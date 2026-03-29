@@ -1,3 +1,5 @@
 * text=auto
 *.sh text eol=lf
 *.bat text eol=crlf
+bun.lock -diff
+Cargo.lock -diff
