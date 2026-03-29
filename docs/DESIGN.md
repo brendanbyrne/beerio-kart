@@ -374,6 +374,7 @@ beerio-kart/
 - [ ] Verify HTTPS works end-to-end through Cloudflare
 - [ ] Test basic auth flow from phone over real network
 - [ ] Add .env / config for production vs development settings
+- [ ] Set up sqlx offline mode (`cargo sqlx prepare`, check `.sqlx/` into git) for Docker builds
 
 Note: Deploying early (before core features) keeps the deployment simple and catches infrastructure issues before application complexity grows. The Dockerfiles are listed in Phase 1 as well — Phase 1 creates them for local development, Phase 2 validates they work on the actual Unraid server behind Cloudflare.
 
