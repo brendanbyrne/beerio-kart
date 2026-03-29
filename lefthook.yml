@@ -1,0 +1,19 @@
+pre-commit:
+  parallel: true
+  commands:
+    rust-fmt:
+      root: backend/
+      glob: "*.rs"
+      run: cargo fmt --check
+    rust-clippy:
+      root: backend/
+      glob: "*.rs"
+      run: cargo clippy -- -D warnings
+    frontend-lint:
+      root: frontend/
+      glob: "*.{ts,tsx}"
+      run: bunx eslint {staged_files}
+    frontend-format:
+      root: frontend/
+      glob: "*.{ts,tsx,css,json}"
+      run: bunx prettier --check {staged_files}

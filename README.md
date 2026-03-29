@@ -17,3 +17,31 @@ To run them separately:
 cd backend && cargo run    # API server on port 3000
 cd frontend && bun dev     # Dev server on port 5173
 ```
+
+## Linting & Formatting
+
+Pre-commit hooks run automatically via [lefthook](https://github.com/evilmartians/lefthook). After cloning, install them:
+
+```sh
+bun install
+bunx lefthook install
+```
+
+The pre-commit hook runs these checks in parallel:
+
+| Check | Scope | Tool |
+|-------|-------|------|
+| Format | `backend/*.rs` | `cargo fmt --check` |
+| Lint | `backend/*.rs` | `cargo clippy` |
+| Lint | `frontend/*.{ts,tsx}` | ESLint |
+| Format | `frontend/*.{ts,tsx,css,json}` | Prettier |
+
+To run manually:
+
+```sh
+# Backend
+cd backend && cargo fmt --check && cargo clippy -- -D warnings
+
+# Frontend
+cd frontend && bunx eslint src/ && bunx prettier --check "src/**/*.{ts,tsx,css,json}"
+```
