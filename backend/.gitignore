@@ -1,0 +1,21 @@
+# Build artifacts
+/target/
+
+# Cargo.lock is checked in for binaries, but ignore if this were a library
+# (keeping it checked in since this is an application)
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+*.pdb
