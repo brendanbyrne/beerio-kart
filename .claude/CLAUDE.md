@@ -3,8 +3,11 @@
 ## Start of Session
 Read `DESIGN.md` (repo root) at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
 
-### Handoff from Cowork
-Before starting work, check if `.claude/cowork-handoff.md` exists. If it does, read it — it contains task instructions written by Cowork (the architecture/design assistant). Follow those instructions for the current task. After completing the work, delete the file so Cowork knows the task is done.
+### Handoff files
+Two handoff files enable async task passing between assistants. The writer creates the file, the reader deletes it when done — the file's existence is the signal.
+
+- **`.claude/cowork-handoff.md`** — Cowork → Claude Code. Check before starting work. Contains task instructions from the architecture/design assistant. Delete after completing the work.
+- **`.claude/claude-code-handoff.md`** — Claude Code → Cowork. Write this when you have questions, research requests, or design decisions for Cowork. Cowork deletes it after addressing.
 
 ## Project Phase
 Phase 1 — Foundation (backend + frontend scaffolded, hello world working).

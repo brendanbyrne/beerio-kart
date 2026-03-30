@@ -16,7 +16,3 @@ cargo run
 ```
 
 Server starts on `http://localhost:3000`.
-
-## Project Structure
-
-See [DESIGN.md](../docs/DESIGN.md) for the full backend source layout under `backend/src/`.

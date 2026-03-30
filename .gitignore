@@ -1,1 +1,19 @@
 node_modules/
+
+# SQLite database
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# User uploads
+uploads/
+
+# Rust build artifacts
+target/
+.cargo/
+
+# Environment files
+.env
+
+# Assistant handoff files (ephemeral)
+.claude/*-handoff.md
