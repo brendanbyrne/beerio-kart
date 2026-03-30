@@ -15,12 +15,15 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 - Don't assume knowledge — Brendan has deep C++/Python experience but is new to web dev, databases, and Rust.
 - When introducing web/database concepts, explain them briefly.
 
-## Repo Copies
-- **WSL (source of truth):** `/home/bbyrne/projects/beerio-kart`
-- **Windows (read-only mirror):** `/mnt/c/Users/obiva/beerio-kart`
-- Both point to the same GitHub remote. To sync Windows: `git -C /mnt/c/Users/obiva/beerio-kart pull --ff-only`. If branches diverge, reset Windows to remote: `git -C /mnt/c/Users/obiva/beerio-kart reset --hard origin/main`.
-- **Auto-sync:** After any commit is pushed from WSL, sync the Windows copy without being asked.
-- **Cowork handoff:** Cowork may leave uncommitted changes on the Windows copy. To process: (1) read the diff/untracked files from Windows, (2) apply the changes in WSL, (3) reset Windows to clean (`git -C ... checkout .` + `git -C ... clean -fd`).
+## Repo Location
+- **Single checkout:** `C:\Users\obiva\beerio-kart` (Windows), accessible from WSL2 at `/mnt/c/Users/obiva/beerio-kart`
+- Both Cowork (Claude Desktop) and Claude Code (WSL2 CLI) work on this same checkout. No syncing needed.
+- **Performance note:** WSL2 accessing `/mnt/c/` is slower than the native Linux filesystem, especially for `cargo build`. If build times become painful, configure Cargo to put build artifacts on the Linux filesystem while keeping source on Windows:
+  ```toml
+  # backend/.cargo/config.toml
+  [build]
+  target-dir = "/home/bbyrne/.cargo-target/beerio-kart"
+  ```
 
 ## Conventions
 - Use LF (`\n`) line endings, not CRLF (`\r\n`).
@@ -36,7 +39,7 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 This project uses two AI environments:
 
 - **Cowork (Claude Desktop):** Design, architecture, documentation, research, review. Accesses the repo via a Windows mount (`C:\Users\obiva\beerio-kart`). Cannot access WSL2 filesystem. Cannot access GitHub directly.
-- **Claude Code (WSL2 CLI):** Coding, building, testing, git operations. Works directly in the WSL2-native checkout (`/home/bbyrne/projects/beerio-kart/`).
+- **Claude Code (WSL2 CLI):** Coding, building, testing, git operations. Accesses the same checkout via `/mnt/c/Users/obiva/beerio-kart/`.
 
 ### Git workflow
 
@@ -46,8 +49,9 @@ This project uses two AI environments:
 
 **Coordination between assistants:**
 
-- **Claude Code** must `git push` after making changes so Cowork can see them.
-- **Cowork** cannot push to GitHub. After Cowork edits files, Brendan or Claude Code must commit and push.
+- Both assistants work on the same checkout — no push/pull needed to see each other's changes.
+- **Cowork** cannot access GitHub directly. After Cowork edits files, Brendan or Claude Code must commit and push.
+- **Claude Code** must `git push` after making changes so the remote stays current.
 - Both should check `git status` before starting work to avoid conflicts.
 - If both need to edit the same file, coordinate through the user (Brendan).
 
