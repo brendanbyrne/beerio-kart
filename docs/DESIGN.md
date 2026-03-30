@@ -20,7 +20,7 @@ Beerio Kart is a mobile-first web app for tracking times and stats for the Mario
 | Backend     | Rust + Axum                   | Learning opportunity; strong async/WebSocket support          |
 | Frontend    | React + Vite                  | Largest ecosystem for mobile-web; camera API support          |
 | Styling     | Tailwind CSS                  | Utility-first; fast iteration; mobile-first by convention     |
-| Database    | SQLite (via rusqlite or sqlx) | File-based; no separate server; sufficient for this scale     |
+| Database    | SQLite (via sqlx)             | File-based; no separate server; sufficient for this scale     |
 | Package mgr | Bun                           | Drop-in npm replacement; faster installs and script running   |
 | Containers  | Dockerfile + compose.yaml    | Works with Docker or Podman                                  |
 
@@ -31,140 +31,182 @@ Beerio Kart is a mobile-first web app for tracking times and stats for the Mario
 - Foreign keys: `{referenced_table_singular}_id` (`character_id`, `cup_id`)
 - Primary keys: `id`
 
+## Design Principles
+
+- **Minimize manual input.** Every design decision should favor automatically deducing information over requiring users to enter it explicitly.
+- **Don't overengineer before OCR.** Many corner cases (time validation, race setup entry, session tracking) will be solved by OCR. Design the MVP for manual entry with hooks for OCR to slot in later.
+
 ## Data Model
 
 ### Design Decisions
 
-- **RaceSetup stored inline, not normalized.** Character, body, wheels, and glider IDs are stored directly on the `runs` and `users` tables rather than in separate `race_setup`/`car_setup` junction tables. With ~3 million possible combinations (most never used), a reference table is wasteful. Inline storage costs 4 integer columns (16 bytes) — negligible. Migration to a normalized form later is straightforward if needed.
+- **UUID vs INTEGER primary keys.** INTEGER for pre-seeded static data (characters, tracks, cups, bodies, wheels, gliders) — stable, small, human-readable. UUID for user-generated runtime data (users, runs, drink_types) — globally unique, can be generated client-side without a database round trip (important for future offline support).
+- **RaceSetup stored inline, not normalized.** Character, body, wheels, and glider IDs are stored directly on the `runs` and `users` tables rather than in separate junction tables. With ~3 million possible combinations (most never used), a reference table is wasteful. Inline storage costs 4 integer columns (16 bytes) — negligible. Migration to a normalized form later is straightforward if needed.
 - **Images stored on disk, paths in the database.** Pre-seeded assets (characters, tracks, kart parts) ship as static files. User-uploaded photos (run verification) are saved to a configurable uploads directory. Database stores relative paths (e.g., `images/characters/mario.png`).
-- **Fixed-size arrays use separate columns or relational joins.** Lap times (always 3) become `lap_1_time`, `lap_2_time`, `lap_3_time` — simple to query. Cup-to-track relationships use the `cup_id` foreign key on the `tracks` table (not an array on `cups`).
+- **Fixed-size arrays use separate columns or relational joins.** Lap times (always 3) become `lap_1_time`, `lap_2_time`, `lap_3_time` — simple to query. Cup-to-track relationships use the `cup_id` foreign key on the `tracks` table, not an array on `cups`.
 - **Leaderboards separate alcoholic and non-alcoholic runs by default**, with a combined view available.
+- **Nullability defaults to NOT NULL** unless there is a clear reason for the data to be optional. Nullable columns map to `Option<T>` in Rust, adding handling overhead.
 - **Database encryption** via SQLCipher is possible but deferred past v1.
 
 ### Users
 
+User-modifiable: yes (own profile, default race setup).
+
 ```
 users
 ├── id: UUID (primary key)
-├── username: TEXT (unique, display name)
-├── email: TEXT (unique, optional, for account recovery)
-├── password_hash: TEXT
+├── username: TEXT (unique, not null, 1-30 characters)
+├── email: TEXT (unique, nullable — for account recovery)
+├── password_hash: TEXT (not null)
 ├── default_character_id: INTEGER (foreign key -> characters, nullable)
 ├── default_body_id: INTEGER (foreign key -> bodies, nullable)
 ├── default_wheels_id: INTEGER (foreign key -> wheels, nullable)
 ├── default_glider_id: INTEGER (foreign key -> gliders, nullable)
-├── created_at: TIMESTAMP
-└── updated_at: TIMESTAMP
+├── created_at: TIMESTAMP (not null)
+└── updated_at: TIMESTAMP (not null)
 ```
+
+Notes:
+- Default race setup columns are nullable (new user hasn't picked yet). All-or-nothing: either all four are set or none are. Enforced in application code, not the database.
+- SQLite allows multiple NULLs in a UNIQUE column (email), which is the desired behavior.
+- `email` validated as valid format in application code if provided.
+- Default race setup will eventually be retired once OCR extracts setup from TV screen photos.
 
 ### Characters
 
-Pre-seeded table of all MK8 Deluxe characters (including DLC).
+Pre-seeded, read-only. All MK8 Deluxe characters (including DLC).
 
 ```
 characters
-├── id: INTEGER (primary key)
-├── name: TEXT
-└── image_path: TEXT
+├── id: INTEGER (primary key, not null)
+├── name: TEXT (unique, not null)
+└── image_path: TEXT (not null)
 ```
 
 ### Bodies
 
-Pre-seeded table of all MK8 Deluxe vehicle bodies.
+Pre-seeded, read-only. All MK8 Deluxe vehicle bodies.
 
 ```
 bodies
-├── id: INTEGER (primary key)
-├── name: TEXT
-└── image_path: TEXT
+├── id: INTEGER (primary key, not null)
+├── name: TEXT (unique, not null)
+└── image_path: TEXT (not null)
 ```
 
 ### Wheels
 
-Pre-seeded table of all MK8 Deluxe wheel sets.
+Pre-seeded, read-only. All MK8 Deluxe wheel sets.
 
 ```
 wheels
-├── id: INTEGER (primary key)
-├── name: TEXT
-└── image_path: TEXT
+├── id: INTEGER (primary key, not null)
+├── name: TEXT (unique, not null)
+└── image_path: TEXT (not null)
 ```
 
 ### Gliders
 
-Pre-seeded table of all MK8 Deluxe glider attachments.
+Pre-seeded, read-only. All MK8 Deluxe glider attachments.
 
 ```
 gliders
-├── id: INTEGER (primary key)
-├── name: TEXT
-└── image_path: TEXT
+├── id: INTEGER (primary key, not null)
+├── name: TEXT (unique, not null)
+└── image_path: TEXT (not null)
 ```
 
 ### Cups
 
-Pre-seeded table of all MK8 Deluxe cups (including DLC).
+Pre-seeded, read-only. All MK8 Deluxe cups (including DLC).
 
 ```
 cups
-├── id: INTEGER (primary key)
-├── name: TEXT (e.g., "Cloud Cup")
-└── image_path: TEXT
+├── id: INTEGER (primary key, not null)
+├── name: TEXT (unique, not null)
+└── image_path: TEXT (not null)
 ```
 
-Note: Cup-to-track mapping is handled by the `cup_id` foreign key on the `tracks` table.
+Note: Cup-to-track mapping is handled by the `cup_id` foreign key on the `tracks` table. Application-level validation ensures each cup has exactly 4 tracks after seeding.
 
 ### Tracks
 
-Pre-seeded table of all MK8 Deluxe tracks (including DLC).
+Pre-seeded, read-only. All MK8 Deluxe tracks (including DLC). Track names include console prefix for retro tracks (e.g., "GBA Rainbow Road", "SNES Rainbow Road"). MK8-native tracks have no prefix (e.g., "Rainbow Road").
 
 ```
 tracks
-├── id: INTEGER (primary key)
-├── name: TEXT (e.g., "Rainbow Road")
-├── cup_id: INTEGER (foreign key -> cups)
-└── image_path: TEXT
+├── id: INTEGER (primary key, not null)
+├── name: TEXT (unique, not null)
+├── cup_id: INTEGER (foreign key -> cups, not null)
+├── position: INTEGER (not null, 1-4, order within the cup)
+└── image_path: TEXT (not null)
 ```
+
+Constraints:
+- Composite unique on `(cup_id, position)` — no two tracks in the same slot of a cup.
 
 ### Drink Types
 
-Specific beverages used during runs (e.g., "Molson Canadian", "LaCroix Pamplemousse").
-Users should have a way to submit new drink types
+User-created. Specific beverages used during runs (e.g., "Molson Canadian", "LaCroix Pamplemousse"). Users can submit new drink types. Deduplication is handled via deterministic UUID.
 
 ```
 drink_types
-├── id: UUID (primary key)
-├── name: TEXT (display name, e.g., "Molson Canadian")
-├── alcoholic: BOOLEAN
-└── image_path: TEXT (nullable)
+├── id: UUID (primary key, deterministic via uuid_v5 of uppercased name)
+├── name: TEXT (unique, not null, stored as-entered by first creator)
+├── alcoholic: BOOLEAN (not null)
+├── created_by: UUID (foreign key -> users, nullable — null for pre-seeded entries)
+└── created_at: TIMESTAMP (not null)
 ```
+
+Notes:
+- UUID derived from `uuid_v5(DRINK_TYPE_NAMESPACE, uppercase(name))`. Ensures case-insensitive deduplication at the database level.
+- If a user submits a drink that already exists (different casing), the app detects the UUID collision, shows the existing entry, and offers to use it.
+- `alcoholic` must be explicitly set by the user (no default).
+- Image support for drink types deferred to a future phase.
 
 ### Runs
 
-The core table. One row per player per race attempt.
+The core table. One row per player per race attempt. User-created, immutable (times cannot be edited after creation), deletable by owner only.
 
 ```
 runs
 ├── id: UUID (primary key)
-├── user_id: UUID (foreign key -> users)
-├── track_id: INTEGER (foreign key -> tracks)
-├── character_id: INTEGER (foreign key -> characters)
-├── body_id: INTEGER (foreign key -> bodies)
-├── wheels_id: INTEGER (foreign key -> wheels)
-├── glider_id: INTEGER (foreign key -> gliders)
-├── track_time: INTEGER (completion time in milliseconds)
-├── lap_1_time: INTEGER (milliseconds)
-├── lap_2_time: INTEGER (milliseconds)
-├── lap_3_time: INTEGER (milliseconds)
-├── drink_type_id: UUID (foreign key -> drink_types)
-├── photo_path: TEXT (nullable, path to TV screen photo for verification/OCR training)
-├── created_at: TIMESTAMP (when entered into the system)
-└── notes: TEXT (nullable, e.g., "new controller, felt weird")
+├── user_id: UUID (foreign key -> users, not null)
+├── track_id: INTEGER (foreign key -> tracks, not null)
+├── character_id: INTEGER (foreign key -> characters, not null)
+├── body_id: INTEGER (foreign key -> bodies, not null)
+├── wheels_id: INTEGER (foreign key -> wheels, not null)
+├── glider_id: INTEGER (foreign key -> gliders, not null)
+├── track_time: INTEGER (milliseconds, not null, must be positive)
+├── lap_1_time: INTEGER (milliseconds, not null, must be positive and non-zero)
+├── lap_2_time: INTEGER (milliseconds, not null, must be positive and non-zero)
+├── lap_3_time: INTEGER (milliseconds, not null, must be positive and non-zero)
+├── drink_type_id: UUID (foreign key -> drink_types, not null)
+├── photo_path: TEXT (nullable — optional for regular runs, required for record-breaking runs)
+├── flagged_for_review: BOOLEAN (not null, default false)
+├── created_at: TIMESTAMP (not null, defaults to current time, optionally user-provided)
+└── notes: TEXT (nullable — freeform; may be mined for future structured columns)
 ```
+
+Validation (application-level):
+- `track_time` must be positive.
+- All three lap times must be positive and non-zero.
+- Lap times should roughly sum to `track_time` (with tolerance for game rounding).
+- If this run would set a new track record, a photo is required. The frontend checks this before submission and prompts for a photo. The API enforces it as well.
+- Race setup columns pre-fill from user defaults but are all required.
+
+Flagging:
+- Users can flag their own run for admin review (e.g., OCR extracted wrong data), but only if the run has a photo attached.
+- Users cannot flag other users' runs.
+
+Future (OCR):
+- The end-of-race TV screen shows race setup, track, and all 3 lap times. OCR will eventually extract all of this automatically.
+- Photos on all runs provide training data for OCR, even when not required.
+- Once OCR is reliable, the `created_at` override becomes unnecessary (live capture only).
 
 ### Head-to-Head Context
 
-Not an explicit feature. Runs played in the same session are loosely clustered by `created_at` timestamps.
+Not an explicit feature. Runs played in the same round robin are loosely clustered by `created_at` timestamps. Head-to-head stats (Phase 5) are derived from timestamp proximity, not user-managed grouping. This avoids adding manual "session" bookkeeping — consistent with the design principle of minimizing manual input.
 
 ## API Surface
 
