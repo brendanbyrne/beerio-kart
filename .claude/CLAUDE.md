@@ -19,6 +19,7 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 - Suggest better approaches when you see them, with reasoning and sources.
 - Keep responses concise but explain the "why."
 - Don't assume knowledge — Brendan has deep C++/Python experience but is new to web dev, databases, and Rust.
+- If a command fails because it needs sudo or a password, **stop and ask Brendan** before trying alternative approaches. Don't attempt workarounds (e.g., installing via conda, pip, or other package managers) — just explain what's needed and let Brendan handle the installation.
 - When introducing web/database concepts, explain them briefly.
 
 ## Repo Location
