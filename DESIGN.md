@@ -444,9 +444,7 @@ beerio-kart/
 ├── .claude/
 │   └── CLAUDE.md                # AI assistant context (checked into repo)
 │
-├── docs/
-│   └── DESIGN.md                # This design document
-│
+├── DESIGN.md                    # Architecture design document (single source of truth)
 ├── compose.yaml                 # Docker compose
 ├── Makefile                     # Or justfile — common dev commands
 │
@@ -590,3 +588,10 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - **Run immutability:** Users cannot edit runs after creation. Admin can edit (for correcting OCR errors, etc.).
 - **Head-to-head tracking:** No explicit sessions table. Derived from timestamp proximity.
 - **Photo enforcement for records:** Runs are auto-flagged and hidden if record-breaking without a photo. Photo upload auto-resolves the flag.
+
+## Future Ideas (Not Committed)
+
+These are loose ideas that may or may not be pursued. No guarantees.
+
+- Turn list of previous players into invite emails to join.
+- Investigate whether `bun install` is necessary or can be streamlined.

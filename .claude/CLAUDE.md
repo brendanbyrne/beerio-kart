@@ -1,7 +1,7 @@
 # Beerio Kart
 
 ## Start of Session
-Read `docs/DESIGN.md` at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
+Read `DESIGN.md` (repo root) at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
 
 ## Project Phase
 Phase 1 — Foundation (backend + frontend scaffolded, hello world working).
