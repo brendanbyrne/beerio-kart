@@ -3,6 +3,9 @@
 ## Start of Session
 Read `DESIGN.md` (repo root) at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
 
+### Handoff from Cowork
+Before starting work, check if `.claude/cowork-handoff.md` exists. If it does, read it — it contains task instructions written by Cowork (the architecture/design assistant). Follow those instructions for the current task. After completing the work, delete the file so Cowork knows the task is done.
+
 ## Project Phase
 Phase 1 — Foundation (backend + frontend scaffolded, hello world working).
 
@@ -46,9 +49,22 @@ This project uses two AI environments:
 
 ### Git workflow
 
-**Branching:** Simple feature branches. Work on a branch (e.g., `phase-1/foundation`, `feature/run-entry`), merge to `main` when complete. No PRs required for now — merge directly.
+**Branching:** Simple feature branches. All code changes go through pull requests — never push directly to `main`.
 
 **Branch naming:** `phase-N/description` for phase work, `feature/description` for standalone features, `fix/description` for bug fixes.
+
+**Pull request workflow:**
+
+1. Claude Code creates a feature branch, commits work, and pushes to GitHub.
+2. Claude Code opens a PR via `gh pr create` with a description summarizing what changed and why.
+3. Brendan reviews the diff on GitHub (or via `gh pr diff` / Cowork in Chrome).
+4. Brendan approves and merges (GitHub UI or `gh pr merge`).
+
+**Rules:**
+- **Never push directly to `main`.** All code changes require a PR.
+- **Never merge your own PR.** Only Brendan merges.
+- PR descriptions should summarize the changes, call out anything non-obvious, and list any open questions.
+- Documentation-only changes (CLAUDE.md, DESIGN.md) can be committed to `main` directly since Cowork can't push and these don't need code review.
 
 **Coordination between assistants:**
 
