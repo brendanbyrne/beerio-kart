@@ -17,3 +17,6 @@ target/
 
 # Assistant handoff files (ephemeral)
 .claude/*-handoff.md
+
+# Code review files
+reviews/
