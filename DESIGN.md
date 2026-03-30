@@ -594,4 +594,3 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 These are loose ideas that may or may not be pursued. No guarantees.
 
 - Turn list of previous players into invite emails to join.
-- Investigate whether `bun install` is necessary or can be streamlined.

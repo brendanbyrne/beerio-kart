@@ -1,6 +1,7 @@
 {
   "name": "beerio-kart",
   "private": true,
+  "workspaces": ["frontend"],
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"cd backend && cargo run\" \"cd frontend && bun run dev\""
   },

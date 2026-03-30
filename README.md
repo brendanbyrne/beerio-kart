@@ -5,7 +5,7 @@ We're really doing this thing.
 ## Running
 
 ```sh
-bun install      # install root + frontend dependencies
+bun install      # installs all dependencies (root + frontend workspace)
 bun run dev      # starts backend (port 3000) and frontend (port 5173) together
 ```
 
@@ -20,10 +20,10 @@ cd frontend && bun dev     # Dev server on port 5173
 
 ## Linting & Formatting
 
-Pre-commit hooks run automatically via [lefthook](https://github.com/evilmartians/lefthook). After cloning, install them:
+Pre-commit hooks run automatically via [lefthook](https://github.com/evilmartians/lefthook). After cloning:
 
 ```sh
-bun install
+bun install          # also installs lefthook as a devDependency
 bunx lefthook install
 ```
 
