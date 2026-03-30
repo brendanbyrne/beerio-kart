@@ -1,4 +1,4 @@
-d# Frontend
+# Frontend
 
 React web app for Beerio Kart, built with [Vite](https://vite.dev/).
 
