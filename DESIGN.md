@@ -25,6 +25,34 @@ Beerio Kart is a mobile-first web app for tracking times and stats for the Mario
 | Package mgr | Bun                           | Drop-in npm replacement; faster installs and script running   |
 | Containers  | Dockerfile + compose.yaml    | Works with Docker or Podman                                  |
 
+## Observability
+
+### Crates
+
+- **`tracing`** — structured, leveled logging facade (used throughout application code)
+- **`tracing-subscriber`** — formats and emits log output (with `fmt` and `env-filter` features)
+- **`tower-http`** — provides `TraceLayer` middleware for automatic HTTP request/response logging (method, path, status, duration)
+
+### Log level conventions
+
+- `error` — unexpected failures (DB errors, hashing failures, token creation failures)
+- `warn` — suspicious but recoverable (e.g., rate-limit warnings in the future)
+- `info` — request lifecycle, startup, seeding complete
+- `debug` — detailed diagnostics during development
+
+### Error response pattern
+
+Internal error details are never exposed to clients. When an unexpected error occurs:
+1. Log the real error server-side with `tracing::error!` (including the error value for diagnostics)
+2. Return a generic `"Internal server error"` message in the JSON response body
+3. Keep the appropriate HTTP status code (e.g., 500)
+
+### Configuration
+
+Log output is controlled via the `RUST_LOG` environment variable. Defaults to `info` if not set. Examples:
+- `RUST_LOG=debug` — all debug-level output
+- `RUST_LOG=beerio_kart=debug` — debug only for application code, info for dependencies
+
 ## Naming Conventions
 
 - Table names: plural, snake_case (`drink_types`, `characters`)

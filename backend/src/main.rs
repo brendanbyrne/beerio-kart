@@ -7,6 +7,8 @@ use axum::{
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde::Serialize;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::EnvFilter;
 
 use beerio_kart::AppState;
 use beerio_kart::config::AppConfig;
@@ -21,6 +23,14 @@ struct HelloResponse {
 async fn main() {
     // Load .env file if present (non-fatal if missing)
     dotenvy::dotenv().ok();
+
+    // Initialize structured logging. Defaults to `info` level; override with
+    // the RUST_LOG env var (e.g., RUST_LOG=debug or RUST_LOG=beerio_kart=debug).
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
 
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:../data/beerio-kart.db?mode=rwc".to_string());
@@ -48,9 +58,9 @@ async fn main() {
 
     // Seed static game data (characters, tracks, cups, etc.) from JSON files.
     // Only inserts into empty tables — safe to call on every startup.
-    println!("Seeding static data...");
+    tracing::info!("Seeding static data...");
     seed::run(&db).await.expect("Failed to seed database");
-    println!("Seeding complete.");
+    tracing::info!("Seeding complete");
 
     let state = AppState { db, config };
 
@@ -59,10 +69,11 @@ async fn main() {
         .route("/api/v1/auth/register", post(routes::auth::register))
         .route("/api/v1/auth/login", post(routes::auth::login))
         .route("/api/v1/auth/logout", post(routes::auth::logout))
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Listening on http://localhost:3000");
+    tracing::info!("Listening on http://localhost:3000");
     axum::serve(listener, app).await.unwrap();
 }
 

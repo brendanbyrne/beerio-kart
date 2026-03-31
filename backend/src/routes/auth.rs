@@ -1,6 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use crate::AppState;
 use crate::entities::users;
@@ -84,10 +85,11 @@ pub async fn register(
                 .into_response();
         }
         Err(e) => {
+            error!(error = %e, "Failed to check username availability");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    error: format!("Database error: {e}"),
+                    error: "Internal server error".to_string(),
                 }),
             )
                 .into_response();
@@ -99,10 +101,11 @@ pub async fn register(
     let password_hash = match crate::services::auth::hash_password(&body.password) {
         Ok(h) => h,
         Err(e) => {
+            error!(error = %e, "Failed to hash password");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    error: format!("Failed to hash password: {e}"),
+                    error: "Internal server error".to_string(),
                 }),
             )
                 .into_response();
@@ -129,10 +132,11 @@ pub async fn register(
     };
 
     if let Err(e) = new_user.insert(&state.db).await {
+        error!(error = %e, "Failed to insert user");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {
-                error: format!("Failed to create user: {e}"),
+                error: "Internal server error".to_string(),
             }),
         )
             .into_response();
@@ -142,10 +146,11 @@ pub async fn register(
     let token = match crate::services::auth::create_token(&user_id, username, &state.config) {
         Ok(t) => t,
         Err(e) => {
+            error!(error = %e, "Failed to create JWT during registration");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    error: format!("Failed to create token: {e}"),
+                    error: "Internal server error".to_string(),
                 }),
             )
                 .into_response();
@@ -199,10 +204,11 @@ pub async fn login(
             return invalid.into_response();
         }
         Err(e) => {
+            error!(error = %e, "Failed to look up user during login");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    error: format!("Database error: {e}"),
+                    error: "Internal server error".to_string(),
                 }),
             )
                 .into_response();
@@ -214,10 +220,11 @@ pub async fn login(
         Ok(true) => {}
         Ok(false) => return invalid.into_response(),
         Err(e) => {
+            error!(error = %e, "Password verification failed unexpectedly");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    error: format!("Password verification error: {e}"),
+                    error: "Internal server error".to_string(),
                 }),
             )
                 .into_response();
@@ -228,10 +235,11 @@ pub async fn login(
     let token = match crate::services::auth::create_token(&user.id, &user.username, &state.config) {
         Ok(t) => t,
         Err(e) => {
+            error!(error = %e, "Failed to create JWT during login");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    error: format!("Failed to create token: {e}"),
+                    error: "Internal server error".to_string(),
                 }),
             )
                 .into_response();
