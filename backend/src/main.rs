@@ -1,5 +1,5 @@
-#[allow(unused)]
 mod entities;
+mod seed;
 
 use axum::{Json, Router, routing::get};
 use migration::{Migrator, MigratorTrait};
@@ -36,6 +36,12 @@ async fn main() {
     Migrator::up(&db, None)
         .await
         .expect("Failed to run database migrations");
+
+    // Seed static game data (characters, tracks, cups, etc.) from JSON files.
+    // Only inserts into empty tables — safe to call on every startup.
+    println!("Seeding static data...");
+    seed::run(&db).await.expect("Failed to seed database");
+    println!("Seeding complete.");
 
     let app = Router::new()
         .route("/api/v1/hello", get(hello))
