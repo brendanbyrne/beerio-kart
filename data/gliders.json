@@ -1,0 +1,17 @@
+[
+  {"id": 1, "name": "Super Glider", "image_path": "images/gliders/super-glider.png"},
+  {"id": 2, "name": "Cloud Glider", "image_path": "images/gliders/cloud-glider.png"},
+  {"id": 3, "name": "Wario Wing", "image_path": "images/gliders/wario-wing.png"},
+  {"id": 4, "name": "Waddle Wing", "image_path": "images/gliders/waddle-wing.png"},
+  {"id": 5, "name": "Peach Parasol", "image_path": "images/gliders/peach-parasol.png"},
+  {"id": 6, "name": "Parachute", "image_path": "images/gliders/parachute.png"},
+  {"id": 7, "name": "Parafoil", "image_path": "images/gliders/parafoil.png"},
+  {"id": 8, "name": "Flower Glider", "image_path": "images/gliders/flower-glider.png"},
+  {"id": 9, "name": "Bowser Kite", "image_path": "images/gliders/bowser-kite.png"},
+  {"id": 10, "name": "Plane Glider", "image_path": "images/gliders/plane-glider.png"},
+  {"id": 11, "name": "MKTV Parafoil", "image_path": "images/gliders/mktv-parafoil.png"},
+  {"id": 12, "name": "Gold Glider", "image_path": "images/gliders/gold-glider.png"},
+  {"id": 13, "name": "Hylian Kite", "image_path": "images/gliders/hylian-kite.png"},
+  {"id": 14, "name": "Paraglider", "image_path": "images/gliders/paraglider.png"},
+  {"id": 15, "name": "Paper Glider", "image_path": "images/gliders/paper-glider.png"}
+]
