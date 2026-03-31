@@ -536,6 +536,7 @@ beerio-kart/
 - [ ] Create Dockerfile for frontend (build with Bun, serve with nginx or similar)
 - [ ] Create compose.yaml (backend + frontend + shared volume for SQLite + uploads)
 - [ ] Configure Cloudflare tunnel to route domain to the app on Unraid
+- [ ] Set Cloudflare encryption mode to **Full (strict)** — Flexible encrypts browser-to-Cloudflare but forwards plaintext to the origin server, which means passwords travel unencrypted on the last hop
 - [ ] Verify HTTPS works end-to-end through Cloudflare
 - [ ] Test basic auth flow from phone over real network
 - [ ] Add .env / config for production vs development settings

@@ -42,6 +42,14 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 - Rust style: Follow standard `rustfmt` and `clippy` conventions.
 - Frontend style: TypeScript, functional React components, Tailwind for styling.
 
+## Testing
+**Tests are a deliverable, not optional.** Every PR that adds business logic must include tests. PRs should not be opened without them.
+
+- **Unit tests:** Use `#[cfg(test)] mod tests { }` in the same file as the code being tested. Cover business logic: validation rules, service functions, data transformations, error cases.
+- **Integration tests:** Use `tests/` directory or Axum's test utilities to test HTTP endpoints end-to-end. Cover the happy path and key error cases (bad input, auth failures, not found, conflicts).
+- **What doesn't need tests:** Pure boilerplate (entity definitions, mod.rs re-exports), one-time startup code (seeding, migration runner), and simple config loading. Use judgment — if it has logic, it needs tests.
+- **Test naming:** Descriptive names that read as sentences: `test_login_with_wrong_password_returns_401`, not `test_login_2`.
+
 ## Development Workflow
 
 ### Two-assistant setup
