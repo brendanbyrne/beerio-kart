@@ -24,6 +24,7 @@ Beerio Kart is a mobile-first web app for tracking times and stats for the Mario
 | Database    | SQLite                        | File-based; no separate server; sufficient for this scale     |
 | Package mgr | Bun                           | Drop-in npm replacement; faster installs and script running   |
 | Containers  | Dockerfile + compose.yaml    | Works with Docker or Podman                                  |
+| Serving     | Axum (single container)       | Axum serves both the API and the frontend static files via `tower-http::ServeDir`. No separate nginx or frontend container. |
 
 ## Observability
 
@@ -622,6 +623,10 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - **UUID storage in SQLite:** UUIDs stored as TEXT (not BLOB) for human readability when debugging with CLI tools. PostgreSQL migration will map to native UUID type. SeaORM maps both to `String` in Rust, so application code won't change.
 - **Timestamp storage in SQLite:** Timestamps stored as TEXT in ISO 8601 format. SQLite has no native timestamp type. PostgreSQL migration will map to `TIMESTAMPTZ`.
 - **run_flags audit trail:** `run_id` is not unique — a run can have multiple flags (different reasons tracked separately, resolved independently). Resolved flags are kept as history. Only duplicate flags (same run + same reason while unresolved) are prevented in application code.
+## Resolved Decisions (continued)
+
+- **Frontend serving strategy:** Axum serves everything in a single container. The Vite build produces static files that Axum serves via `tower-http::ServeDir`, with SPA fallback to `index.html`. No nginx or separate frontend container. Rationale: simpler deployment for a small-scale app, no CORS (same origin), one container to manage. If static asset performance ever matters (it won't at this scale), a CDN or nginx can be added in front later.
+
 ## Future Ideas (Not Committed)
 
 These are loose ideas that may or may not be pursued. No guarantees.
