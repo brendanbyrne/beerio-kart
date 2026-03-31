@@ -526,9 +526,9 @@ beerio-kart/
 ### Phase 1: Foundation
 - [x] Initialize Rust project with Axum
 - [x] Initialize React project with Vite + Bun + Tailwind
-- [ ] Set up SeaORM with SQLite and migrations (all tables including run_flags)
-- [ ] Seed MK8 Deluxe data (tracks, cups, characters, bodies, wheels, gliders)
-- [ ] Basic auth (register/login with argon2 + JWT)
+- [x] Set up SeaORM with SQLite and migrations (all tables including run_flags)
+- [x] Seed MK8 Deluxe data (tracks, cups, characters, bodies, wheels, gliders)
+- [x] Basic auth (register/login with argon2 + JWT)
 - [ ] Dockerfiles + compose.yaml
 
 ### Phase 2: Deployment
