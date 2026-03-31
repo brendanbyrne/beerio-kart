@@ -86,7 +86,7 @@ where
 {
     let existing = E::find().one(db).await?;
     if existing.is_some() {
-        println!("  {table_name}: already seeded, skipping");
+        tracing::debug!("{table_name}: already seeded, skipping");
         return Ok(());
     }
 
@@ -105,7 +105,7 @@ where
     }
     txn.commit().await?;
 
-    println!("  {table_name}: seeded {num_items} rows");
+    tracing::info!("{table_name}: seeded {num_items} rows");
     Ok(())
 }
 
@@ -139,7 +139,7 @@ impl_simple_seed!(characters, bodies, wheels, gliders, cups);
 async fn seed_tracks(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
     let existing = tracks::Entity::find().one(db).await?;
     if existing.is_some() {
-        println!("  tracks: already seeded, skipping");
+        tracing::debug!("tracks: already seeded, skipping");
         return Ok(());
     }
 
@@ -180,6 +180,6 @@ async fn seed_tracks(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::
     }
     txn.commit().await?;
 
-    println!("  tracks: seeded {num_items} rows");
+    tracing::info!("tracks: seeded {num_items} rows");
     Ok(())
 }

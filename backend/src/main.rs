@@ -28,7 +28,8 @@ async fn main() {
     // the RUST_LOG env var (e.g., RUST_LOG=debug or RUST_LOG=beerio_kart=debug).
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn,sea_orm_migration=warn")),
         )
         .init();
 
