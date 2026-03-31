@@ -226,48 +226,6 @@ async fn test_jwt_contains_correct_sub_claim() {
 }
 
 #[tokio::test]
-async fn test_register_duplicate_username_different_case_returns_409() {
-    let server = setup_test_app().await;
-
-    server
-        .post("/api/v1/auth/register")
-        .json(&json!({ "username": "Alice", "password": "password123" }))
-        .await
-        .assert_status(StatusCode::CREATED);
-
-    // Same name, different casing — should be rejected
-    let response = server
-        .post("/api/v1/auth/register")
-        .json(&json!({ "username": "alice", "password": "password456" }))
-        .await;
-
-    response.assert_status(StatusCode::CONFLICT);
-}
-
-#[tokio::test]
-async fn test_login_with_different_case_succeeds() {
-    let server = setup_test_app().await;
-
-    // Register as "Alice"
-    server
-        .post("/api/v1/auth/register")
-        .json(&json!({ "username": "Alice", "password": "password123" }))
-        .await
-        .assert_status(StatusCode::CREATED);
-
-    // Login as "alice" — should work
-    let response = server
-        .post("/api/v1/auth/login")
-        .json(&json!({ "username": "alice", "password": "password123" }))
-        .await;
-
-    response.assert_status(StatusCode::OK);
-    let body: Value = response.json();
-    // Display name should preserve original casing
-    assert_eq!(body["user"]["username"], "Alice");
-}
-
-#[tokio::test]
 async fn test_register_unicode_username_within_30_chars() {
     let server = setup_test_app().await;
 

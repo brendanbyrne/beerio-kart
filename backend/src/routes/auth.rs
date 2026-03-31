@@ -67,10 +67,9 @@ pub async fn register(
             .into_response();
     }
 
-    // Check if username already exists (case-insensitive via username_lower)
-    let username_lower = username.to_lowercase();
+    // Check if username already exists (nicer error than a DB constraint violation)
     let existing = users::Entity::find()
-        .filter(users::Column::UsernameLower.eq(&username_lower))
+        .filter(users::Column::Username.eq(username))
         .one(&state.db)
         .await;
 
@@ -118,7 +117,6 @@ pub async fn register(
     let new_user = users::ActiveModel {
         id: Set(user_id.clone()),
         username: Set(username.to_string()),
-        username_lower: Set(username_lower),
         email: Set(None),
         password_hash: Set(password_hash),
         preferred_character_id: Set(None),
@@ -184,7 +182,7 @@ pub async fn login(
     );
 
     let user = match users::Entity::find()
-        .filter(users::Column::UsernameLower.eq(body.username.to_lowercase()))
+        .filter(users::Column::Username.eq(&body.username))
         .one(&state.db)
         .await
     {
