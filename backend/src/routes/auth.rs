@@ -57,11 +57,11 @@ pub async fn register(
             .into_response();
     }
 
-    if body.password.len() < 8 {
+    if body.password.len() < 8 || body.password.len() > 128 {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorBody {
-                error: "Password must be at least 8 characters".to_string(),
+                error: "Password must be 8-128 characters".to_string(),
             }),
         )
             .into_response();
@@ -172,6 +172,8 @@ pub async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
 ) -> impl IntoResponse {
+    let username = body.username.trim();
+
     // Look up user — use the same error message for "not found" and "wrong password"
     // to avoid leaking whether a username exists.
     let invalid = (
@@ -182,12 +184,20 @@ pub async fn login(
     );
 
     let user = match users::Entity::find()
-        .filter(users::Column::Username.eq(&body.username))
+        .filter(users::Column::Username.eq(username))
         .one(&state.db)
         .await
     {
         Ok(Some(u)) => u,
-        Ok(None) => return invalid.into_response(),
+        Ok(None) => {
+            // Hash a dummy password so the timing is similar to the "wrong password"
+            // path. Prevents username enumeration via response-time analysis.
+            let _ = crate::services::auth::verify_password(
+                "dummy",
+                "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            );
+            return invalid.into_response();
+        }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
