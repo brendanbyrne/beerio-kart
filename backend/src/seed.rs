@@ -5,7 +5,7 @@ use sea_orm::{
 use serde::Deserialize;
 use std::collections::HashSet;
 
-use crate::entities::{bodies, characters, cups, gliders, tracks, wheels};
+use beerio_kart::entities::{bodies, characters, cups, gliders, tracks, wheels};
 
 // Serde structs matching the JSON file shapes. These are separate from the
 // SeaORM entities because entity Models carry ORM metadata we don't need for

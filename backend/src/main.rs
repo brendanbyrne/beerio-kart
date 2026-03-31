@@ -1,11 +1,16 @@
-#[allow(unused_imports)]
-mod entities;
 mod seed;
 
-use axum::{Json, Router, routing::get};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{ConnectionTrait, Database, DatabaseConnection};
+use sea_orm::{ConnectionTrait, Database};
 use serde::Serialize;
+
+use beerio_kart::AppState;
+use beerio_kart::config::AppConfig;
+use beerio_kart::routes;
 
 #[derive(Serialize)]
 struct HelloResponse {
@@ -20,9 +25,12 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:../data/beerio-kart.db?mode=rwc".to_string());
 
+    // Load config from env vars (panics if JWT_SECRET is missing)
+    let config = AppConfig::from_env();
+
     // Connect to the database. The ?mode=rwc flag creates the file if it
     // doesn't exist yet. SeaORM wraps sqlx under the hood.
-    let db: DatabaseConnection = Database::connect(&database_url)
+    let db = Database::connect(&database_url)
         .await
         .expect("Failed to connect to database");
 
@@ -44,9 +52,14 @@ async fn main() {
     seed::run(&db).await.expect("Failed to seed database");
     println!("Seeding complete.");
 
+    let state = AppState { db, config };
+
     let app = Router::new()
         .route("/api/v1/hello", get(hello))
-        .with_state(db);
+        .route("/api/v1/auth/register", post(routes::auth::register))
+        .route("/api/v1/auth/login", post(routes::auth::login))
+        .route("/api/v1/auth/logout", post(routes::auth::logout))
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("Listening on http://localhost:3000");

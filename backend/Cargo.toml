@@ -7,14 +7,22 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+argon2 = { version = "0.5", features = ["std"] }
 axum = { version = "0.8", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+jsonwebtoken = "9"
 sea-orm = { version = "1", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 uuid = { version = "1", features = ["v4", "v5"] }
 dotenvy = "0.15"
+rand_core = { version = "0.6", features = ["getrandom"] }
 migration = { path = "migration" }
 
 [lints.rust]
 warnings = "deny"
+
+[dev-dependencies]
+axum-test = "19.1.1"
+tower = "0.5.3"
