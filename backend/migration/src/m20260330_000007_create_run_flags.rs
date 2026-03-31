@@ -3,7 +3,8 @@ use sea_orm_migration::prelude::*;
 use crate::m20260330_000006_create_runs::Runs;
 
 /// Creates the run_flags table for tracking review requests on runs.
-/// Has a UNIQUE constraint on run_id (one active flag per run).
+/// run_id is NOT NULL but not unique — resolved flags are kept for audit
+/// history, and application code enforces one unresolved flag per run.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -16,12 +17,7 @@ impl MigrationTrait for Migration {
                     .table(RunFlags::Table)
                     .if_not_exists()
                     .col(ColumnDef::new(RunFlags::Id).text().not_null().primary_key())
-                    .col(
-                        ColumnDef::new(RunFlags::RunId)
-                            .text()
-                            .not_null()
-                            .unique_key(),
-                    )
+                    .col(ColumnDef::new(RunFlags::RunId).text().not_null())
                     .col(ColumnDef::new(RunFlags::Reason).text().not_null())
                     .col(ColumnDef::new(RunFlags::Note).text())
                     .col(

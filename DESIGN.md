@@ -184,9 +184,9 @@ runs
 ├── wheels_id: INTEGER (foreign key -> wheels, not null)
 ├── glider_id: INTEGER (foreign key -> gliders, not null)
 ├── track_time: INTEGER (milliseconds, not null, must be positive)
-├── lap_1_time: INTEGER (milliseconds, not null, must be positive and non-zero)
-├── lap_2_time: INTEGER (milliseconds, not null, must be positive and non-zero)
-├── lap_3_time: INTEGER (milliseconds, not null, must be positive and non-zero)
+├── lap1_time: INTEGER (milliseconds, not null, must be positive and non-zero)
+├── lap2_time: INTEGER (milliseconds, not null, must be positive and non-zero)
+├── lap3_time: INTEGER (milliseconds, not null, must be positive and non-zero)
 ├── drink_type_id: UUID (foreign key -> drink_types, not null)
 ├── photo_path: TEXT (nullable — optional but encouraged; required for record-breaking runs)
 ├── created_at: TIMESTAMP (not null, defaults to current time, optionally user-provided)
@@ -217,7 +217,7 @@ Tracks review requests for runs. Supports both user-initiated flags and auto-gen
 ```
 run_flags
 ├── id: UUID (primary key)
-├── run_id: UUID (foreign key -> runs, unique)
+├── run_id: UUID (foreign key -> runs, not null)
 ├── reason: TEXT (not null — from preset list or auto-generated)
 ├── note: TEXT (nullable — user-provided context)
 ├── hide_while_pending: BOOLEAN (not null, default false)
@@ -242,6 +242,7 @@ Notes:
 - When flagging, users choose whether the run stays visible or is hidden while under review (`hide_while_pending`).
 - Auto-generated flags always set `hide_while_pending = true`.
 - The `flagged_for_review` column on the `runs` table is removed — flag status is determined by the presence of an unresolved `run_flags` row.
+- `run_id` is NOT unique — a run can have multiple flags, both resolved and unresolved. Different issues (e.g., wrong time and wrong race setup) are tracked as separate flags and resolved independently. Resolved flags are kept as audit history. Application code prevents duplicate flags (same run + same reason while unresolved).
 
 ### Head-to-Head Context
 
@@ -588,6 +589,10 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - **Run immutability:** Users cannot edit runs after creation. Admin can edit (for correcting OCR errors, etc.).
 - **Head-to-head tracking:** No explicit sessions table. Derived from timestamp proximity.
 - **Photo enforcement for records:** Runs are auto-flagged and hidden if record-breaking without a photo. Photo upload auto-resolves the flag.
+- **Lap time column naming:** `lap1_time`, `lap2_time`, `lap3_time` (no underscore before digit). Matches SeaORM's `DeriveIden` macro output for variants like `Lap1Time`, avoiding unnecessary custom naming.
+- **UUID storage in SQLite:** UUIDs stored as TEXT (not BLOB) for human readability when debugging with CLI tools. PostgreSQL migration will map to native UUID type. SeaORM maps both to `String` in Rust, so application code won't change.
+- **Timestamp storage in SQLite:** Timestamps stored as TEXT in ISO 8601 format. SQLite has no native timestamp type. PostgreSQL migration will map to `TIMESTAMPTZ`.
+- **run_flags audit trail:** `run_id` is not unique — a run can have multiple flags (different reasons tracked separately, resolved independently). Resolved flags are kept as history. Only duplicate flags (same run + same reason while unresolved) are prevented in application code.
 
 ## Future Ideas (Not Committed)
 
