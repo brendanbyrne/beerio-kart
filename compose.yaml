@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - JWT_EXPIRY_HOURS=${JWT_EXPIRY_HOURS:-24}
+      - ADMIN_USER_ID=${ADMIN_USER_ID:-}
+      - DATABASE_URL=sqlite:///app/db/beerio-kart.db?mode=rwc
+      - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      - db-data:/app/db
+      - uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:

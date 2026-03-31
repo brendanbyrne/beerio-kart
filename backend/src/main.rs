@@ -7,6 +7,7 @@ use axum::{
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde::Serialize;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -65,13 +66,24 @@ async fn main() {
 
     let state = AppState { db, config };
 
+    // STATIC_DIR defaults to ../frontend/dist for local dev (running from backend/).
+    // In Docker, set to /app/static where the built frontend is copied.
+    let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "../frontend/dist".to_string());
+
     let app = Router::new()
         .route("/api/v1/hello", get(hello))
         .route("/api/v1/auth/register", post(routes::auth::register))
         .route("/api/v1/auth/login", post(routes::auth::login))
         .route("/api/v1/auth/logout", post(routes::auth::logout))
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state)
+        // Serve frontend static files. If no API route or static file matches,
+        // fall back to index.html so React Router can handle client-side routing.
+        // Using .fallback() instead of .not_found_service() returns 200 (not 404).
+        .fallback_service(
+            ServeDir::new(&static_dir)
+                .fallback(ServeFile::new(format!("{}/index.html", static_dir))),
+        );
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     tracing::info!("Listening on http://localhost:3000");
