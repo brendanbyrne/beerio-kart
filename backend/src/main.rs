@@ -3,7 +3,7 @@ mod entities;
 
 use axum::{Json, Router, routing::get};
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{Database, DatabaseConnection};
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -24,6 +24,13 @@ async fn main() {
     let db: DatabaseConnection = Database::connect(&database_url)
         .await
         .expect("Failed to connect to database");
+
+    // SQLite doesn't enforce foreign keys by default — this PRAGMA enables it
+    // per connection. Without it, you can insert rows referencing nonexistent
+    // foreign keys and SQLite will silently accept them.
+    db.execute_unprepared("PRAGMA foreign_keys = ON")
+        .await
+        .expect("Failed to enable foreign key enforcement");
 
     // Run all pending migrations. On a fresh database this creates every table.
     Migrator::up(&db, None)

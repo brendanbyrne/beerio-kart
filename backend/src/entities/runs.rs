@@ -62,7 +62,7 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Gliders,
-    #[sea_orm(has_one = "super::run_flags::Entity")]
+    #[sea_orm(has_many = "super::run_flags::Entity")]
     RunFlags,
     #[sea_orm(
         belongs_to = "super::tracks::Entity",
