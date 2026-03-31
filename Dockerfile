@@ -49,8 +49,14 @@ COPY --from=backend-build /app/backend/target/release/beerio-kart ./beerio-kart
 # Copy the built frontend
 COPY --from=frontend-build /app/frontend/dist/ ./static/
 
-# Create directories for runtime data
-RUN mkdir -p /app/db /app/uploads
+# Create directories for runtime data and a non-root user to run the app.
+# Running as root inside a container is a security risk — if the app were
+# compromised, the attacker would have root privileges in the container.
+RUN useradd --create-home --no-log-init appuser \
+    && mkdir -p /app/db /app/uploads \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 3000
 
