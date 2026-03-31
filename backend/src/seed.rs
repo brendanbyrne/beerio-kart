@@ -111,62 +111,30 @@ where
 
 /// Intermediate struct for converting JSON data into any simple ActiveModel.
 /// Each simple entity (characters, bodies, wheels, gliders, cups) implements
-/// From<SimpleActiveModel> below.
+/// From<SimpleActiveModel> via the macro below.
 struct SimpleActiveModel {
     id: i32,
     name: String,
     image_path: String,
 }
 
-impl From<SimpleActiveModel> for characters::ActiveModel {
-    fn from(s: SimpleActiveModel) -> Self {
-        Self {
-            id: Set(s.id),
-            name: Set(s.name),
-            image_path: Set(s.image_path),
-        }
-    }
+macro_rules! impl_simple_seed {
+    ($($module:ident),+) => {
+        $(
+            impl From<SimpleActiveModel> for $module::ActiveModel {
+                fn from(s: SimpleActiveModel) -> Self {
+                    Self {
+                        id: Set(s.id),
+                        name: Set(s.name),
+                        image_path: Set(s.image_path),
+                    }
+                }
+            }
+        )+
+    };
 }
 
-impl From<SimpleActiveModel> for bodies::ActiveModel {
-    fn from(s: SimpleActiveModel) -> Self {
-        Self {
-            id: Set(s.id),
-            name: Set(s.name),
-            image_path: Set(s.image_path),
-        }
-    }
-}
-
-impl From<SimpleActiveModel> for wheels::ActiveModel {
-    fn from(s: SimpleActiveModel) -> Self {
-        Self {
-            id: Set(s.id),
-            name: Set(s.name),
-            image_path: Set(s.image_path),
-        }
-    }
-}
-
-impl From<SimpleActiveModel> for gliders::ActiveModel {
-    fn from(s: SimpleActiveModel) -> Self {
-        Self {
-            id: Set(s.id),
-            name: Set(s.name),
-            image_path: Set(s.image_path),
-        }
-    }
-}
-
-impl From<SimpleActiveModel> for cups::ActiveModel {
-    fn from(s: SimpleActiveModel) -> Self {
-        Self {
-            id: Set(s.id),
-            name: Set(s.name),
-            image_path: Set(s.image_path),
-        }
-    }
-}
+impl_simple_seed!(characters, bodies, wheels, gliders, cups);
 
 async fn seed_tracks(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
     let existing = tracks::Entity::find().one(db).await?;
