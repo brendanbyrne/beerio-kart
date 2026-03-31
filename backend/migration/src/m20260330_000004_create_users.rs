@@ -82,6 +82,7 @@ pub enum Users {
     PreferredWheelsId,
     PreferredGliderId,
     PreferredDrinkTypeId,
+    UsernameLower,
     CreatedAt,
     UpdatedAt,
 }

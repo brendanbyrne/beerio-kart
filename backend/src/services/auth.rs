@@ -2,7 +2,7 @@ use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
-use chrono::{Duration, Utc};
+use chrono::{TimeDelta, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
@@ -47,7 +47,7 @@ pub fn create_token(
     config: &AppConfig,
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let now = Utc::now();
-    let expiry = now + Duration::hours(config.jwt_expiry_hours as i64);
+    let expiry = now + TimeDelta::hours(config.jwt_expiry_hours as i64);
 
     let claims = Claims {
         sub: user_id.to_string(),

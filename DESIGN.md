@@ -58,7 +58,8 @@ User-modifiable: yes (own profile, preferred race setup).
 ```
 users
 ├── id: UUID (primary key)
-├── username: TEXT (unique, not null, 1-30 characters)
+├── username: TEXT (not null, display name as-entered)
+├── username_lower: TEXT (unique, not null, lowercased for lookups)
 ├── email: TEXT (unique, nullable — for account recovery)
 ├── password_hash: TEXT (not null)
 ├── preferred_character_id: INTEGER (foreign key -> characters, nullable)
@@ -594,6 +595,7 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - **UUID storage in SQLite:** UUIDs stored as TEXT (not BLOB) for human readability when debugging with CLI tools. PostgreSQL migration will map to native UUID type. SeaORM maps both to `String` in Rust, so application code won't change.
 - **Timestamp storage in SQLite:** Timestamps stored as TEXT in ISO 8601 format. SQLite has no native timestamp type. PostgreSQL migration will map to `TIMESTAMPTZ`.
 - **run_flags audit trail:** `run_id` is not unique — a run can have multiple flags (different reasons tracked separately, resolved independently). Resolved flags are kept as history. Only duplicate flags (same run + same reason while unresolved) are prevented in application code.
+- **Case-insensitive usernames:** Two-column approach — `username` stores the original casing (for display), `username_lower` stores the lowercased form (for uniqueness and lookups). The UNIQUE constraint is on `username_lower`. This avoids SQLite's limited `COLLATE NOCASE` (ASCII-only) and keeps case-insensitive behavior explicit in queries.
 
 ## Future Ideas (Not Committed)
 
