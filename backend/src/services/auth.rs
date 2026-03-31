@@ -71,7 +71,7 @@ pub fn validate_token(
     let token_data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(config.jwt_secret.as_bytes()),
-        &Validation::default(),
+        &Validation::new(jsonwebtoken::Algorithm::HS256),
     )?;
     Ok(token_data.claims)
 }

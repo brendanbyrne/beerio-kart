@@ -230,7 +230,7 @@ async fn test_register_unicode_username_within_30_chars() {
     let server = setup_test_app().await;
 
     // 30 Unicode characters (each is multibyte in UTF-8)
-    let unicode_name: String = std::iter::repeat('é').take(30).collect();
+    let unicode_name: String = "é".repeat(30);
     let response = server
         .post("/api/v1/auth/register")
         .json(&json!({ "username": unicode_name, "password": "password123" }))
@@ -238,4 +238,39 @@ async fn test_register_unicode_username_within_30_chars() {
 
     // Should succeed — 30 characters even though >30 bytes
     response.assert_status(StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn test_login_trims_whitespace_like_register() {
+    let server = setup_test_app().await;
+
+    // Register with whitespace-padded username
+    server
+        .post("/api/v1/auth/register")
+        .json(&json!({ "username": "  padded  ", "password": "password123" }))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    // Login with the same whitespace — should still find the user
+    let response = server
+        .post("/api/v1/auth/login")
+        .json(&json!({ "username": "  padded  ", "password": "password123" }))
+        .await;
+
+    response.assert_status(StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["user"]["username"], "padded");
+}
+
+#[tokio::test]
+async fn test_register_long_password_returns_400() {
+    let server = setup_test_app().await;
+
+    let long_password = "a".repeat(129);
+    let response = server
+        .post("/api/v1/auth/register")
+        .json(&json!({ "username": "testuser", "password": long_password }))
+        .await;
+
+    response.assert_status(StatusCode::BAD_REQUEST);
 }
