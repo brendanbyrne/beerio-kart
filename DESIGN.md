@@ -558,7 +558,7 @@ beerio-kart/
 - [x] Set up SeaORM with SQLite and migrations (all tables including run_flags)
 - [x] Seed MK8 Deluxe data (tracks, cups, characters, bodies, wheels, gliders)
 - [x] Basic auth (register/login with argon2 + JWT)
-- [ ] Dockerfiles + compose.yaml
+- [x] Dockerfiles + compose.yaml
 
 ### Phase 2: Deployment
 - [ ] Create Dockerfile for backend (multi-stage: build Rust binary, copy to slim runtime image)
