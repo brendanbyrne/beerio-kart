@@ -10,8 +10,29 @@ Beerio Kart is a mobile-first web app for tracking times and stats for the Mario
 2. You cannot touch the controller while touching your drink.
 3. The drink is one 12oz beer or one 12oz sparkling water, poured into a cup.
 4. You may restart the race if it is before the end of the first lap AND you haven't had any of your drink yet.
-5. Played round robin — all players race the same track.
-6. Fastest time wins.
+5. If you finish the race before you finish your drink, your run is disqualified (DQ). This is self-reported on the honor system.
+6. Played round robin — all players race the same track.
+7. Fastest non-DQ'd time wins.
+
+## High Level Principles
+
+Consideration of these principles should go into every design decision made. If a decision can't tie itself back to at least one of these principles, then it should be questioned.
+
+- **First class experience even if you don't drink.** Tailor each player's experience to their preference to drink or not.
+- **Never a burden to use.** What's the point if it's not making things easier.
+- **You should never feel rushed, unless absolutely necessary.** Enjoying each others' company is the point.
+- **You can play in the same room as much as across the world.** Nothing should require that you're using different TVs or the same TV.
+- **Should be usable by only one hand.** The other one could be wet.
+
+## Design Goals
+
+- **Minimize number of choices in any moment.** It's hard to use wrong, if you can only do what you need to.
+- **Prefer simple interactions over complex ones.** Doing nothing > "single use button" > swipe screen > togglable button > swipe specific objects > multiple buttons > typing.
+- **Provide sensible defaults whenever possible.** You can usually assume what most likely decision a person will make.
+
+## Technical Constraints
+
+- **Don't overengineer before OCR.** Many corner cases (time validation, race setup entry, session tracking) will be solved by OCR. Design the MVP for manual entry with hooks for OCR to slot in later.
 
 ## Tech Stack
 
@@ -61,12 +82,6 @@ Log output is controlled via the `RUST_LOG` environment variable. Defaults to `i
 - Foreign keys: `{referenced_table_singular}_id` (`character_id`, `cup_id`)
 - Primary keys: `id`
 
-## Design Principles
-
-- **Minimize manual input.** Every design decision should favor automatically deducing information over requiring users to enter it explicitly.
-- **Inclusive by default.** The game is historically a drinking game, but non-drinkers should never feel like second-class participants. The app treats alcoholic and non-alcoholic runs with equal prominence.
-- **Don't overengineer before OCR.** Many corner cases (time validation, race setup entry, session tracking) will be solved by OCR. Design the MVP for manual entry with hooks for OCR to slot in later.
-
 ## Data Model
 
 ### Design Decisions
@@ -74,7 +89,7 @@ Log output is controlled via the `RUST_LOG` environment variable. Defaults to `i
 - **UUID vs INTEGER primary keys.** INTEGER for pre-seeded static data (characters, tracks, cups, bodies, wheels, gliders) — stable, small, human-readable. UUID for user-generated runtime data (users, runs, drink_types) — globally unique, can be generated client-side without a database round trip (important for future offline support).
 - **RaceSetup stored inline, not normalized.** Character, body, wheels, and glider IDs are stored directly on the `runs` and `users` tables rather than in separate junction tables. With ~3 million possible combinations (most never used), a reference table is wasteful. Inline storage costs 4 integer columns (16 bytes) — negligible. Migration to a normalized form later is straightforward if needed.
 - **Images stored on disk, paths in the database.** Pre-seeded assets (characters, tracks, kart parts) ship as static files. User-uploaded photos (run verification) are saved to a configurable uploads directory. Database stores relative paths (e.g., `images/characters/mario.png`).
-- **Fixed-size arrays use separate columns or relational joins.** Lap times (always 3) become `lap_1_time`, `lap_2_time`, `lap_3_time` — simple to query. Cup-to-track relationships use the `cup_id` foreign key on the `tracks` table, not an array on `cups`.
+- **Fixed-size arrays use separate columns or relational joins.** Lap times (always 3) become `lap1_time`, `lap2_time`, `lap3_time` — simple to query. Cup-to-track relationships use the `cup_id` foreign key on the `tracks` table, not an array on `cups`.
 - **Leaderboards separate alcoholic and non-alcoholic runs by default**, with a combined view available.
 - **Nullability defaults to NOT NULL** unless there is a clear reason for the data to be optional. Nullable columns map to `Option<T>` in Rust, adding handling overhead.
 - **"Previous" setup is derived, not stored.** The user's last-used race setup and drink type are queried from their most recent run, not duplicated on the users table. Only "preferred" (explicitly set) values are stored on users.
@@ -95,6 +110,7 @@ users
 ├── preferred_wheels_id: INTEGER (foreign key -> wheels, nullable)
 ├── preferred_glider_id: INTEGER (foreign key -> gliders, nullable)
 ├── preferred_drink_type_id: UUID (foreign key -> drink_types, nullable)
+├── refresh_token_version: INTEGER (not null, default 0)
 ├── created_at: TIMESTAMP (not null)
 └── updated_at: TIMESTAMP (not null)
 ```
@@ -199,6 +215,67 @@ Notes:
 - `alcoholic` must be explicitly set by the user (no default).
 - Image support for drink types deferred to a future phase.
 
+### Sessions
+
+The organizational unit for group play. A session is like a lobby — players join, race tracks together, and leave when done. All run recording happens within session context.
+
+```
+sessions
+├── id: UUID (primary key)
+├── created_by: UUID (foreign key -> users, not null)
+├── host_id: UUID (foreign key -> users, not null — current host, transfers on leave)
+├── ruleset: TEXT (not null — "random", "default", "least_played", "round_robin")
+├── ruleset_config: TEXT (nullable — JSON for ruleset-specific options, e.g., drink category for least_played)
+├── status: TEXT (not null — "active", "closed")
+├── created_at: TIMESTAMP (not null)
+└── last_activity_at: TIMESTAMP (not null)
+```
+
+Notes:
+- `host_id` starts as `created_by`. If the host leaves, host role transfers to the earliest-joined remaining participant.
+- `ruleset_config` stores options that vary by ruleset (e.g., for "least_played": which drink category to count by). JSON in TEXT column — structured enough to query, flexible enough for different rulesets.
+- Session auto-closes after 1 hour of no activity. No further run submissions accepted after close.
+- Future consideration: `password_hash` column for session passwords. Deferred — the `POST /sessions/:id/join` endpoint is designed as a dedicated action so password checking can be added later without restructuring the join flow.
+
+### Session Participants
+
+Tracks who is in a session and when they joined/left. A user can rejoin a session (creating a new row).
+
+```
+session_participants
+├── id: UUID (primary key)
+├── session_id: UUID (foreign key -> sessions, not null)
+├── user_id: UUID (foreign key -> users, not null)
+├── joined_at: TIMESTAMP (not null)
+└── left_at: TIMESTAMP (nullable — null means currently in session)
+```
+
+Notes:
+- A user can have multiple rows for the same session (left and rejoined).
+- "Currently in session" = has a row where `left_at` is null.
+- On leave, pending race submissions enter a 5-minute grace period. If the user rejoins within that window, their pending races are preserved. After the grace period, pending submissions expire.
+
+### Session Races
+
+Each race within a session. Tracks the sequence of tracks raced and who chose them.
+
+```
+session_races
+├── id: UUID (primary key)
+├── session_id: UUID (foreign key -> sessions, not null)
+├── race_number: INTEGER (not null — sequential within session, starting at 1)
+├── track_id: INTEGER (foreign key -> tracks, not null)
+├── chosen_by: UUID (foreign key -> users, nullable — null for random/automatic selection)
+└── created_at: TIMESTAMP (not null)
+```
+
+Constraints:
+- Composite unique on `(session_id, race_number)` — no duplicate race numbers within a session.
+
+Notes:
+- `chosen_by` is null when the track was selected automatically (random ruleset, or everyone recused in default/round-robin).
+- Race numbers are sequential and gapless within a session.
+
 ### Runs
 
 The core table. One row per player per race attempt. User-created, immutable for regular users (times cannot be edited after creation; admin can edit), deletable by owner or admin.
@@ -207,6 +284,7 @@ The core table. One row per player per race attempt. User-created, immutable for
 runs
 ├── id: UUID (primary key)
 ├── user_id: UUID (foreign key -> users, not null)
+├── session_race_id: UUID (foreign key -> session_races, not null)
 ├── track_id: INTEGER (foreign key -> tracks, not null)
 ├── character_id: INTEGER (foreign key -> characters, not null)
 ├── body_id: INTEGER (foreign key -> bodies, not null)
@@ -217,22 +295,30 @@ runs
 ├── lap2_time: INTEGER (milliseconds, not null, must be positive and non-zero)
 ├── lap3_time: INTEGER (milliseconds, not null, must be positive and non-zero)
 ├── drink_type_id: UUID (foreign key -> drink_types, not null)
+├── disqualified: BOOLEAN (not null, default false)
 ├── photo_path: TEXT (nullable — optional but encouraged; required for record-breaking runs)
 ├── created_at: TIMESTAMP (not null, defaults to current time, optionally user-provided)
 └── notes: TEXT (nullable — freeform; may be mined for future structured columns)
 ```
+
+Notes:
+- `session_race_id` is NOT NULL — all runs belong to a session race in the MVP. Solo racing is a one-person session. Future enhancement: make nullable to allow standalone runs without session context, streamlining the solo experience.
+- `track_id` is technically redundant with `session_race_id` (the session race knows the track), but stored for query convenience and to allow future standalone runs.
+- `disqualified` marks runs where the player didn't finish their drink before finishing the race. Self-reported (honor system). DQ'd runs are recorded but excluded from H2H win/loss tallies and leaderboard positions.
 
 Validation (application-level):
 - `track_time` must be positive.
 - All three lap times must be positive and non-zero.
 - Lap times should roughly sum to `track_time` (with tolerance for game rounding).
 - Race setup columns pre-fill from previous run (or preferred from profile), but are all required.
+- `track_id` must match the track on the referenced `session_race_id`.
 
 Record-breaking run enforcement:
 - When a run is created, the backend checks if the time is a new track record (per drink category).
 - If it is a record and no photo is attached, the run is saved but auto-flagged with `hide_while_pending = true`.
 - When a photo is uploaded via `POST /runs/:id/photo`, the auto-flag is resolved automatically.
 - If the photo never arrives, the run remains flagged and hidden from leaderboards. Admin can see and act on it.
+- DQ'd runs cannot be track records.
 
 Future (OCR):
 - The end-of-race TV screen shows race setup, track, and all 3 lap times. OCR will eventually extract all of this automatically.
@@ -273,9 +359,37 @@ Notes:
 - The `flagged_for_review` column on the `runs` table is removed — flag status is determined by the presence of an unresolved `run_flags` row.
 - `run_id` is NOT unique — a run can have multiple flags, both resolved and unresolved. Different issues (e.g., wrong time and wrong race setup) are tracked as separate flags and resolved independently. Resolved flags are kept as audit history. Application code prevents duplicate flags (same run + same reason while unresolved).
 
-### Head-to-Head Context
+### Head-to-Head Derivation
 
-Not an explicit feature. Runs played in the same round robin are loosely clustered by `created_at` timestamps. Head-to-head stats (Phase 5) are derived from timestamp proximity, not user-managed grouping. This avoids adding manual "session" bookkeeping — consistent with the design principle of minimizing manual input.
+Head-to-head records are derived from session data, not stored separately. A "win" is when two players both submitted non-DQ'd runs for the same `session_race_id` and one had a faster `track_time`. Ties (identical times) count as 0-0 — neither a win nor a loss.
+
+The query: find all `session_race_id` values where both User A and User B have a non-DQ'd run, compare `track_time`, tally wins and losses. The relationship is symmetric — A's wins are B's losses and vice versa.
+
+H2H does not distinguish between alcoholic and non-alcoholic runs. If a drinker and a non-drinker race in the same session, their result counts for H2H. Drink category separation only applies to leaderboards.
+
+This approach supports an unbounded number of rivals — no tracking table needed, no cap on how many people you can have H2H records with. Performance is a simple indexed join at the scale of a friend group. If it ever needs optimization, a materialized cache can be added later.
+
+### Pending Race Tracking
+
+Within a session, a participant may have "pending" races — session races they were present for but haven't yet submitted a time. The UI caps pending races at 3 (oldest expire first), but the schema places no limit, allowing this cap to be adjusted later.
+
+When a participant has pending races, they submit in order (oldest first). For each pending race, they can submit a time or skip. Submitting out of order is not allowed — this prevents cherry-picking favorable tracks to game H2H records.
+
+If the session advances while a participant hasn't submitted, they get a choice: submit for the original track (default) or the current one. This ensures no one person holds up the group, consistent with "never feel rushed."
+
+### Session Rulesets
+
+Each session uses one ruleset that determines how tracks are selected. The ruleset is chosen at session creation. Development order: Random → Default → Least Played → Round-robin.
+
+**Random:** A random track is chosen each time, without replacement. The host triggers each new track selection. For when you just don't care what you're racing.
+
+**Default:** The person with the fewest points on the global leaderboard always chooses. This biases the game toward "self-leveling" — keeping the pack tight and the leaderboard interesting. Tiebreaker: the user with the oldest account creation time is chosen (increasing the likelihood that the chooser has the most site experience and will keep things moving). The chosen person can recuse — they're removed from consideration until a race is completed or they leave and rejoin. If everyone recuses, a random track is chosen.
+
+**Least Played:** The track with the fewest submitted runs is chosen automatically. "Fewest" is scoped to a drink category (alcoholic or non-alcoholic), chosen at session creation. The player's preferred drink type determines which option is pre-selected. The host triggers each new track selection.
+
+**Round-robin:** Two groups: "Can Choose" and "Can't Choose." Everyone starts in "Can Choose." The earliest session joiner in "Can Choose" picks the track. After choosing, they move to "Can't Choose." Recusing also moves you to "Can't Choose." If "Can Choose" is empty, a random track is chosen and everyone resets to "Can Choose." This prevents the decision from stalling on someone not paying attention.
+
+**Timeout handling (all rulesets):** Every decision point is event-driven — no timers pressuring players. If a chooser stalls, any participant can trigger "skip turn" to pass to the next person per the ruleset's logic. MVP fallback for truly stuck sessions: leave and start a new one. Vote-to-kick deferred.
 
 ## User Workflows
 
@@ -285,30 +399,63 @@ Not an explicit feature. Runs played in the same round robin are loosely cluster
 2. Registers (username + password), auto-logged-in.
 3. Lands on home/dashboard — empty state.
 4. Prompted to set up preferred race setup (character, body, wheels, glider) and preferred drink type. Drink type selector includes "not listed? add new" option.
+5. Home screen shows active sessions. If friends are already playing, the most natural next step is "tap to join." If nobody's playing, "Start a Session" is the primary action.
 
-### Workflow 2: Recording a Run
+### Workflow 2: Starting a Session
 
-1. Opens app (already logged in).
-2. Taps "Enter a Run."
-3. Track suggestion: if another player entered a run on a different track within the last 15 minutes, suggest that track. Presented as a suggestion, not auto-selected.
-4. Selects track (browse by cup or search by name) — or accepts the suggestion.
-5. Enters time (MM:SS.mmm format — manual entry for v1, camera/OCR later).
-6. Drink selector: defaults to previous (last run's drink), falls back to preferred (profile). Can change or add new inline.
-7. Race setup: defaults to previous (last run's setup), falls back to preferred (profile). Changeable. *(Earmarked: should both previous and preferred be shown as options when they differ?)*
-8. Optionally takes/uploads photo of TV screen.
-9. If time would beat the track record and no photo is attached → app prompts for a photo. If skipped, run is auto-flagged and hidden.
-10. Submits.
-11. Sees confirmation, home screen updates.
+1. Taps "Start a Session" on home screen.
+2. Selects a ruleset: Random (default for MVP), Default, Least Played, or Round-robin. Brief explanation of each shown inline.
+3. Session is created. User is the host and first participant.
+4. Lands on the session screen — waiting for others to join, or can proceed solo.
+5. For Random and Least Played rulesets: host taps to trigger the first track selection. For Default and Round-robin: the chooser is determined by the ruleset and prompted to pick.
 
-### Workflow 3: Checking Personal Stats
+### Workflow 3: Joining a Session
+
+1. Home screen shows list of active sessions, sorted by most recent activity. Each shows: host name, participant count, current race number, ruleset.
+2. Taps a session to join.
+3. Lands on the session screen, sees current state: what track is being raced, who's in, who has pending submissions.
+4. Can immediately submit a time for the current race.
+
+Future enhancement: prioritize sessions containing players you've competed with before (sort by known rivals). Future consideration: session passwords via the `POST /sessions/:id/join` endpoint.
+
+### Workflow 4: The Session Loop (Core Play Loop)
+
+1. A track is selected (by the chooser or automatically, depending on ruleset).
+2. Everyone in the session sees the track. Each person races on their TV in Time Trial mode.
+3. After racing, each person submits their time:
+   - Track is already known (from the session race) — no track selection needed.
+   - Enter time (MM:SS.mmm — manual entry for v1, camera/OCR later).
+   - Drink defaults to previous, fallback to preferred. Can change or add new inline.
+   - Race setup defaults to previous, fallback to preferred. Can change.
+   - Option to mark the run as DQ'd (didn't finish drink before finishing race).
+   - Optional photo upload.
+   - If time is a track record and no photo: prompt, then auto-flag if skipped.
+4. Session screen shows who has submitted, who's still pending.
+5. Next track selection happens when the chooser/host triggers it (depending on ruleset). The chooser can pick while others still have pending submissions — this doesn't block.
+6. If someone has pending races from earlier, they see those when they go to submit. Pending races shown in order, submit or skip each. Max 3 pending in UI (oldest expire first). Schema supports unlimited for future flexibility.
+7. Choosing and submitting are independent actions — the chooser can pick the next track even if they haven't submitted their own time yet.
+8. Repeat until the group decides to stop.
+
+Earmarked: the track selection sub-workflow (how the chooser browses/searches for a track within a session) will be specified as part of Phase 3 detailed design. Starting point: browse by cup or search by name, consistent with the existing track browser concept.
+
+### Workflow 5: Leaving a Session / Session End
+
+1. Player taps "Leave Session."
+2. If they have pending race submissions: warning that pending times will be forfeited after a 5-minute grace period. If they rejoin within the grace period, pending races are preserved.
+3. If the leaving player is the host: host role transfers to the earliest-joined remaining participant.
+4. Session ends when all participants have left.
+5. If no activity for 1 hour, session auto-closes and no further run submissions are accepted.
+
+### Workflow 6: Checking Personal Stats
 
 1. Opens profile.
 2. Sees overall stats: total runs, most-played track, best track (highest leaderboard position), overall rank.
-3. Sees full run history (all runs, newest first) — tappable to view details, flag, or delete.
-4. Can drill into a specific track — time chart over time, PB, average.
-5. Sees "players you've competed with" list (derived from timestamp clustering) — tap one to see H2H record.
+3. Sees session history: list of sessions participated in (date, participants, race count, personal W-L for that session). Tap into a session for race-by-race breakdown.
+4. Sees full run history (all runs, newest first) — tappable to view details, flag, or delete.
+5. Can drill into a specific track — time chart over time, PB, average.
+6. Sees "players you've competed with" list (derived from shared session races) — tap one to see H2H record.
 
-### Workflow 4: Tracks & Leaderboards
+### Workflow 7: Tracks & Leaderboards
 
 1. Opens "Tracks & Leaderboards."
 2. Sees global leaderboard — most track records held per player, your rank pinned at bottom if not in top N.
@@ -321,7 +468,7 @@ Not an explicit feature. Runs played in the same round robin are loosely cluster
 
 Note: earmarked for later discussion — potential shared leaderboard component across global/cup/track levels with consistent visual style but different data.
 
-### Workflow 5: Flagging a Run
+### Workflow 8: Flagging a Run
 
 1. User views one of their own runs (from run history in profile).
 2. Run has a photo attached.
@@ -331,7 +478,7 @@ Note: earmarked for later discussion — potential shared leaderboard component 
 6. Chooses visibility: keep visible (default) or hide until reviewed.
 7. Run marked as flagged, appears in admin queue.
 
-### Workflow 6: Admin Reviews Flagged Runs
+### Workflow 9: Admin Reviews Flagged Runs
 
 1. Brendan opens admin page (accessible only if user ID matches env variable).
 2. Sees list of unresolved flags: player name, track, entered time, flag reason, note, visibility status, whether auto-generated.
@@ -356,9 +503,11 @@ For future flexibility (querying data in ways not yet enumerated), the runs endp
 Uses established Rust crates — not rolling crypto from scratch. `argon2` for password hashing, `jsonwebtoken` for JWT tokens. ~150 lines of code wrapping audited libraries. Sufficient for a self-hosted friends-and-game-night app. Account recovery is admin-reset for now.
 
 ```
-POST   /auth/register              Create account (username, password), returns JWT
-POST   /auth/login                 Returns JWT token
-POST   /auth/logout                Invalidate token
+POST   /auth/register              Create account (username, password), returns access token + sets refresh cookie
+POST   /auth/login                 Returns access token + sets refresh cookie
+POST   /auth/refresh               Exchange refresh cookie for new access token
+POST   /auth/logout                Clears refresh cookie, increments refresh_token_version
+PUT    /auth/password              Change own password (requires current password)
 ```
 
 ### Users
@@ -390,33 +539,51 @@ GET    /drink_types                List all drink types (optional filter: alcoho
 GET    /drink_types/:id            Get drink type details
 ```
 
+### Sessions
+
+```
+POST   /sessions                   Create a new session (choose ruleset)
+GET    /sessions                   List active sessions (sorted by most recent activity)
+GET    /sessions/:id               Get session details (participants, current race, state)
+POST   /sessions/:id/join          Join a session (dedicated endpoint — designed for future password support)
+POST   /sessions/:id/leave         Leave a session (triggers grace period for pending races)
+POST   /sessions/:id/next-track    Trigger next track selection (host or chooser, depending on ruleset)
+POST   /sessions/:id/choose-track  Choose a specific track (for rulesets where a player picks)
+POST   /sessions/:id/skip-turn     Pass the chooser's turn to the next person (any participant can trigger)
+GET    /sessions/:id/races         List all races in a session (with submission status per participant)
+```
+
+Note: Session state changes (joins, leaves, new races, submissions) are broadcast to participants via WebSocket. The REST endpoints handle actions; the WebSocket pushes real-time updates.
+
 ### Runs
 
 ```
-POST   /runs                       Record a new run (auto-flags if record-breaking without photo)
-GET    /runs                       Query runs (filters: user_id, track_id, drink_type_id,
-                                               alcoholic, after, before, sort, limit, offset)
+POST   /runs                       Record a new run (requires session_race_id; auto-flags if record-breaking without photo)
+GET    /runs                       Query runs (filters: user_id, track_id, session_race_id, drink_type_id,
+                                               alcoholic, disqualified, after, before, sort, limit, cursor)
 GET    /runs/:id                   Get a specific run
 DELETE /runs/:id                   Delete a run (owner or admin)
 PUT    /runs/:id                   Edit a run (admin only, 403 for regular users)
 POST   /runs/:id/photo             Upload photo for a run (auto-resolves record flag if present)
 POST   /runs/:id/flag              Flag a run for review (owner only, requires photo on run)
-GET    /runs/suggest-track         Track suggestion heuristic (15-min window, server-side logic)
 ```
+
+Note: `GET /runs/suggest-track` has been removed — track coordination is now handled by sessions.
 
 ### Stats
 
 ```
 GET    /stats/personal/:user_id                    Personal summary (total runs, most-played, best track, rank)
 GET    /stats/personal/:user_id/track/:track_id    Per-track breakdown (PB, average, time history)
+GET    /stats/personal/:user_id/sessions           Session history (date, participants, race count, personal W-L)
 GET    /stats/leaderboard/global                   Global leaderboard (most track records held)
 GET    /stats/leaderboard/cup/:cup_id              Cup-level leaderboard
 GET    /stats/leaderboard/track/:track_id          Track leaderboard (best time per user)
-GET    /stats/rivals/:user_id                      Players you've competed with (timestamp clustering)
-GET    /stats/head-to-head/:user_id_1/:user_id_2   H2H record between two players
+GET    /stats/rivals/:user_id                      Players you've competed with (derived from shared session races)
+GET    /stats/head-to-head/:user_id_1/:user_id_2   H2H record between two players (derived from session races)
 ```
 
-All leaderboard endpoints accept `?alcoholic=true|false|all` to filter by drink category. Default matches the requesting user's preferred drink category.
+All leaderboard endpoints accept `?alcoholic=true|false|all` to filter by drink category. Default matches the requesting user's preferred drink category. DQ'd runs are excluded from leaderboard calculations.
 
 ### Admin
 
@@ -431,21 +598,34 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 Simple form. Username + password. No email required for v1.
 
 ### 2. Home / Dashboard
-- Quick-action button: "Enter a Run"
-- Recent runs (your last 5)
-- Your overall rank (most track records held)
-- Preferred Race Setup (character + kart displayed)
+- Active sessions list (sorted by most recent activity; each shows host, participants, race number, ruleset).
+- "Start a Session" button (primary action).
+- Recent runs (your last 5).
+- Your overall rank (most track records held).
+- Preferred Race Setup (character + kart displayed).
 
-### 3. Record a Run
-1. Track suggestion shown if applicable (another player entered a run on a different track within 15 minutes).
-2. Select track (searchable dropdown or grouped by cup) — or accept suggestion.
-3. Enter time (MM:SS.mmm format — manual entry for v1, camera/OCR later).
-4. Select drink (defaults to previous, falls back to preferred; "not listed? add new" inline).
-5. Race setup (defaults to previous, falls back to preferred; changeable).
-6. Optional: take/upload photo of TV screen.
-7. If record-breaking without photo: prompt for photo. If skipped, run is auto-flagged and hidden.
+### 3. Session Screen
+The main play screen. Shows:
+- Current track being raced.
+- Participant list with submission status (submitted / pending / DQ'd).
+- Pending race indicator (who has unsubmitted races from earlier).
+- "Submit Time" action — opens the run entry form for the current (or pending) race.
+- Next track controls (host/chooser triggers, depending on ruleset).
+- "Skip Turn" option (any participant can pass the chooser's turn).
+- "Leave Session" button.
+- Session history (tracks raced so far, results).
 
-### 4. Tracks & Leaderboards
+### 4. Run Entry (within session)
+Streamlined compared to standalone entry — the track is already known from the session.
+1. Enter time (MM:SS.mmm — manual entry for v1, camera/OCR later).
+2. Drink defaults to previous, fallback to preferred. Can change or add new inline.
+3. Race setup defaults to previous, fallback to preferred. Can change.
+4. Option to mark run as DQ'd (didn't finish drink before finishing race).
+5. Optional photo upload.
+6. If record-breaking without photo: prompt, then auto-flag if skipped.
+7. If pending races exist: shown in order, submit or skip each before current race.
+
+### 5. Tracks & Leaderboards
 - Global leaderboard: most track records held, your rank pinned at bottom.
 - Alcoholic/non-alcoholic/combined toggle (defaults to user's preferred drink category).
 - Cups listed in game order, each showing its 4 tracks.
@@ -453,13 +633,14 @@ Simple form. Username + password. No email required for v1.
 - Drill into track: your PB, time chart, run history on this track, track leaderboard.
 - Tap a player: their stats at that level. Tap again: full profile.
 
-### 5. Profile / Personal Stats
+### 6. Profile / Personal Stats
 - Overall stats: total runs, most-played track, best track, overall rank.
+- Session history: list of sessions (date, participants, race count, W-L). Tap for race-by-race breakdown.
 - Full run history (newest first) — tappable for details, flag, or delete.
 - Drill into a track for personal breakdown.
-- "Players you've competed with" — tap for H2H.
+- "Players you've competed with" (derived from shared session races) — tap for H2H.
 
-### 6. Admin (Brendan only)
+### 7. Admin (Brendan only)
 - List of unresolved flags with run details, photos, reasons, notes.
 - Actions: resolve, edit and resolve, or delete run.
 
@@ -491,6 +672,7 @@ beerio-kart/
 │       ├── routes/
 │       │   ├── mod.rs
 │       │   ├── auth.rs
+│       │   ├── sessions.rs
 │       │   ├── runs.rs
 │       │   ├── tracks.rs
 │       │   ├── stats.rs
@@ -499,6 +681,7 @@ beerio-kart/
 │       ├── services/            # Business logic layer
 │       │   ├── mod.rs
 │       │   ├── auth.rs
+│       │   ├── sessions.rs      # Session lifecycle, rulesets, WebSocket broadcast
 │       │   └── stats.rs
 │       └── middleware/
 │           ├── mod.rs
@@ -520,7 +703,8 @@ beerio-kart/
 │       ├── pages/               # Screen-level components
 │       │   ├── Home.tsx
 │       │   ├── Login.tsx
-│       │   ├── RecordRun.tsx
+│       │   ├── Session.tsx
+│       │   ├── RunEntry.tsx
 │       │   ├── TracksAndLeaderboards.tsx
 │       │   ├── TrackDetail.tsx
 │       │   ├── CupDetail.tsx
@@ -539,6 +723,8 @@ beerio-kart/
 │       └── cups/
 │
 ├── uploads/                     # User-uploaded run photos (gitignored)
+│
+├── reviews/                     # Claude Code-generated explanations from code reviews
 │
 └── data/
     ├── tracks.json              # MK8D track seed data
@@ -561,46 +747,68 @@ beerio-kart/
 - [x] Dockerfiles + compose.yaml
 
 ### Phase 2: Deployment
-- [ ] Create Dockerfile for backend (multi-stage: build Rust binary, copy to slim runtime image)
-- [ ] Create Dockerfile for frontend (build with Bun, serve with nginx or similar)
-- [ ] Create compose.yaml (backend + frontend + shared volume for SQLite + uploads)
+- [ ] Validate single-container Dockerfile on Unraid (multi-stage build already exists from Phase 1)
+- [ ] Validate compose.yaml on Unraid (already exists from Phase 1, single service + volumes)
 - [ ] Configure Cloudflare tunnel to route domain to the app on Unraid
 - [ ] Set Cloudflare encryption mode to **Full (strict)** — Flexible encrypts browser-to-Cloudflare but forwards plaintext to the origin server, which means passwords travel unencrypted on the last hop
 - [ ] Verify HTTPS works end-to-end through Cloudflare
 - [ ] Test basic auth flow from phone over real network
 - [ ] Add .env / config for production vs development settings
+- [ ] Upgrade auth to refresh token flow (short-lived access token + HttpOnly refresh cookie + `refresh_token_version` on users)
 
-Note: Deploying early (before core features) keeps the deployment simple and catches infrastructure issues before application complexity grows. The Dockerfiles are listed in Phase 1 as well — Phase 1 creates them for local development, Phase 2 validates they work on the actual Unraid server behind Cloudflare.
+Note: Deploying early (before core features) keeps the deployment simple and catches infrastructure issues before application complexity grows. The Dockerfile and compose.yaml were created in Phase 1 for local development — Phase 2 validates they work on the actual Unraid server behind Cloudflare.
 
-### Phase 3: Core Feature — Recording Runs
-- [ ] "Record a Run" form (track selection, manual time entry, drink type, race setup)
-- [ ] Track suggestion heuristic (15-minute window)
+### Phase 3: Sessions & Run Recording
+- [ ] Session schema: sessions, session_participants, session_races tables + migrations
+- [ ] Add `session_race_id` and `disqualified` columns to runs table (migration)
+- [ ] Add `refresh_token_version` to users table (migration, if not done in Phase 2)
+- [ ] WebSocket infrastructure (Axum WebSocket support for real-time session updates)
+- [ ] Session lifecycle: create, join, leave, auto-close on inactivity (1 hour)
+- [ ] Host transfer on leave (earliest-joined remaining participant)
+- [ ] Random ruleset (first ruleset — track chosen at random without replacement)
+- [ ] Run entry within session context (time, drink, race setup, DQ option)
+- [ ] Pending race tracking (max 3 in UI, submit in order, skip option)
+- [ ] 5-minute grace period for disconnects before pending races expire
+- [ ] "Skip turn" — any participant can pass the chooser's turn
 - [ ] Drink type selector with inline creation
 - [ ] Previous/preferred defaulting for drink and race setup
 - [ ] Photo upload (separate endpoint)
-- [ ] Auto-flagging for record-breaking runs without photos
-- [ ] Runs API (create, list, delete, photo upload)
-- [ ] Home screen showing recent runs
+- [ ] Auto-flagging for record-breaking runs without photos (DQ'd runs excluded)
+- [ ] Home screen: active sessions list + "Start a Session" primary action + recent runs
+- [ ] Sessions API (create, join, leave, next-track, choose-track, skip-turn, list races)
+- [ ] Runs API (create within session, list, delete, photo upload)
+- [ ] Password change endpoint (`PUT /auth/password`)
 
-### Phase 4: Stats & Leaderboards
+Note: Solo racing uses a one-person session. Future enhancement: streamline the solo experience by making `session_race_id` nullable on runs and offering a lightweight entry flow without session overhead.
+
+### Phase 4: Session Rulesets
+- [ ] Default ruleset (least leaderboard points chooses; recusal; fallback to random)
+- [ ] Least Played ruleset (track with fewest runs chosen; drink category config at session creation)
+- [ ] Round-robin ruleset ("Can Choose" / "Can't Choose" groups; recusal; reset when empty)
+- [ ] Ruleset selection UI at session creation (brief inline explanations)
+
+Future consideration: allow ruleset changes mid-session (deferred post-MVP).
+
+### Phase 5: Stats & Leaderboards
 - [ ] Personal stats page (PBs, averages, run count, most-played track, best track)
+- [ ] Session history in profile (date, participants, race count, personal W-L per session)
 - [ ] Full run history with detail view
 - [ ] Per-track time history with chart
-- [ ] Track leaderboard (alcoholic / non-alcoholic / combined toggle)
+- [ ] Track leaderboard (alcoholic / non-alcoholic / combined toggle; DQ'd runs excluded)
 - [ ] Cup-level leaderboard
 - [ ] Global leaderboard (most track records held)
 - [ ] User rank pinned at bottom of leaderboards
 
-### Phase 5: Social & Head-to-Head
-- [ ] "Players you've competed with" (timestamp clustering)
-- [ ] Head-to-head comparison view
-- [ ] Win/loss records
+### Phase 6: Social & Head-to-Head
+- [ ] "Players you've competed with" (derived from shared session races)
+- [ ] Head-to-head comparison view (wins/losses derived from session race data; DQ'd runs excluded; ties = 0-0)
+- [ ] Win/loss records (H2H does not distinguish alcoholic vs non-alcoholic — drink category only matters for leaderboards)
 - [ ] Profile page with improvement trends
 - [ ] Flagging a run (user-initiated, with preset reasons + notes + visibility choice)
 - [ ] Admin page (lightweight, env-variable-gated)
 - [ ] Admin: review flagged runs, resolve, edit, or delete
 
-### Phase 6: Camera/OCR (Future)
+### Phase 7: Camera/OCR (Future)
 - [ ] Photo upload with each run (verification + training data)
 - [ ] Use phone camera to photograph TV screen showing race time
 - [ ] Extract time using OCR (likely browser-side Tesseract.js or similar)
@@ -617,13 +825,25 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - **Track variants:** 150cc only.
 - **Admin model:** Lightweight admin page gated by user ID in env variable. No formal role system for MVP.
 - **Run immutability:** Users cannot edit runs after creation. Admin can edit (for correcting OCR errors, etc.).
-- **Head-to-head tracking:** No explicit sessions table. Derived from timestamp proximity.
+- **Head-to-head tracking:** Derived from session races. Two players have a H2H record when they both submitted non-DQ'd runs for the same session race. Replaces the earlier timestamp-clustering approach.
+- **Sessions replace standalone run recording.** All runs are recorded within session context. Solo racing uses a one-person session (MVP). Future enhancement: nullable `session_race_id` for lightweight standalone runs.
+- **H2H ties:** Identical times = 0-0 (draw). Neither player gets a win or loss.
+- **H2H drink category:** H2H does not distinguish alcoholic vs non-alcoholic. A drinker and non-drinker in the same session race have their result counted. Drink category only matters for leaderboards.
+- **DQ'd runs:** Recorded but excluded from H2H tallies and leaderboard positions. Self-reported at submission time (honor system). DQ = didn't finish drink before finishing race.
+- **Pending race cap:** UI shows max 3 pending races (oldest expire first). Schema supports unlimited — cap is a UX guardrail, adjustable later.
+- **Session host transfer:** When host leaves, earliest-joined remaining participant becomes new host.
+- **Session timeout handling (MVP):** "Skip turn" allows any participant to pass the chooser's turn. Vote-to-kick deferred. Leave-and-restart is the fallback for stuck sessions.
+- **Session passwords:** Deferred. The `POST /sessions/:id/join` endpoint is a dedicated action so password checking can be added later without restructuring the join flow.
+- **Ruleset changes mid-session:** Deferred post-MVP.
 - **Photo enforcement for records:** Runs are auto-flagged and hidden if record-breaking without a photo. Photo upload auto-resolves the flag.
 - **Lap time column naming:** `lap1_time`, `lap2_time`, `lap3_time` (no underscore before digit). Matches SeaORM's `DeriveIden` macro output for variants like `Lap1Time`, avoiding unnecessary custom naming.
 - **UUID storage in SQLite:** UUIDs stored as TEXT (not BLOB) for human readability when debugging with CLI tools. PostgreSQL migration will map to native UUID type. SeaORM maps both to `String` in Rust, so application code won't change.
 - **Timestamp storage in SQLite:** Timestamps stored as TEXT in ISO 8601 format. SQLite has no native timestamp type. PostgreSQL migration will map to `TIMESTAMPTZ`.
 - **run_flags audit trail:** `run_id` is not unique — a run can have multiple flags (different reasons tracked separately, resolved independently). Resolved flags are kept as history. Only duplicate flags (same run + same reason while unresolved) are prevented in application code.
 - **Frontend serving strategy:** Axum serves everything in a single container. The Vite build produces static files that Axum serves via `tower-http::ServeDir`, with SPA fallback to `index.html`. No nginx or separate frontend container. Rationale: simpler deployment for a small-scale app, no CORS (same origin), one container to manage. If static asset performance ever matters (it won't at this scale), a CDN or nginx can be added in front later.
+- **Auth token strategy:** Short-lived access token (15-30 min, Authorization header) + long-lived refresh token (7-30 days, HttpOnly/Secure/SameSite=Strict cookie scoped to `/api/v1/auth/refresh`). A `refresh_token_version` column on `users` enables server-side revocation checked only on the refresh path, not every request. Frontend intercepts 401s, silently refreshes, and retries. Replaces the original 24-hour single JWT approach.
+- **Pagination:** Cursor-based (keyset) pagination using `created_at` + `id` for list endpoints, particularly `GET /runs` and run history views. Preferred over offset-based to avoid duplicate/skipped entries when new data is inserted during browsing. If implementation proves too complex relative to offset-based, revisit.
+- **Password change:** `PUT /auth/password` endpoint for users to change their own password. Slated for Phase 3.
 
 ## Future Ideas (Not Committed)
 
