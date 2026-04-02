@@ -271,6 +271,7 @@ dependencies = [
  "axum",
  "axum-test",
  "chrono",
+ "cookie",
  "dotenvy",
  "jsonwebtoken",
  "migration",

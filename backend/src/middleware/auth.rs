@@ -6,6 +6,11 @@ use axum::{
 /// Extractor that validates the JWT from the `Authorization: Bearer <token>`
 /// header and makes the authenticated user's info available to handlers.
 ///
+/// Only accepts access tokens (`token_type == "access"`). Refresh tokens are
+/// valid JWTs signed with the same key, but they must NOT be usable as access
+/// tokens — that would let a stolen refresh cookie bypass the short-lived
+/// access token window.
+///
 /// Usage in a handler:
 /// ```ignore
 /// async fn protected(user: AuthUser) -> impl IntoResponse {
@@ -20,7 +25,8 @@ pub struct AuthUser {
 }
 
 /// Axum extractor implementation. Pulls `AppConfig` from state and validates
-/// the bearer token. Returns 401 if the token is missing, malformed, or expired.
+/// the bearer token. Returns 401 if the token is missing, malformed, expired,
+/// or not an access token.
 impl FromRequestParts<crate::AppState> for AuthUser {
     type Rejection = (StatusCode, &'static str);
 
@@ -39,8 +45,13 @@ impl FromRequestParts<crate::AppState> for AuthUser {
             "Invalid Authorization header format",
         ))?;
 
-        let claims = crate::services::auth::validate_token(token, &state.config)
+        let claims = crate::services::auth::validate_access_token(token, &state.config)
             .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token"))?;
+
+        // Reject refresh tokens used as access tokens
+        if claims.token_type != "access" {
+            return Err((StatusCode::UNAUTHORIZED, "Invalid token type"));
+        }
 
         Ok(AuthUser {
             user_id: claims.sub,

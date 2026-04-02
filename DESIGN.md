@@ -763,15 +763,14 @@ beerio-kart/
 - [ ] Set Cloudflare encryption mode to **Full (strict)** — Flexible encrypts browser-to-Cloudflare but forwards plaintext to the origin server, which means passwords travel unencrypted on the last hop
 - [ ] Verify HTTPS works end-to-end through Cloudflare
 - [ ] Test basic auth flow from phone over real network
-- [ ] Add .env / config for production vs development settings
-- [ ] Upgrade auth to refresh token flow (short-lived access token + HttpOnly refresh cookie + `refresh_token_version` on users)
+- [x] Add .env / config for production vs development settings
+- [x] Upgrade auth to refresh token flow (short-lived access token + HttpOnly refresh cookie + `refresh_token_version` on users)
 
 Note: Deploying early (before core features) keeps the deployment simple and catches infrastructure issues before application complexity grows. The Dockerfile and compose.yaml were created in Phase 1 for local development — Phase 2 validates they work on the actual Unraid server behind Cloudflare.
 
 ### Phase 3: Sessions & Run Recording
 - [ ] Session schema: sessions, session_participants, session_races tables + migrations
 - [ ] Add `session_race_id` and `disqualified` columns to runs table (migration)
-- [ ] Add `refresh_token_version` to users table (migration, if not done in Phase 2)
 - [ ] Session polling endpoint (`GET /sessions/:id` returns full session state; clients poll every 2-3 seconds)
 - [ ] Session lifecycle: create, join, leave, auto-close on inactivity (1 hour)
 - [ ] Host transfer on leave (earliest-joined remaining participant)
@@ -868,7 +867,11 @@ Required test scenarios per ruleset: normal flow, recusal by one player, recusal
 - **Frontend serving strategy:** Axum serves everything in a single container. The Vite build produces static files that Axum serves via `tower-http::ServeDir`, with SPA fallback to `index.html`. No nginx or separate frontend container. Rationale: simpler deployment for a small-scale app, no CORS (same origin), one container to manage. If static asset performance ever matters (it won't at this scale), a CDN or nginx can be added in front later.
 - **Auth token strategy:** Short-lived access token (15-30 min, Authorization header) + long-lived refresh token (7-30 days, HttpOnly/Secure/SameSite=Lax cookie scoped to `/api/v1/auth/refresh`). Lax (not Strict) because Strict blocks the cookie when navigating from an external link (e.g., a friend texts you the URL), which would force a re-login. Lax still protects against cross-origin POST attacks. A `refresh_token_version` column on `users` enables server-side revocation checked only on the refresh path, not every request. Frontend intercepts 401s, silently refreshes, and retries. Replaces the original 24-hour single JWT approach.
 - **Pagination:** Cursor-based (keyset) pagination using `created_at` + `id` for list endpoints, particularly `GET /runs` and run history views. Preferred over offset-based to avoid duplicate/skipped entries when new data is inserted during browsing. If implementation proves too complex relative to offset-based, revisit.
-- **Password change:** `PUT /auth/password` endpoint for users to change their own password. Slated for Phase 3.
+- **Password change:** `PUT /auth/password` endpoint for users to change their own password. Implemented in Phase 2 alongside refresh token auth.
+- **Refresh token format:** JWT (not opaque). Contains `sub`, `refresh_token_version`, `exp`, `iat`, `token_type`. Same signing key as access token. Simplest approach — no new table. Per-device revocation deferred; version-bump covers logout and password change.
+- **Refresh token rotation:** On each refresh, a new refresh JWT is issued with a fresh expiry. Does not bump `refresh_token_version` — rotation is about extending the session window, not revocation.
+- **Cloudflare Tunnel (not port forwarding)** for exposing the app. Outbound-only connection from Unraid to Cloudflare edge. No open ports on the home network.
+- **Docker Compose Manager plugin** on Unraid for container management. compose.yaml as the single source of truth for the deployment.
 
 ## Future Ideas (Not Committed)
 
