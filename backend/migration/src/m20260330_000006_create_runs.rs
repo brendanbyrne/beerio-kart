@@ -24,7 +24,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Runs::TrackId).integer().not_null())
                     .col(ColumnDef::new(Runs::CharacterId).integer().not_null())
                     .col(ColumnDef::new(Runs::BodyId).integer().not_null())
-                    .col(ColumnDef::new(Runs::WheelsId).integer().not_null())
+                    .col(ColumnDef::new(Runs::WheelId).integer().not_null())
                     .col(ColumnDef::new(Runs::GliderId).integer().not_null())
                     .col(ColumnDef::new(Runs::TrackTime).integer().not_null())
                     .col(ColumnDef::new(Runs::Lap1Time).integer().not_null())
@@ -56,7 +56,7 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .from(Runs::Table, Runs::WheelsId)
+                            .from(Runs::Table, Runs::WheelId)
                             .to(Wheels::Table, Wheels::Id),
                     )
                     .foreign_key(
@@ -89,7 +89,7 @@ pub enum Runs {
     TrackId,
     CharacterId,
     BodyId,
-    WheelsId,
+    WheelId,
     GliderId,
     TrackTime,
     Lap1Time,
