@@ -485,9 +485,9 @@ pub async fn logout(State(state): State<AppState>, user: AuthUser) -> impl IntoR
     };
 
     // Increment version to invalidate all existing refresh tokens
+    let new_version = db_user.refresh_token_version + 1;
     let mut active: users::ActiveModel = db_user.into_active_model();
-    let current_version: i32 = active.refresh_token_version.clone().unwrap();
-    active.refresh_token_version = Set(current_version + 1);
+    active.refresh_token_version = Set(new_version);
     active.updated_at = Set(chrono::Utc::now().to_rfc3339());
 
     if let Err(e) = active.update(&state.db).await {

@@ -38,7 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAccessToken(data.access_token)
           // Decode the access token to get user info (the payload is the
           // middle segment, base64url-encoded). This avoids an extra API call.
-          const payload = JSON.parse(atob(data.access_token.split('.')[1]))
+          // JWT payloads use base64url encoding (- and _ instead of + and /),
+          // but atob() only handles standard base64 — convert before decoding.
+          const base64 = data.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+          const payload = JSON.parse(atob(base64))
           setUser({ id: payload.sub, username: payload.username })
         }
       } catch {
