@@ -124,7 +124,7 @@ pub async fn register(
         password_hash: Set(password_hash),
         preferred_character_id: Set(None),
         preferred_body_id: Set(None),
-        preferred_wheels_id: Set(None),
+        preferred_wheel_id: Set(None),
         preferred_glider_id: Set(None),
         preferred_drink_type_id: Set(None),
         created_at: Set(now.clone()),

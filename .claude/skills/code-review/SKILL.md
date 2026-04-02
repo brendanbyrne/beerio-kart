@@ -162,7 +162,7 @@ Flag any deviations from these conventions.
 
 #### Data Model Adherence
 - **UUID vs INTEGER**: User-generated data uses UUID; pre-seeded static data uses INTEGER. Flag mismatches.
-- **Inline vs normalized**: Race setup is stored inline (character_id, body_id, wheels_id, glider_id directly on runs/users). Don't suggest normalizing this — it's a deliberate design decision.
+- **Inline vs normalized**: Race setup is stored inline (character_id, body_id, wheel_id, glider_id directly on runs/users). Don't suggest normalizing this — it's a deliberate design decision.
 - **Derived vs stored**: "Previous" setup is derived from the most recent run, not stored. Flag any attempt to cache derived values on the users table.
 
 ## Review Etiquette

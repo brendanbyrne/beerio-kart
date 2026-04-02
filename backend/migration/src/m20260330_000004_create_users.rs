@@ -28,7 +28,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Users::PasswordHash).text().not_null())
                     .col(ColumnDef::new(Users::PreferredCharacterId).integer())
                     .col(ColumnDef::new(Users::PreferredBodyId).integer())
-                    .col(ColumnDef::new(Users::PreferredWheelsId).integer())
+                    .col(ColumnDef::new(Users::PreferredWheelId).integer())
                     .col(ColumnDef::new(Users::PreferredGliderId).integer())
                     .col(ColumnDef::new(Users::PreferredDrinkTypeId).text())
                     .col(ColumnDef::new(Users::CreatedAt).text().not_null())
@@ -45,7 +45,7 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .from(Users::Table, Users::PreferredWheelsId)
+                            .from(Users::Table, Users::PreferredWheelId)
                             .to(Wheels::Table, Wheels::Id),
                     )
                     .foreign_key(
@@ -79,7 +79,7 @@ pub enum Users {
     PasswordHash,
     PreferredCharacterId,
     PreferredBodyId,
-    PreferredWheelsId,
+    PreferredWheelId,
     PreferredGliderId,
     PreferredDrinkTypeId,
     CreatedAt,

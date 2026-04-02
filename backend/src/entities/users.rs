@@ -15,7 +15,7 @@ pub struct Model {
     pub password_hash: String,
     pub preferred_character_id: Option<i32>,
     pub preferred_body_id: Option<i32>,
-    pub preferred_wheels_id: Option<i32>,
+    pub preferred_wheel_id: Option<i32>,
     pub preferred_glider_id: Option<i32>,
     #[sea_orm(column_type = "Text", nullable)]
     pub preferred_drink_type_id: Option<String>,
@@ -63,7 +63,7 @@ pub enum Relation {
     Runs,
     #[sea_orm(
         belongs_to = "super::wheels::Entity",
-        from = "Column::PreferredWheelsId",
+        from = "Column::PreferredWheelId",
         to = "super::wheels::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"

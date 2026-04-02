@@ -12,7 +12,7 @@ pub struct Model {
     pub track_id: i32,
     pub character_id: i32,
     pub body_id: i32,
-    pub wheels_id: i32,
+    pub wheel_id: i32,
     pub glider_id: i32,
     pub track_time: i32,
     pub lap1_time: i32,
@@ -82,7 +82,7 @@ pub enum Relation {
     Users,
     #[sea_orm(
         belongs_to = "super::wheels::Entity",
-        from = "Column::WheelsId",
+        from = "Column::WheelId",
         to = "super::wheels::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
