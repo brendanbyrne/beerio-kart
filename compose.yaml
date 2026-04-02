@@ -5,10 +5,12 @@ services:
       - "3000:3000"
     environment:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
-      - JWT_EXPIRY_HOURS=${JWT_EXPIRY_HOURS:-24}
+      - JWT_ACCESS_EXPIRY_MINUTES=${JWT_ACCESS_EXPIRY_MINUTES:-15}
+      - JWT_REFRESH_EXPIRY_DAYS=${JWT_REFRESH_EXPIRY_DAYS:-7}
       - ADMIN_USER_ID=${ADMIN_USER_ID:-}
       - DATABASE_URL=sqlite:///app/db/beerio-kart.db?mode=rwc
       - RUST_LOG=${RUST_LOG:-info}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
     volumes:
       - db-data:/app/db
       - uploads:/app/uploads

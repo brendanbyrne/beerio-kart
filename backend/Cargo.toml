@@ -28,4 +28,5 @@ warnings = "deny"
 
 [dev-dependencies]
 axum-test = "19.1.1"
+cookie = "0.18"
 tower = "0.5.3"

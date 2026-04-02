@@ -31,6 +31,12 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Users::PreferredWheelId).integer())
                     .col(ColumnDef::new(Users::PreferredGliderId).integer())
                     .col(ColumnDef::new(Users::PreferredDrinkTypeId).text())
+                    .col(
+                        ColumnDef::new(Users::RefreshTokenVersion)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(Users::CreatedAt).text().not_null())
                     .col(ColumnDef::new(Users::UpdatedAt).text().not_null())
                     .foreign_key(
@@ -82,6 +88,7 @@ pub enum Users {
     PreferredWheelId,
     PreferredGliderId,
     PreferredDrinkTypeId,
+    RefreshTokenVersion,
     CreatedAt,
     UpdatedAt,
 }

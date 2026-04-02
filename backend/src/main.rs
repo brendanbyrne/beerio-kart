@@ -2,7 +2,7 @@ mod seed;
 
 use axum::{
     Json, Router,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
@@ -74,7 +74,9 @@ async fn main() {
         .route("/api/v1/hello", get(hello))
         .route("/api/v1/auth/register", post(routes::auth::register))
         .route("/api/v1/auth/login", post(routes::auth::login))
+        .route("/api/v1/auth/refresh", post(routes::auth::refresh))
         .route("/api/v1/auth/logout", post(routes::auth::logout))
+        .route("/api/v1/auth/password", put(routes::auth::change_password))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         // Serve frontend static files. If no API route or static file matches,

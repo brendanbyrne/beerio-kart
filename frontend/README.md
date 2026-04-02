@@ -16,7 +16,3 @@ bun dev
 ```
 
 Dev server starts on `http://localhost:5173`. API requests to `/api` are proxied to the backend at `http://localhost:3000`.
-
-## Project Structure
-
-See [DESIGN.md](../docs/DESIGN.md) for the full frontend source layout under `frontend/src/`.

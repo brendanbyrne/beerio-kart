@@ -19,6 +19,7 @@ pub struct Model {
     pub preferred_glider_id: Option<i32>,
     #[sea_orm(column_type = "Text", nullable)]
     pub preferred_drink_type_id: Option<String>,
+    pub refresh_token_version: i32,
     #[sea_orm(column_type = "Text")]
     pub created_at: String,
     #[sea_orm(column_type = "Text")]
