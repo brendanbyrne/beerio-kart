@@ -789,6 +789,7 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - [ ] User profile endpoints (GET /users, GET /users/:id, PUT /users/:id for preferred setup and drink type)
 - [ ] Drink types API (create, list, get)
 - [ ] Sessions API (create, join, leave, next-track, choose-track, skip-turn, list races)
+- [ ] Pre-seeded data read endpoints (characters, bodies, wheels, gliders, cups, tracks)
 - [ ] Runs API (create within session, list, delete, photo upload)
 - [ ] Password change endpoint (`PUT /auth/password`)
 - [ ] justfile with recipes: `dev`, `test`, `entities`, `build`
