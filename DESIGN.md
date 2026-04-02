@@ -33,6 +33,7 @@ Consideration of these principles should go into every design decision made. If 
 ## Technical Constraints
 
 - **Don't overengineer before OCR.** Many corner cases (time validation, race setup entry, session tracking) will be solved by OCR. Design the MVP for manual entry with hooks for OCR to slot in later.
+- **SQLite STRICT mode on all tables.** Enforces type checking at the database level (rejects inserting a string into an INTEGER column, etc.). Catches bugs early that would otherwise only surface during a PostgreSQL migration. Requires SQLite 3.37+ (2021).
 
 ## Tech Stack
 
@@ -107,7 +108,7 @@ users
 ├── password_hash: TEXT (not null)
 ├── preferred_character_id: INTEGER (foreign key -> characters, nullable)
 ├── preferred_body_id: INTEGER (foreign key -> bodies, nullable)
-├── preferred_wheels_id: INTEGER (foreign key -> wheels, nullable)
+├── preferred_wheel_id: INTEGER (foreign key -> wheels, nullable)
 ├── preferred_glider_id: INTEGER (foreign key -> gliders, nullable)
 ├── preferred_drink_type_id: UUID (foreign key -> drink_types, nullable)
 ├── refresh_token_version: INTEGER (not null, default 0)
@@ -155,6 +156,8 @@ wheels
 ├── name: TEXT (unique, not null)
 └── image_path: TEXT (not null)
 ```
+
+Note: FK column is `wheel_id` (singular, per naming convention). The UI displays the label as "Wheels" since each entry represents a set of four.
 
 ### Gliders
 
@@ -225,7 +228,7 @@ sessions
 ├── created_by: UUID (foreign key -> users, not null)
 ├── host_id: UUID (foreign key -> users, not null — current host, transfers on leave)
 ├── ruleset: TEXT (not null — "random", "default", "least_played", "round_robin")
-├── ruleset_config: TEXT (nullable — JSON for ruleset-specific options, e.g., drink category for least_played)
+├── least_played_drink_category: TEXT (nullable — "alcoholic" or "non_alcoholic"; only used when ruleset is "least_played")
 ├── status: TEXT (not null — "active", "closed")
 ├── created_at: TIMESTAMP (not null)
 └── last_activity_at: TIMESTAMP (not null)
@@ -233,8 +236,9 @@ sessions
 
 Notes:
 - `host_id` starts as `created_by`. If the host leaves, host role transfers to the earliest-joined remaining participant.
-- `ruleset_config` stores options that vary by ruleset (e.g., for "least_played": which drink category to count by). JSON in TEXT column — structured enough to query, flexible enough for different rulesets.
-- Session auto-closes after 1 hour of no activity. No further run submissions accepted after close.
+- `least_played_drink_category` stores values as `"alcoholic"` or `"non_alcoholic"` (snake_case, per database convention). The frontend maps these to display text with hyphens ("non-alcoholic").
+- Ruleset-specific config uses explicit nullable columns rather than a JSON blob. With four well-defined rulesets, explicit columns are safer (database can enforce CHECK constraints) and queryable. New config options require a migration, but that's the right tradeoff for known rulesets.
+- Session auto-closes after 1 hour of no activity. No further run submissions accepted after close. A lightweight Tokio background task checks for and closes stale sessions periodically (e.g., every 5 minutes) so they don't linger in the active sessions list. Actions that update `last_activity_at`: run submission, track selection (next-track, choose-track), join, leave, skip-turn.
 - Future consideration: `password_hash` column for session passwords. Deferred — the `POST /sessions/:id/join` endpoint is designed as a dedicated action so password checking can be added later without restructuring the join flow.
 
 ### Session Participants
@@ -253,7 +257,7 @@ session_participants
 Notes:
 - A user can have multiple rows for the same session (left and rejoined).
 - "Currently in session" = has a row where `left_at` is null.
-- On leave, pending race submissions enter a 5-minute grace period. If the user rejoins within that window, their pending races are preserved. After the grace period, pending submissions expire.
+- On leave, pending races enter a 5-minute grace period. If the user rejoins within that window, their pending races are preserved. After the grace period, pending races expire. Grace period is checked lazily at submission time (compare `now` against `left_at`) — no background timer needed.
 
 ### Session Races
 
@@ -288,7 +292,7 @@ runs
 ├── track_id: INTEGER (foreign key -> tracks, not null)
 ├── character_id: INTEGER (foreign key -> characters, not null)
 ├── body_id: INTEGER (foreign key -> bodies, not null)
-├── wheels_id: INTEGER (foreign key -> wheels, not null)
+├── wheel_id: INTEGER (foreign key -> wheels, not null)
 ├── glider_id: INTEGER (foreign key -> gliders, not null)
 ├── track_time: INTEGER (milliseconds, not null, must be positive)
 ├── lap1_time: INTEGER (milliseconds, not null, must be positive and non-zero)
@@ -315,7 +319,7 @@ Validation (application-level):
 
 Record-breaking run enforcement:
 - When a run is created, the backend checks if the time is a new track record (per drink category).
-- If it is a record and no photo is attached, the run is saved but auto-flagged with `hide_while_pending = true`.
+- If it is a record and no photo is attached, the run is saved and an auto-generated flag is created in `run_flags` with `hide_while_pending = true`.
 - When a photo is uploaded via `POST /runs/:id/photo`, the auto-flag is resolved automatically.
 - If the photo never arrives, the run remains flagged and hidden from leaderboards. Admin can see and act on it.
 - DQ'd runs cannot be track records.
@@ -389,6 +393,10 @@ Each session uses one ruleset that determines how tracks are selected. The rules
 
 **Round-robin:** Two groups: "Can Choose" and "Can't Choose." Everyone starts in "Can Choose." The earliest session joiner in "Can Choose" picks the track. After choosing, they move to "Can't Choose." Recusing also moves you to "Can't Choose." If "Can Choose" is empty, a random track is chosen and everyone resets to "Can Choose." This prevents the decision from stalling on someone not paying attention.
 
+**Skip turn vs. recusal:** "Skip turn" (`POST /sessions/:id/skip-turn`) and self-recusal are distinct actions. Recusal means "I don't want to choose" — the chooser opts out. Skip turn means "I don't want to wait for you" — any participant can trigger it to move past a stalled chooser. Per-ruleset behavior of skip-turn: in Default, the next eligible player (by fewest leaderboard points) is offered the choice. In Round-robin, the skipped player moves to "Can't Choose," same as if they'd chosen or recused. If skip-turn or recusal cycles through everyone (Default) or empties "Can Choose" (Round-robin), a random track is selected automatically.
+
+**Chooser state persistence:** Round-robin chooser rotation is derived from `session_races.chosen_by` — the "Can Choose" group is everyone who hasn't chosen since the last reset. Default recusal is transient (in-memory, resets per race) — if the server restarts mid-race, the chooser gets re-offered, which is harmless.
+
 **Timeout handling (all rulesets):** Every decision point is event-driven — no timers pressuring players. If a chooser stalls, any participant can trigger "skip turn" to pass to the next person per the ruleset's logic. MVP fallback for truly stuck sessions: leave and start a new one. Vote-to-kick deferred.
 
 ## User Workflows
@@ -413,7 +421,7 @@ Each session uses one ruleset that determines how tracks are selected. The rules
 
 1. Home screen shows list of active sessions, sorted by most recent activity. Each shows: host name, participant count, current race number, ruleset.
 2. Taps a session to join.
-3. Lands on the session screen, sees current state: what track is being raced, who's in, who has pending submissions.
+3. Lands on the session screen, sees current state: what track is being raced, who's in, who has pending races.
 4. Can immediately submit a time for the current race.
 
 Future enhancement: prioritize sessions containing players you've competed with before (sort by known rivals). Future consideration: session passwords via the `POST /sessions/:id/join` endpoint.
@@ -431,7 +439,7 @@ Future enhancement: prioritize sessions containing players you've competed with 
    - Optional photo upload.
    - If time is a track record and no photo: prompt, then auto-flag if skipped.
 4. Session screen shows who has submitted, who's still pending.
-5. Next track selection happens when the chooser/host triggers it (depending on ruleset). The chooser can pick while others still have pending submissions — this doesn't block.
+5. Next track selection happens when the chooser/host triggers it (depending on ruleset). The chooser can pick while others still have pending races — this doesn't block.
 6. If someone has pending races from earlier, they see those when they go to submit. Pending races shown in order, submit or skip each. Max 3 pending in UI (oldest expire first). Schema supports unlimited for future flexibility.
 7. Choosing and submitting are independent actions — the chooser can pick the next track even if they haven't submitted their own time yet.
 8. Repeat until the group decides to stop.
@@ -441,7 +449,7 @@ Earmarked: the track selection sub-workflow (how the chooser browses/searches fo
 ### Workflow 5: Leaving a Session / Session End
 
 1. Player taps "Leave Session."
-2. If they have pending race submissions: warning that pending times will be forfeited after a 5-minute grace period. If they rejoin within the grace period, pending races are preserved.
+2. If they have pending races: warning that pending times will be forfeited after a 5-minute grace period. If they rejoin within the grace period, pending races are preserved.
 3. If the leaving player is the host: host role transfers to the earliest-joined remaining participant.
 4. Session ends when all participants have left.
 5. If no activity for 1 hour, session auto-closes and no further run submissions are accepted.
@@ -534,9 +542,9 @@ GET    /tracks/:id                 Get track details
 ### Drink Types
 
 ```
-POST   /drink_types                Create a new drink type (returns existing on UUID collision)
-GET    /drink_types                List all drink types (optional filter: alcoholic)
-GET    /drink_types/:id            Get drink type details
+POST   /drink-types                Create a new drink type (returns existing on UUID collision)
+GET    /drink-types                List all drink types (optional filter: alcoholic)
+GET    /drink-types/:id            Get drink type details
 ```
 
 ### Sessions
@@ -553,7 +561,7 @@ POST   /sessions/:id/skip-turn     Pass the chooser's turn to the next person (a
 GET    /sessions/:id/races         List all races in a session (with submission status per participant)
 ```
 
-Note: Session state changes (joins, leaves, new races, submissions) are broadcast to participants via WebSocket. The REST endpoints handle actions; the WebSocket pushes real-time updates.
+Note: Session state is consumed via polling — clients call `GET /sessions/:id` every 2-3 seconds to pick up joins, leaves, new races, and submissions. For a turn-based game where events happen every few minutes, polling latency is imperceptible. WebSockets can be added later as an optimization if polling ever feels sluggish.
 
 ### Runs
 
@@ -657,7 +665,7 @@ beerio-kart/
 │
 ├── DESIGN.md                    # Architecture design document (single source of truth)
 ├── compose.yaml                 # Docker compose
-├── Makefile                     # Or justfile — common dev commands
+├── justfile                     # Developer workflow commands (just)
 │
 ├── backend/
 │   ├── Cargo.toml
@@ -681,7 +689,7 @@ beerio-kart/
 │       ├── services/            # Business logic layer
 │       │   ├── mod.rs
 │       │   ├── auth.rs
-│       │   ├── sessions.rs      # Session lifecycle, rulesets, WebSocket broadcast
+│       │   ├── sessions.rs      # Session lifecycle, rulesets, track selection
 │       │   └── stats.rs
 │       └── middleware/
 │           ├── mod.rs
@@ -724,7 +732,9 @@ beerio-kart/
 │
 ├── uploads/                     # User-uploaded run photos (gitignored)
 │
-├── reviews/                     # Claude Code-generated explanations from code reviews
+├── reviews/
+│   ├── pr/                      # Claude Code-generated PR review explanations
+│   └── design/                  # Design session records (Cowork-generated, checkbox format)
 │
 └── data/
     ├── tracks.json              # MK8D track seed data
@@ -762,7 +772,7 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - [ ] Session schema: sessions, session_participants, session_races tables + migrations
 - [ ] Add `session_race_id` and `disqualified` columns to runs table (migration)
 - [ ] Add `refresh_token_version` to users table (migration, if not done in Phase 2)
-- [ ] WebSocket infrastructure (Axum WebSocket support for real-time session updates)
+- [ ] Session polling endpoint (`GET /sessions/:id` returns full session state; clients poll every 2-3 seconds)
 - [ ] Session lifecycle: create, join, leave, auto-close on inactivity (1 hour)
 - [ ] Host transfer on leave (earliest-joined remaining participant)
 - [ ] Random ruleset (first ruleset — track chosen at random without replacement)
@@ -775,9 +785,13 @@ Note: Deploying early (before core features) keeps the deployment simple and cat
 - [ ] Photo upload (separate endpoint)
 - [ ] Auto-flagging for record-breaking runs without photos (DQ'd runs excluded)
 - [ ] Home screen: active sessions list + "Start a Session" primary action + recent runs
+- [ ] Background task: Tokio task to close stale sessions (no activity for 1 hour, check every ~5 min)
+- [ ] User profile endpoints (GET /users, GET /users/:id, PUT /users/:id for preferred setup and drink type)
+- [ ] Drink types API (create, list, get)
 - [ ] Sessions API (create, join, leave, next-track, choose-track, skip-turn, list races)
 - [ ] Runs API (create within session, list, delete, photo upload)
 - [ ] Password change endpoint (`PUT /auth/password`)
+- [ ] justfile with recipes: `dev`, `test`, `entities`, `build`
 
 Note: Solo racing uses a one-person session. Future enhancement: streamline the solo experience by making `session_race_id` nullable on runs and offering a lightweight entry flow without session overhead.
 
@@ -788,6 +802,8 @@ Note: Solo racing uses a one-person session. Future enhancement: streamline the 
 - [ ] Ruleset selection UI at session creation (brief inline explanations)
 
 Future consideration: allow ruleset changes mid-session (deferred post-MVP).
+
+Required test scenarios per ruleset: normal flow, recusal by one player, recusal by all players, player joins mid-session, player leaves mid-session, host leaves mid-session. Each ruleset needs all six scenarios covered.
 
 ### Phase 5: Stats & Leaderboards
 - [ ] Personal stats page (PBs, averages, run count, most-played track, best track)
@@ -818,6 +834,7 @@ Future consideration: allow ruleset changes mid-session (deferred post-MVP).
 
 ## Resolved Decisions
 
+- **SQLite STRICT mode on all tables.** Enforces type checking at the database level. Catches bugs early that would otherwise only surface during a PostgreSQL migration. Requires SQLite 3.37+ (2021).
 - **Global leaderboard ranking:** Most track records held.
 - **Account recovery:** Admin reset for now.
 - **Time entry validation:** No validation against plausible track times. Rely on photos and eventual OCR.
@@ -835,13 +852,20 @@ Future consideration: allow ruleset changes mid-session (deferred post-MVP).
 - **Session timeout handling (MVP):** "Skip turn" allows any participant to pass the chooser's turn. Vote-to-kick deferred. Leave-and-restart is the fallback for stuck sessions.
 - **Session passwords:** Deferred. The `POST /sessions/:id/join` endpoint is a dedicated action so password checking can be added later without restructuring the join flow.
 - **Ruleset changes mid-session:** Deferred post-MVP.
+- **Real-time updates via polling, not WebSockets.** Clients poll `GET /sessions/:id` every 2-3 seconds. For a turn-based game where events happen every few minutes, polling latency is imperceptible. WebSockets can be added later as an optimization. Polling is stateless, testable with standard HTTP tools, and avoids connection state management, reconnection logic, and heartbeat complexity.
+- **Admin defense in depth.** Admin-only operations (editing runs, resolving flags) are checked in both the route middleware (AdminUser extractor) and the service layer independently. Two independent checks — if either the middleware or the service rejects the request, it fails. Prevents a middleware bug from exposing admin operations.
+- **Photo upload validation.** Validate server-side by checking magic bytes (not just Content-Type header). Accept JPEG, PNG, HEIC/HEIF. Max file size: 10MB. Generate filenames from run ID (`{run_id}.{ext}`) — never use user-provided filenames. Optionally strip EXIF data (GPS, device info) for privacy in a future pass.
+- **Upload path isolation.** User uploads are served from a separate URL prefix and filesystem directory from static assets. Static assets at `/static/...` (from `STATIC_DIR`), uploads at `/uploads/...` (from `UPLOAD_DIR`). Different prefixes and different directories prevent path traversal across boundaries.
+- **Rulesets implemented as a Rust trait.** Each ruleset (Random, Default, Least Played, Round-robin) is a separate module implementing a `Ruleset` trait, not conditionals in the session service. Adding a fifth ruleset later means adding one module, not modifying existing code.
+- **Entity regeneration via justfile recipe.** After adding or modifying a migration, run `just entities` (wraps `sea-orm-cli generate entity`) to regenerate SeaORM entity files. Standard SeaORM workflow — no custom tooling needed.
+- **just (not Make) for developer commands.** Cargo handles Rust build dependencies, Bun handles frontend dependencies, Docker handles container caching. Developer workflow commands (`just dev`, `just test`, `just entities`) don't need file-level dependency tracking — just a named command runner.
 - **Photo enforcement for records:** Runs are auto-flagged and hidden if record-breaking without a photo. Photo upload auto-resolves the flag.
 - **Lap time column naming:** `lap1_time`, `lap2_time`, `lap3_time` (no underscore before digit). Matches SeaORM's `DeriveIden` macro output for variants like `Lap1Time`, avoiding unnecessary custom naming.
 - **UUID storage in SQLite:** UUIDs stored as TEXT (not BLOB) for human readability when debugging with CLI tools. PostgreSQL migration will map to native UUID type. SeaORM maps both to `String` in Rust, so application code won't change.
 - **Timestamp storage in SQLite:** Timestamps stored as TEXT in ISO 8601 format. SQLite has no native timestamp type. PostgreSQL migration will map to `TIMESTAMPTZ`.
 - **run_flags audit trail:** `run_id` is not unique — a run can have multiple flags (different reasons tracked separately, resolved independently). Resolved flags are kept as history. Only duplicate flags (same run + same reason while unresolved) are prevented in application code.
 - **Frontend serving strategy:** Axum serves everything in a single container. The Vite build produces static files that Axum serves via `tower-http::ServeDir`, with SPA fallback to `index.html`. No nginx or separate frontend container. Rationale: simpler deployment for a small-scale app, no CORS (same origin), one container to manage. If static asset performance ever matters (it won't at this scale), a CDN or nginx can be added in front later.
-- **Auth token strategy:** Short-lived access token (15-30 min, Authorization header) + long-lived refresh token (7-30 days, HttpOnly/Secure/SameSite=Strict cookie scoped to `/api/v1/auth/refresh`). A `refresh_token_version` column on `users` enables server-side revocation checked only on the refresh path, not every request. Frontend intercepts 401s, silently refreshes, and retries. Replaces the original 24-hour single JWT approach.
+- **Auth token strategy:** Short-lived access token (15-30 min, Authorization header) + long-lived refresh token (7-30 days, HttpOnly/Secure/SameSite=Lax cookie scoped to `/api/v1/auth/refresh`). Lax (not Strict) because Strict blocks the cookie when navigating from an external link (e.g., a friend texts you the URL), which would force a re-login. Lax still protects against cross-origin POST attacks. A `refresh_token_version` column on `users` enables server-side revocation checked only on the refresh path, not every request. Frontend intercepts 401s, silently refreshes, and retries. Replaces the original 24-hour single JWT approach.
 - **Pagination:** Cursor-based (keyset) pagination using `created_at` + `id` for list endpoints, particularly `GET /runs` and run history views. Preferred over offset-based to avoid duplicate/skipped entries when new data is inserted during browsing. If implementation proves too complex relative to offset-based, revisit.
 - **Password change:** `PUT /auth/password` endpoint for users to change their own password. Slated for Phase 3.
 

@@ -10,7 +10,7 @@ Two handoff files enable async task passing between assistants. The writer creat
 - **`.claude/claude-code-handoff.md`** — Claude Code → Cowork. Write this when you have questions, research requests, or design decisions for Cowork. Cowork deletes it after addressing.
 
 ## Project Phase
-Phase 1 — Foundation (backend + frontend scaffolded, hello world working).
+Phase 2 — Deployment (validate Docker on Unraid, Cloudflare tunnel, HTTPS, production config, refresh token auth).
 
 ## Overview
 Beerio Kart is a mobile-first web app for tracking times and stats for a Mario Kart 8 Deluxe drinking game. Players race time trials, optionally drink, and the app tracks personal bests, leaderboards, and run history. Non-drinkers are equally welcome — inclusive by default is a core design principle.
@@ -98,3 +98,24 @@ This project uses two AI environments:
 | Code review & research | Either |
 | Deployment config | Claude Code (with Cowork for planning) |
 | Browser-based tasks | Cowork |
+| Design reviews | Cowork (writes to `reviews/design/`) |
+| PR reviews | Claude Code (writes to `reviews/pr/`) |
+
+### Review directories
+
+- **`reviews/pr/`** — Claude Code writes PR review explanations here.
+- **`reviews/design/`** — Cowork writes design session records here. These use a checkbox format so Brendan can sign off section by section.
+
+### Design session format
+
+When Cowork conducts a design review or audit, the findings should be written as a markdown file in `reviews/design/` with numbered sections and checkboxes:
+
+```markdown
+## 3. Security Concerns
+### 3.1 CSRF / SameSite cookie policy
+[Finding and recommendation]
+- [ ] Approved
+- [ ] Needs discussion
+```
+
+Brendan signs off on sections. Approved decisions get integrated into DESIGN.md. Open items carry to the next session.
