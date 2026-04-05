@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useSession } from '../hooks/useSession'
-import { leaveSession } from '../api/sessions'
+import { joinSession, leaveSession } from '../api/sessions'
 import BottomNav from '../components/BottomNav'
 
 export default function Session() {
@@ -11,6 +11,8 @@ export default function Session() {
   const { session, loading, ended } = useSession(id!)
   const navigate = useNavigate()
   const [leaving, setLeaving] = useState(false)
+  const [joiningSession, setJoiningSession] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
   const [headerExpanded, setHeaderExpanded] = useState(false)
 
   const handleLeave = async () => {
@@ -20,6 +22,17 @@ export default function Session() {
       navigate('/')
     } catch {
       setLeaving(false)
+    }
+  }
+
+  const handleJoin = async () => {
+    setJoiningSession(true)
+    setJoinError(null)
+    try {
+      await joinSession(id!)
+    } catch (e) {
+      setJoinError(e instanceof Error ? e.message : 'Failed to join session')
+      setJoiningSession(false)
     }
   }
 
@@ -47,6 +60,7 @@ export default function Session() {
   }
 
   const activeParticipants = session.participants.filter((p) => !p.left_at)
+  const isParticipant = activeParticipants.some((p) => p.user_id === user?.id)
   const isHost = user?.id === session.host_id
 
   return (
@@ -131,14 +145,28 @@ export default function Session() {
           </div>
         </div>
 
-        {/* Leave button */}
-        <button
-          onClick={handleLeave}
-          disabled={leaving}
-          className="w-full py-3 text-sm font-medium text-red-500 bg-white border border-red-200 rounded-xl disabled:opacity-50 active:bg-red-50 transition-colors"
-        >
-          {leaving ? 'Leaving...' : 'Leave Session'}
-        </button>
+        {isParticipant ? (
+          /* Leave button — only shown to participants */
+          <button
+            onClick={handleLeave}
+            disabled={leaving}
+            className="w-full py-3 text-sm font-medium text-red-500 bg-white border border-red-200 rounded-xl disabled:opacity-50 active:bg-red-50 transition-colors"
+          >
+            {leaving ? 'Leaving...' : 'Leave Session'}
+          </button>
+        ) : (
+          /* Join button — shown to non-participants */
+          <div className="space-y-2">
+            <button
+              onClick={handleJoin}
+              disabled={joiningSession}
+              className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl disabled:opacity-50 active:bg-blue-600 transition-colors"
+            >
+              {joiningSession ? 'Joining...' : 'Join Session'}
+            </button>
+            {joinError && <p className="text-xs text-red-500 text-center">{joinError}</p>}
+          </div>
+        )}
       </div>
 
       <BottomNav />
