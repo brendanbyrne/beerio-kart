@@ -135,11 +135,9 @@ export default function Home() {
                       <span className="text-xs text-gray-400">
                         {s.participant_count} player{s.participant_count !== 1 ? 's' : ''}
                       </span>
-                      {s.race_count > 0 && (
-                        <span className="text-xs text-gray-400">
-                          {'\u00B7'} Race {s.race_count}
-                        </span>
-                      )}
+                      <span className="text-xs text-gray-400">
+                        {'\u00B7'} Race {s.race_number}
+                      </span>
                     </div>
                   </div>
                   <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">

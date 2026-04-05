@@ -66,7 +66,7 @@ export interface SessionSummary {
   id: string
   host_username: string
   participant_count: number
-  race_count: number
+  race_number: number
   ruleset: string
   last_activity_at: string
 }
@@ -88,5 +88,5 @@ export interface SessionDetail {
   created_at: string
   last_activity_at: string
   participants: ParticipantInfo[]
-  race_count: number
+  race_number: number
 }
