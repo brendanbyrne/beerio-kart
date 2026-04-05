@@ -7,11 +7,16 @@ source "$SCRIPT_DIR/env.sh"
 
 TOKEN=$(require_token)
 
-curl -s -w "\nHTTP status: %{http_code}\n" -D - \
+# Logout returns no JSON body, so we print response headers to show
+# the set-cookie clearing header.
+local_response=$(curl -s -w "\n%{http_code}" -D - \
     -X POST "$API/auth/logout" \
-    -H "Authorization: Bearer $TOKEN"
+    -H "Authorization: Bearer $TOKEN")
+local_status="${local_response##*$'\n'}"
+local_headers="${local_response%$'\n'*}"
+echo "$local_headers"
+echo "HTTP status: $local_status"
 
 # Clean up local state since the tokens are now invalid.
 rm -f "$TOKEN_FILE" "$COOKIE_JAR"
-echo ""
 echo "(Local token and cookie cleared)"

@@ -48,3 +48,16 @@ pretty() {
         cat
     fi
 }
+
+# Run a curl command, print the JSON body (pretty-printed) and HTTP status
+# separately. Pipes the body through save_token so tokens are captured.
+# Usage: api_call [curl args...]
+api_call() {
+    local response status body
+    # -w appends the status code after a newline; we split on it.
+    response=$(curl -s -w "\n%{http_code}" "$@")
+    status="${response##*$'\n'}"
+    body="${response%$'\n'*}"
+    echo "$body" | save_token | pretty
+    echo "HTTP status: $status"
+}

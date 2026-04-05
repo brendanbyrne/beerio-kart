@@ -12,7 +12,5 @@ if [[ ! -f "$COOKIE_JAR" ]]; then
     exit 1
 fi
 
-curl -s -w "\nHTTP status: %{http_code}\n" \
-    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
-    -X POST "$API/auth/refresh" \
-    | save_token | pretty
+api_call -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    -X POST "$API/auth/refresh"
