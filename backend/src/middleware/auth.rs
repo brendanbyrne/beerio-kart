@@ -1,7 +1,6 @@
-use axum::{
-    extract::FromRequestParts,
-    http::{StatusCode, request::Parts},
-};
+use axum::{extract::FromRequestParts, http::request::Parts};
+
+use crate::error::AppError;
 
 /// Extractor that validates the JWT from the `Authorization: Bearer <token>`
 /// header and makes the authenticated user's info available to handlers.
@@ -28,7 +27,7 @@ pub struct AuthUser {
 /// the bearer token. Returns 401 if the token is missing, malformed, expired,
 /// or not an access token.
 impl FromRequestParts<crate::AppState> for AuthUser {
-    type Rejection = (StatusCode, &'static str);
+    type Rejection = AppError;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -38,19 +37,18 @@ impl FromRequestParts<crate::AppState> for AuthUser {
             .headers
             .get("Authorization")
             .and_then(|v| v.to_str().ok())
-            .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header"))?;
+            .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
 
-        let token = auth_header.strip_prefix("Bearer ").ok_or((
-            StatusCode::UNAUTHORIZED,
-            "Invalid Authorization header format",
-        ))?;
+        let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+            AppError::Unauthorized("Invalid Authorization header format".to_string())
+        })?;
 
         let claims = crate::services::auth::validate_access_token(token, &state.config)
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token"))?;
+            .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
 
         // Reject refresh tokens used as access tokens
         if claims.token_type != "access" {
-            return Err((StatusCode::UNAUTHORIZED, "Invalid token type"));
+            return Err(AppError::Unauthorized("Invalid token type".to_string()));
         }
 
         Ok(AuthUser {
@@ -72,7 +70,7 @@ pub struct AdminUser {
 }
 
 impl FromRequestParts<crate::AppState> for AdminUser {
-    type Rejection = (StatusCode, &'static str);
+    type Rejection = AppError;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -86,10 +84,10 @@ impl FromRequestParts<crate::AppState> for AdminUser {
             .config
             .admin_user_id
             .as_ref()
-            .ok_or((StatusCode::FORBIDDEN, "Admin access not configured"))?;
+            .ok_or_else(|| AppError::Forbidden("Admin access not configured".to_string()))?;
 
         if auth_user.user_id != *admin_id {
-            return Err((StatusCode::FORBIDDEN, "Admin access required"));
+            return Err(AppError::Forbidden("Admin access required".to_string()));
         }
 
         Ok(AdminUser {
