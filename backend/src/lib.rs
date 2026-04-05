@@ -1,4 +1,5 @@
 pub mod config;
+pub mod drink_type_id;
 #[allow(unused_imports)]
 pub mod entities;
 pub mod error;

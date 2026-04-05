@@ -62,6 +62,8 @@ pub enum Relation {
     Gliders,
     #[sea_orm(has_many = "super::runs::Entity")]
     Runs,
+    #[sea_orm(has_many = "super::session_participants::Entity")]
+    SessionParticipants,
     #[sea_orm(
         belongs_to = "super::wheels::Entity",
         from = "Column::PreferredWheelId",
@@ -105,6 +107,12 @@ impl Related<super::runs::Entity> for Entity {
 impl Related<super::wheels::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Wheels.def()
+    }
+}
+
+impl Related<super::session_participants::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SessionParticipants.def()
     }
 }
 

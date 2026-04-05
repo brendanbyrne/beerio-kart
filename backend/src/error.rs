@@ -21,6 +21,8 @@ pub enum AppError {
     BadRequest(String),
     /// 401 — wrong credentials, expired/missing token
     Unauthorized(String),
+    /// 403 — action not permitted for this user
+    Forbidden(String),
     /// 404 — resource not found
     NotFound(String),
     /// 409 — duplicate username, etc.
@@ -35,6 +37,7 @@ impl IntoResponse for AppError {
         let (status, user_message) = match &self {
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             AppError::Internal(log_msg) => {

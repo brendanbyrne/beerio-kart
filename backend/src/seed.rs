@@ -5,7 +5,8 @@ use sea_orm::{
 use serde::Deserialize;
 use std::collections::HashSet;
 
-use beerio_kart::entities::{bodies, characters, cups, gliders, tracks, wheels};
+use beerio_kart::drink_type_id::drink_type_uuid;
+use beerio_kart::entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels};
 
 // Serde structs matching the JSON file shapes. These are separate from the
 // SeaORM entities because entity Models carry ORM metadata we don't need for
@@ -68,6 +69,9 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Erro
 
     // Tracks depend on cups (FK), so they come after cups.
     seed_tracks(db).await?;
+
+    // Drink types seeded with deterministic UUIDs (same logic as the API).
+    seed_drink_types(db).await?;
 
     Ok(())
 }
@@ -181,5 +185,41 @@ async fn seed_tracks(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::
     txn.commit().await?;
 
     tracing::info!("tracks: seeded {num_items} rows");
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct SeedDrinkType {
+    name: String,
+    alcoholic: bool,
+}
+
+async fn seed_drink_types(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
+    let existing = drink_types::Entity::find().one(db).await?;
+    if existing.is_some() {
+        tracing::debug!("drink_types: already seeded, skipping");
+        return Ok(());
+    }
+
+    let json_data = include_str!("../../data/drink_types.json");
+    let items: Vec<SeedDrinkType> = serde_json::from_str(json_data)?;
+    let num_items = items.len();
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let txn = db.begin().await?;
+    for item in items {
+        let id = drink_type_uuid(&item.name);
+        let model = drink_types::ActiveModel {
+            id: Set(id),
+            name: Set(item.name),
+            alcoholic: Set(item.alcoholic),
+            created_at: Set(now.clone()),
+            created_by: Set(None), // Pre-seeded entries have no creator
+        };
+        model.insert(&txn).await?;
+    }
+    txn.commit().await?;
+
+    tracing::info!("drink_types: seeded {num_items} rows");
     Ok(())
 }

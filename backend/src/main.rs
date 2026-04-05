@@ -72,11 +72,39 @@ async fn main() {
 
     let app = Router::new()
         .route("/api/v1/hello", get(hello))
+        // Auth
         .route("/api/v1/auth/register", post(routes::auth::register))
         .route("/api/v1/auth/login", post(routes::auth::login))
         .route("/api/v1/auth/refresh", post(routes::auth::refresh))
         .route("/api/v1/auth/logout", post(routes::auth::logout))
         .route("/api/v1/auth/password", put(routes::auth::change_password))
+        // Game data (pre-seeded, read-only)
+        .route(
+            "/api/v1/characters",
+            get(routes::game_data::list_characters),
+        )
+        .route("/api/v1/bodies", get(routes::game_data::list_bodies))
+        .route("/api/v1/wheels", get(routes::game_data::list_wheels))
+        .route("/api/v1/gliders", get(routes::game_data::list_gliders))
+        .route("/api/v1/cups", get(routes::game_data::list_cups))
+        .route("/api/v1/cups/{id}", get(routes::game_data::get_cup))
+        .route("/api/v1/tracks", get(routes::game_data::list_tracks))
+        .route("/api/v1/tracks/{id}", get(routes::game_data::get_track))
+        // Users
+        .route("/api/v1/users", get(routes::users::list_users))
+        .route(
+            "/api/v1/users/{id}",
+            get(routes::users::get_user).put(routes::users::update_user),
+        )
+        // Drink types
+        .route(
+            "/api/v1/drink-types",
+            get(routes::drink_types::list_drink_types).post(routes::drink_types::create_drink_type),
+        )
+        .route(
+            "/api/v1/drink-types/{id}",
+            get(routes::drink_types::get_drink_type),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         // Serve frontend static files. If no API route or static file matches,

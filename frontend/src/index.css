@@ -1,1 +1,6 @@
 @import 'tailwindcss';
+
+/* Safe area padding for bottom nav on notched phones */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
