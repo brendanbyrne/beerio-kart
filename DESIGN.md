@@ -746,8 +746,6 @@ beerio-kart/
 │       ├── tracks/
 │       └── cups/
 │
-├── uploads/                     # User-uploaded run photos (gitignored)
-│
 ├── reviews/
 │   ├── pr/                      # Claude Code-generated PR review explanations
 │   └── design/                  # Design session records (Cowork-generated, checkbox format)
@@ -759,7 +757,9 @@ beerio-kart/
     ├── wheels.json              # MK8D wheel set seed data
     ├── gliders.json             # MK8D glider seed data
     ├── cups.json                # MK8D cup seed data
-    └── beerio-kart.db           # SQLite database file (gitignored)
+    ├── db/
+    │   └── beerio-kart.db       # SQLite database file (gitignored)
+    └── uploads/                  # User-uploaded run photos (gitignored)
 ```
 
 ## Build Plan (Phases)

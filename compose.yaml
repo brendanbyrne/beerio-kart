@@ -12,10 +12,6 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
     volumes:
-      - db-data:/app/db
-      - uploads:/app/uploads
+      - ./data/db:/app/db
+      - ./data/uploads:/app/uploads
     restart: unless-stopped
-
-volumes:
-  db-data:
-  uploads:

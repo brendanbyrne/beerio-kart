@@ -1,12 +1,10 @@
 node_modules/
 
-# SQLite database
-data/*.db
-data/*.db-shm
-data/*.db-wal
-
-# User uploads
-uploads/
+# Docker bind-mount data (keep directories, ignore contents)
+data/db/*
+data/uploads/*
+!data/db/.gitkeep
+!data/uploads/.gitkeep
 
 # Rust build artifacts
 target/
@@ -24,5 +22,5 @@ tools/.state/
 # Code review files
 reviews/
 
-# Asserts (for now)
-frontend/public/images
+# Static images
+frontend/public/images/*

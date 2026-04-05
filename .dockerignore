@@ -1,7 +1,7 @@
 target/
 node_modules/
-data/beerio-kart.db
-uploads/
+data/db/
+data/uploads/
 .git/
 .claude/
 *.md

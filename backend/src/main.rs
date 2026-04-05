@@ -35,7 +35,7 @@ async fn main() {
         .init();
 
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:../data/beerio-kart.db?mode=rwc".to_string());
+        .unwrap_or_else(|_| "sqlite:../data/db/beerio-kart.db?mode=rwc".to_string());
 
     // Load config from env vars (panics if JWT_SECRET is missing)
     let config = AppConfig::from_env();
