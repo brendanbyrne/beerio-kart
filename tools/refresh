@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Refresh the access token using the stored refresh cookie.
+# Usage: ./tools/refresh
+#
+# Updates both the access token and the refresh cookie.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/env.sh"
+
+if [[ ! -f "$COOKIE_JAR" ]]; then
+    echo "No cookie jar found. Run ./tools/login or ./tools/register first." >&2
+    exit 1
+fi
+
+curl -s -w "\nHTTP status: %{http_code}\n" \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    -X POST "$API/auth/refresh" \
+    | save_token | pretty

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Clear saved tokens and cookies without calling the server.
+# Usage: ./tools/clear-state
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/env.sh"
+
+rm -f "$TOKEN_FILE" "$COOKIE_JAR"
+echo "Cleared access token and cookie jar."

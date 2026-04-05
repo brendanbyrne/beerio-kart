@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Log out the current user. Revokes all refresh tokens and clears local state.
+# Usage: ./tools/logout
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/env.sh"
+
+TOKEN=$(require_token)
+
+curl -s -w "\nHTTP status: %{http_code}\n" -D - \
+    -X POST "$API/auth/logout" \
+    -H "Authorization: Bearer $TOKEN"
+
+# Clean up local state since the tokens are now invalid.
+rm -f "$TOKEN_FILE" "$COOKIE_JAR"
+echo ""
+echo "(Local token and cookie cleared)"

@@ -18,5 +18,8 @@ target/
 # Assistant handoff files (ephemeral)
 .claude/*-handoff.md
 
+# Tool state (tokens, cookies)
+tools/.state/
+
 # Code review files
 reviews/
