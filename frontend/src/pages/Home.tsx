@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { useCharacters } from '../hooks/useGameData'
 import { useSessions } from '../hooks/useSessions'
-import { createSession, joinSession } from '../api/sessions'
+import { createSession } from '../api/sessions'
 import BottomNav from '../components/BottomNav'
 
 export default function Home() {
@@ -16,7 +16,6 @@ export default function Home() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [joining, setJoining] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const preferredChar = characters.find((c) => c.id === profile?.preferred_character_id)
@@ -30,18 +29,6 @@ export default function Home() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session')
       setCreating(false)
-    }
-  }
-
-  const handleJoin = async (sessionId: string) => {
-    setJoining(sessionId)
-    setError(null)
-    try {
-      await joinSession(sessionId)
-      navigate(`/session/${sessionId}`)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to join session')
-      setJoining(null)
     }
   }
 
@@ -122,9 +109,8 @@ export default function Home() {
             {sessions.map((s) => (
               <button
                 key={s.id}
-                onClick={() => handleJoin(s.id)}
-                disabled={joining === s.id}
-                className="w-full bg-white rounded-xl border border-gray-200 p-4 text-left active:bg-gray-50 transition-colors disabled:opacity-50"
+                onClick={() => navigate(`/session/${s.id}`)}
+                className="w-full bg-white rounded-xl border border-gray-200 p-4 text-left active:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div>
