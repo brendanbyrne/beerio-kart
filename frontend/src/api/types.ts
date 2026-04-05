@@ -61,3 +61,32 @@ export interface RaceSetup {
   preferred_wheel_id: number
   preferred_glider_id: number
 }
+
+export interface SessionSummary {
+  id: string
+  host_username: string
+  participant_count: number
+  race_count: number
+  ruleset: string
+  last_activity_at: string
+}
+
+export interface ParticipantInfo {
+  user_id: string
+  username: string
+  joined_at: string
+  left_at: string | null
+}
+
+export interface SessionDetail {
+  id: string
+  created_by: string
+  host_id: string
+  host_username: string
+  ruleset: string
+  status: string
+  created_at: string
+  last_activity_at: string
+  participants: ParticipantInfo[]
+  race_count: number
+}

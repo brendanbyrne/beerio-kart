@@ -1,5 +1,7 @@
 mod seed;
 
+use std::time::Duration;
+
 use axum::{
     Json, Router,
     routing::{get, post, put},
@@ -14,6 +16,7 @@ use tracing_subscriber::EnvFilter;
 use beerio_kart::AppState;
 use beerio_kart::config::AppConfig;
 use beerio_kart::routes;
+use beerio_kart::services;
 
 #[derive(Serialize)]
 struct HelloResponse {
@@ -66,6 +69,10 @@ async fn main() {
 
     let state = AppState { db, config };
 
+    // Clone the DB connection for the background cleanup task before `state`
+    // is moved into the router.
+    let cleanup_db = state.db.clone();
+
     // STATIC_DIR defaults to ../frontend/dist for local dev (running from backend/).
     // In Docker, set to /app/static where the built frontend is copied.
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "../frontend/dist".to_string());
@@ -105,6 +112,20 @@ async fn main() {
             "/api/v1/drink-types/{id}",
             get(routes::drink_types::get_drink_type),
         )
+        // Sessions
+        .route(
+            "/api/v1/sessions",
+            get(routes::sessions::list_sessions).post(routes::sessions::create_session),
+        )
+        .route("/api/v1/sessions/{id}", get(routes::sessions::get_session))
+        .route(
+            "/api/v1/sessions/{id}/join",
+            post(routes::sessions::join_session),
+        )
+        .route(
+            "/api/v1/sessions/{id}/leave",
+            post(routes::sessions::leave_session),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         // Serve frontend static files. If no API route or static file matches,
@@ -114,6 +135,19 @@ async fn main() {
             ServeDir::new(&static_dir)
                 .fallback(ServeFile::new(format!("{}/index.html", static_dir))),
         );
+
+    // Spawn background task to close stale sessions (no activity for 1 hour).
+    // Runs every 5 minutes.
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(300)).await;
+            match services::sessions::close_stale_sessions(&cleanup_db).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("Closed {n} stale session(s)"),
+                Err(_) => tracing::error!("Stale session cleanup failed"),
+            }
+        }
+    });
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     tracing::info!("Listening on http://localhost:3000");

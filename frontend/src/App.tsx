@@ -5,6 +5,7 @@ import Register from './pages/Register'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import Profile from './pages/Profile'
+import Session from './pages/Session'
 
 /** Shows a loading spinner while the initial silent refresh is in progress. */
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -63,6 +64,14 @@ function App() {
               element={
                 <RequireAuth>
                   <Profile />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/session/:id"
+              element={
+                <RequireAuth>
+                  <Session />
                 </RequireAuth>
               }
             />

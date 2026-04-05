@@ -16,6 +16,7 @@ struct ErrorBody {
 /// Implements Axum's `IntoResponse`, so handlers can return
 /// `Result<impl IntoResponse, AppError>` and use `?` directly
 /// instead of writing match arms for every fallible call.
+#[derive(Debug)]
 pub enum AppError {
     /// 400 — validation failures, malformed input
     BadRequest(String),
