@@ -61,7 +61,7 @@ pub struct SessionSummary {
     pub id: String,
     pub host_username: String,
     pub participant_count: usize,
-    pub race_count: usize,
+    pub race_number: usize,
     pub ruleset: String,
     pub last_activity_at: String,
 }
@@ -96,17 +96,19 @@ pub async fn list_active_sessions(
             .count(db)
             .await? as usize;
 
-        // Count races
-        let race_count = session_races::Entity::find()
+        // Current race number (1-indexed). Before any track is picked
+        // this is 1; once a track is selected it stays at the count.
+        let races_created = session_races::Entity::find()
             .filter(session_races::Column::SessionId.eq(&session.id))
             .count(db)
             .await? as usize;
+        let race_number = races_created.max(1);
 
         summaries.push(SessionSummary {
             id: session.id,
             host_username: host,
             participant_count,
-            race_count,
+            race_number,
             ruleset: session.ruleset,
             last_activity_at: session.last_activity_at,
         });
@@ -136,7 +138,7 @@ pub struct SessionDetail {
     pub created_at: String,
     pub last_activity_at: String,
     pub participants: Vec<ParticipantInfo>,
-    pub race_count: usize,
+    pub race_number: usize,
 }
 
 /// Get full session detail — the polling endpoint.
@@ -178,10 +180,11 @@ pub async fn get_session_detail(
         });
     }
 
-    let race_count = session_races::Entity::find()
+    let races_created = session_races::Entity::find()
         .filter(session_races::Column::SessionId.eq(session_id))
         .count(db)
         .await? as usize;
+    let race_number = races_created.max(1);
 
     Ok(SessionDetail {
         id: session.id,
@@ -193,7 +196,7 @@ pub async fn get_session_detail(
         created_at: session.created_at,
         last_activity_at: session.last_activity_at,
         participants,
-        race_count,
+        race_number,
     })
 }
 

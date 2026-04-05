@@ -61,9 +61,7 @@ export default function Session() {
             <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
               {session.ruleset}
             </span>
-            <span className="text-sm font-semibold text-gray-900">
-              Race {session.race_count || 0}
-            </span>
+            <span className="text-sm font-semibold text-gray-900">Race {session.race_number}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">
@@ -97,7 +95,7 @@ export default function Session() {
             <span className="text-xl text-gray-300">{'\uD83C\uDFCE\uFE0F'}</span>
           </div>
           <p className="text-sm text-gray-500">Waiting for host to pick...</p>
-          {isHost && session.race_count === 0 && (
+          {isHost && session.race_number === 0 && (
             <p className="text-xs text-gray-400 mt-1">Track selection coming in a future update</p>
           )}
         </div>

@@ -202,7 +202,7 @@ async fn test_list_sessions_returns_only_active_sorted_by_last_activity() {
 }
 
 #[tokio::test]
-async fn test_get_session_returns_participants_and_race_count() {
+async fn test_get_session_returns_participants_and_race_number() {
     let (server, _db) = setup_test_app().await;
     let (token, _) = register_and_get_token(&server, "host").await;
 
@@ -223,7 +223,7 @@ async fn test_get_session_returns_participants_and_race_count() {
 
     assert!(detail["participants"].is_array());
     assert_eq!(detail["participants"].as_array().unwrap().len(), 1);
-    assert_eq!(detail["race_count"], 0);
+    assert_eq!(detail["race_number"], 1);
     assert!(detail["host_username"].is_string());
 }
 
