@@ -9,6 +9,8 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub user_id: String,
+    #[sea_orm(column_type = "Text")]
+    pub session_race_id: String,
     pub track_id: i32,
     pub character_id: i32,
     pub body_id: i32,
@@ -20,6 +22,7 @@ pub struct Model {
     pub lap3_time: i32,
     #[sea_orm(column_type = "Text")]
     pub drink_type_id: String,
+    pub disqualified: i32,
     #[sea_orm(column_type = "Text", nullable)]
     pub photo_path: Option<String>,
     #[sea_orm(column_type = "Text")]
@@ -64,6 +67,14 @@ pub enum Relation {
     Gliders,
     #[sea_orm(has_many = "super::run_flags::Entity")]
     RunFlags,
+    #[sea_orm(
+        belongs_to = "super::session_races::Entity",
+        from = "Column::SessionRaceId",
+        to = "super::session_races::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    SessionRaces,
     #[sea_orm(
         belongs_to = "super::tracks::Entity",
         from = "Column::TrackId",
@@ -117,6 +128,12 @@ impl Related<super::gliders::Entity> for Entity {
 impl Related<super::run_flags::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::RunFlags.def()
+    }
+}
+
+impl Related<super::session_races::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SessionRaces.def()
     }
 }
 

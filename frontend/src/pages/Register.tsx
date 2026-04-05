@@ -21,22 +21,23 @@ export default function Register() {
     if (err) {
       setError(err)
     } else {
-      navigate('/')
+      // After registration, redirect to onboarding to set up preferences
+      navigate('/onboarding')
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 bg-gray-800 p-6 rounded-lg"
+        className="w-full max-w-sm space-y-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
       >
-        <h1 className="text-2xl font-bold text-white text-center">Register</h1>
+        <h1 className="text-2xl font-bold text-gray-900 text-center">Register</h1>
 
-        {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
         <div>
-          <label htmlFor="username" className="block text-sm text-gray-300 mb-1">
+          <label htmlFor="username" className="block text-sm text-gray-600 mb-1">
             Username
           </label>
           <input
@@ -44,14 +45,14 @@ export default function Register() {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+            className="w-full px-3 py-2.5 bg-gray-50 text-gray-900 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-400"
             autoComplete="username"
             required
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm text-gray-300 mb-1">
+          <label htmlFor="password" className="block text-sm text-gray-600 mb-1">
             Password
           </label>
           <input
@@ -59,25 +60,25 @@ export default function Register() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+            className="w-full px-3 py-2.5 bg-gray-50 text-gray-900 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-400"
             autoComplete="new-password"
             minLength={8}
             required
           />
-          <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
+          <p className="text-xs text-gray-400 mt-1">Must be at least 8 characters</p>
         </div>
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          className="w-full py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 disabled:bg-gray-300 transition-colors"
         >
           {submitting ? 'Creating account...' : 'Register'}
         </button>
 
         <p className="text-sm text-gray-400 text-center">
           Already have an account?{' '}
-          <Link to="/login" className="text-blue-400 hover:underline">
+          <Link to="/login" className="text-blue-500 hover:underline font-medium">
             Log In
           </Link>
         </p>
