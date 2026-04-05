@@ -66,10 +66,24 @@ Consideration of these principles should go into every design decision made. If 
 
 ### Error response pattern
 
-Internal error details are never exposed to clients. When an unexpected error occurs:
-1. Log the real error server-side with `tracing::error!` (including the error value for diagnostics)
-2. Return a generic `"Internal server error"` message in the JSON response body
-3. Keep the appropriate HTTP status code (e.g., 500)
+All route handlers return `Result<impl IntoResponse, AppError>` where `AppError` (`src/error.rs`) is a unified error type that implements Axum's `IntoResponse` trait. This enables idiomatic `?` error propagation instead of verbose match arms.
+
+**`AppError` variants:**
+
+| Variant | HTTP Status | User-facing message |
+|---------|-------------|---------------------|
+| `BadRequest(msg)` | 400 | The provided `msg` |
+| `Unauthorized(msg)` | 401 | The provided `msg` |
+| `NotFound(msg)` | 404 | The provided `msg` |
+| `Conflict(msg)` | 409 | The provided `msg` |
+| `Internal(log_msg)` | 500 | Generic `"Internal server error"` |
+
+**Key behaviors:**
+- `Internal` logs the real error via `tracing::error!` but returns a generic message to the client — internal details are never exposed.
+- `From` impls for `sea_orm::DbErr`, `jsonwebtoken::errors::Error`, and `argon2::password_hash::Error` auto-convert library errors into `Internal`, so `?` works directly on DB queries, token operations, and password hashing.
+- Client-facing errors (`BadRequest`, `Unauthorized`, etc.) are always constructed explicitly — they require human judgment about the appropriate status code and message.
+
+**Response format:** All errors return JSON: `{ "error": "<message>" }`
 
 ### Configuration
 

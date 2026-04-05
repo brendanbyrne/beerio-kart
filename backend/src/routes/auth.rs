@@ -6,10 +6,10 @@ use axum::{
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
 use crate::AppState;
 use crate::entities::users;
+use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::services::auth as auth_service;
 
@@ -50,20 +50,23 @@ pub struct UserInfo {
     pub username: String,
 }
 
-#[derive(Serialize)]
-struct ErrorBody {
-    error: String,
-}
-
 // ── Helpers ────────────────────────────────────────────────────────
 
 /// Build response headers that set the refresh token cookie.
-fn make_refresh_headers(refresh_token: &str, config: &crate::config::AppConfig) -> HeaderMap {
+fn make_refresh_headers(
+    refresh_token: &str,
+    config: &crate::config::AppConfig,
+) -> Result<HeaderMap, AppError> {
     let max_age_seconds = config.jwt_refresh_expiry_days as i64 * 86400;
     let cookie = auth_service::refresh_cookie(refresh_token, max_age_seconds, config);
     let mut headers = HeaderMap::new();
-    headers.insert(header::SET_COOKIE, cookie.parse().unwrap());
-    headers
+    headers.insert(
+        header::SET_COOKIE,
+        cookie
+            .parse()
+            .map_err(|_| AppError::Internal("Failed to build Set-Cookie header".to_string()))?,
+    );
+    Ok(headers)
 }
 
 /// Extract the `refresh_token` value from the Cookie header.
@@ -88,72 +91,32 @@ fn extract_refresh_cookie(headers: &HeaderMap) -> Option<String> {
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
-) -> impl IntoResponse {
-    // Validate input
+) -> Result<impl IntoResponse, AppError> {
     let username = body.username.trim();
     if username.is_empty() || username.chars().count() > 30 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                error: "Username must be 1-30 characters".to_string(),
-            }),
-        )
-            .into_response();
+        return Err(AppError::BadRequest(
+            "Username must be 1-30 characters".into(),
+        ));
     }
 
     if body.password.len() < 8 || body.password.len() > 128 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                error: "Password must be 8-128 characters".to_string(),
-            }),
-        )
-            .into_response();
+        return Err(AppError::BadRequest(
+            "Password must be 8-128 characters".into(),
+        ));
     }
 
     // Check if username already exists (nicer error than a DB constraint violation)
     let existing = users::Entity::find()
         .filter(users::Column::Username.eq(username))
         .one(&state.db)
-        .await;
+        .await?;
 
-    match existing {
-        Ok(Some(_)) => {
-            return (
-                StatusCode::CONFLICT,
-                Json(ErrorBody {
-                    error: "Username already taken".to_string(),
-                }),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to check username availability");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-        Ok(None) => {} // username is available
+    if existing.is_some() {
+        return Err(AppError::Conflict("Username already taken".into()));
     }
 
     // Hash password
-    let password_hash = match auth_service::hash_password(&body.password) {
-        Ok(h) => h,
-        Err(e) => {
-            error!(error = %e, "Failed to hash password");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let password_hash = auth_service::hash_password(&body.password)?;
 
     // Generate user ID and timestamps
     let user_id = uuid::Uuid::new_v4().to_string();
@@ -175,49 +138,14 @@ pub async fn register(
         updated_at: Set(now),
     };
 
-    if let Err(e) = new_user.insert(&state.db).await {
-        error!(error = %e, "Failed to insert user");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                error: "Internal server error".to_string(),
-            }),
-        )
-            .into_response();
-    }
+    new_user.insert(&state.db).await?;
 
     // Generate tokens
-    let access_token = match auth_service::create_access_token(&user_id, username, &state.config) {
-        Ok(t) => t,
-        Err(e) => {
-            error!(error = %e, "Failed to create access token");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let access_token = auth_service::create_access_token(&user_id, username, &state.config)?;
+    let refresh_token = auth_service::create_refresh_token(&user_id, 0, &state.config)?;
+    let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
-    let refresh_token = match auth_service::create_refresh_token(&user_id, 0, &state.config) {
-        Ok(t) => t,
-        Err(e) => {
-            error!(error = %e, "Failed to create refresh token");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    let headers = make_refresh_headers(&refresh_token, &state.config);
-
-    (
+    Ok((
         StatusCode::CREATED,
         headers,
         Json(AuthResponse {
@@ -227,8 +155,7 @@ pub async fn register(
                 username: username.to_string(),
             },
         }),
-    )
-        .into_response()
+    ))
 }
 
 /// POST /api/v1/auth/login
@@ -238,100 +165,46 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, AppError> {
     let username = body.username.trim();
-
-    // Use the same error message for "not found" and "wrong password"
-    // to avoid leaking whether a username exists.
-    let invalid = || {
-        (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorBody {
-                error: "Invalid username or password".to_string(),
-            }),
-        )
-    };
 
     let user = match users::Entity::find()
         .filter(users::Column::Username.eq(username))
         .one(&state.db)
-        .await
+        .await?
     {
-        Ok(Some(u)) => u,
-        Ok(None) => {
+        Some(u) => u,
+        None => {
             // Hash a dummy password so the timing is similar to the "wrong password"
             // path. Prevents username enumeration via response-time analysis.
             let _ = auth_service::verify_password(
                 "dummy",
                 "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             );
-            return invalid().into_response();
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to look up user during login");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
+            return Err(AppError::Unauthorized(
+                "Invalid username or password".into(),
+            ));
         }
     };
 
     // Verify password
     match auth_service::verify_password(&body.password, &user.password_hash) {
         Ok(true) => {}
-        Ok(false) => return invalid().into_response(),
-        Err(e) => {
-            error!(error = %e, "Password verification failed unexpectedly");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
+        Ok(false) => {
+            return Err(AppError::Unauthorized(
+                "Invalid username or password".into(),
+            ));
         }
+        Err(e) => return Err(AppError::from(e)),
     }
 
     // Generate tokens
-    let access_token =
-        match auth_service::create_access_token(&user.id, &user.username, &state.config) {
-            Ok(t) => t,
-            Err(e) => {
-                error!(error = %e, "Failed to create access token during login");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorBody {
-                        error: "Internal server error".to_string(),
-                    }),
-                )
-                    .into_response();
-            }
-        };
+    let access_token = auth_service::create_access_token(&user.id, &user.username, &state.config)?;
+    let refresh_token =
+        auth_service::create_refresh_token(&user.id, user.refresh_token_version, &state.config)?;
+    let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
-    let refresh_token = match auth_service::create_refresh_token(
-        &user.id,
-        user.refresh_token_version,
-        &state.config,
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!(error = %e, "Failed to create refresh token during login");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    let headers = make_refresh_headers(&refresh_token, &state.config);
-
-    (
+    Ok((
         headers,
         Json(AuthResponse {
             access_token,
@@ -340,8 +213,7 @@ pub async fn login(
                 username: user.username,
             },
         }),
-    )
-        .into_response()
+    ))
 }
 
 /// POST /api/v1/auth/refresh
@@ -353,118 +225,46 @@ pub async fn login(
 /// "Rotation" means issuing a fresh refresh JWT with a fresh expiry on every
 /// successful refresh. This extends the session window without bumping the
 /// version (which would invalidate other devices).
-pub async fn refresh(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+pub async fn refresh(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, AppError> {
     let cookie_value = match extract_refresh_cookie(&headers) {
         Some(v) if !v.is_empty() => v,
-        _ => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorBody {
-                    error: "Missing refresh token".to_string(),
-                }),
-            )
-                .into_response();
-        }
+        _ => return Err(AppError::Unauthorized("Missing refresh token".into())),
     };
 
     // Validate the JWT signature and expiry
-    let claims = match auth_service::validate_refresh_token(&cookie_value, &state.config) {
-        Ok(c) => c,
-        Err(_) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorBody {
-                    error: "Invalid or expired refresh token".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let claims = auth_service::validate_refresh_token(&cookie_value, &state.config)
+        .map_err(|_| AppError::Unauthorized("Invalid or expired refresh token".into()))?;
 
     // Reject if token_type is not "refresh"
     if claims.token_type != "refresh" {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorBody {
-                error: "Invalid token type".to_string(),
-            }),
-        )
-            .into_response();
+        return Err(AppError::Unauthorized("Invalid token type".into()));
     }
 
     // Look up user and check refresh_token_version
-    let user = match users::Entity::find_by_id(&claims.sub).one(&state.db).await {
-        Ok(Some(u)) => u,
-        Ok(None) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorBody {
-                    error: "User not found".to_string(),
-                }),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to look up user during refresh");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let user = users::Entity::find_by_id(&claims.sub)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::Unauthorized("User not found".into()))?;
 
     // Version mismatch means the token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorBody {
-                error: "Refresh token has been revoked".to_string(),
-            }),
-        )
-            .into_response();
+        return Err(AppError::Unauthorized(
+            "Refresh token has been revoked".into(),
+        ));
     }
 
     // Issue new tokens
-    let access_token =
-        match auth_service::create_access_token(&user.id, &user.username, &state.config) {
-            Ok(t) => t,
-            Err(e) => {
-                error!(error = %e, "Failed to create access token during refresh");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorBody {
-                        error: "Internal server error".to_string(),
-                    }),
-                )
-                    .into_response();
-            }
-        };
+    let access_token = auth_service::create_access_token(&user.id, &user.username, &state.config)?;
 
     // Rotate: issue a fresh refresh token with same version but new expiry
-    let new_refresh = match auth_service::create_refresh_token(
-        &user.id,
-        user.refresh_token_version,
-        &state.config,
-    ) {
-        Ok(t) => t,
-        Err(e) => {
-            error!(error = %e, "Failed to rotate refresh token");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let new_refresh =
+        auth_service::create_refresh_token(&user.id, user.refresh_token_version, &state.config)?;
+    let resp_headers = make_refresh_headers(&new_refresh, &state.config)?;
 
-    let resp_headers = make_refresh_headers(&new_refresh, &state.config);
-
-    (resp_headers, Json(RefreshResponse { access_token })).into_response()
+    Ok((resp_headers, Json(RefreshResponse { access_token })))
 }
 
 /// POST /api/v1/auth/logout
@@ -472,17 +272,15 @@ pub async fn refresh(State(state): State<AppState>, headers: HeaderMap) -> impl 
 /// Requires authentication. Increments `refresh_token_version` in the database,
 /// which invalidates ALL refresh tokens for this user across all devices.
 /// Also clears the refresh cookie on the current browser.
-pub async fn logout(State(state): State<AppState>, user: AuthUser) -> impl IntoResponse {
+pub async fn logout(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<impl IntoResponse, AppError> {
     // Look up user to get current version
-    let db_user = match users::Entity::find_by_id(&user.user_id)
+    let db_user = users::Entity::find_by_id(&user.user_id)
         .one(&state.db)
-        .await
-    {
-        Ok(Some(u)) => u,
-        Ok(None) | Err(_) => {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+        .await?
+        .ok_or_else(|| AppError::Internal("Authenticated user not found in database".into()))?;
 
     // Increment version to invalidate all existing refresh tokens
     let new_version = db_user.refresh_token_version + 1;
@@ -490,17 +288,19 @@ pub async fn logout(State(state): State<AppState>, user: AuthUser) -> impl IntoR
     active.refresh_token_version = Set(new_version);
     active.updated_at = Set(chrono::Utc::now().to_rfc3339());
 
-    if let Err(e) = active.update(&state.db).await {
-        error!(error = %e, "Failed to increment refresh_token_version");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    active.update(&state.db).await?;
 
     // Clear the refresh cookie
     let cookie = auth_service::clear_refresh_cookie(&state.config);
     let mut headers = HeaderMap::new();
-    headers.insert(header::SET_COOKIE, cookie.parse().unwrap());
+    headers.insert(
+        header::SET_COOKIE,
+        cookie
+            .parse()
+            .map_err(|_| AppError::Internal("Failed to build Set-Cookie header".to_string()))?,
+    );
 
-    (headers, StatusCode::OK).into_response()
+    Ok((headers, StatusCode::OK))
 }
 
 /// PUT /api/v1/auth/password
@@ -512,83 +312,33 @@ pub async fn change_password(
     State(state): State<AppState>,
     user: AuthUser,
     Json(body): Json<ChangePasswordRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, AppError> {
     // Validate new password length
     if body.new_password.len() < 8 || body.new_password.len() > 128 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                error: "New password must be 8-128 characters".to_string(),
-            }),
-        )
-            .into_response();
+        return Err(AppError::BadRequest(
+            "New password must be 8-128 characters".into(),
+        ));
     }
 
     // Look up user
-    let db_user = match users::Entity::find_by_id(&user.user_id)
+    let db_user = users::Entity::find_by_id(&user.user_id)
         .one(&state.db)
-        .await
-    {
-        Ok(Some(u)) => u,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ErrorBody {
-                    error: "User not found".to_string(),
-                }),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to look up user for password change");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
 
     // Verify current password
     match auth_service::verify_password(&body.current_password, &db_user.password_hash) {
         Ok(true) => {}
         Ok(false) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorBody {
-                    error: "Current password is incorrect".to_string(),
-                }),
-            )
-                .into_response();
+            return Err(AppError::Unauthorized(
+                "Current password is incorrect".into(),
+            ));
         }
-        Err(e) => {
-            error!(error = %e, "Password verification failed during change");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
+        Err(e) => return Err(AppError::from(e)),
     }
 
     // Hash new password
-    let new_hash = match auth_service::hash_password(&body.new_password) {
-        Ok(h) => h,
-        Err(e) => {
-            error!(error = %e, "Failed to hash new password");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let new_hash = auth_service::hash_password(&body.new_password)?;
 
     // Update password and bump version (invalidates all other sessions)
     let new_version = db_user.refresh_token_version + 1;
@@ -599,48 +349,12 @@ pub async fn change_password(
     active.refresh_token_version = Set(new_version);
     active.updated_at = Set(chrono::Utc::now().to_rfc3339());
 
-    if let Err(e) = active.update(&state.db).await {
-        error!(error = %e, "Failed to update password");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                error: "Internal server error".to_string(),
-            }),
-        )
-            .into_response();
-    }
+    active.update(&state.db).await?;
 
     // Issue new tokens for the current session
-    let access_token = match auth_service::create_access_token(&user_id, &username, &state.config) {
-        Ok(t) => t,
-        Err(e) => {
-            error!(error = %e, "Failed to create access token after password change");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;
+    let refresh_token = auth_service::create_refresh_token(&user_id, new_version, &state.config)?;
+    let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
-    let refresh_token =
-        match auth_service::create_refresh_token(&user_id, new_version, &state.config) {
-            Ok(t) => t,
-            Err(e) => {
-                error!(error = %e, "Failed to create refresh token after password change");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorBody {
-                        error: "Internal server error".to_string(),
-                    }),
-                )
-                    .into_response();
-            }
-        };
-
-    let headers = make_refresh_headers(&refresh_token, &state.config);
-
-    (headers, Json(RefreshResponse { access_token })).into_response()
+    Ok((headers, Json(RefreshResponse { access_token })))
 }
