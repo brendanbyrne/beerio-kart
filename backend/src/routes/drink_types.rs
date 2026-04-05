@@ -22,6 +22,18 @@ pub struct DrinkTypeResponse {
     pub created_at: String,
 }
 
+impl From<drink_types::Model> for DrinkTypeResponse {
+    fn from(m: drink_types::Model) -> Self {
+        Self {
+            id: m.id,
+            name: m.name,
+            alcoholic: m.alcoholic,
+            created_by: m.created_by,
+            created_at: m.created_at,
+        }
+    }
+}
+
 // ── Request types ────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -48,6 +60,11 @@ pub async fn create_drink_type(
             "Drink type name cannot be empty".to_string(),
         ));
     }
+    if name.len() > 200 {
+        return Err(AppError::BadRequest(
+            "Drink type name must be 200 characters or fewer".to_string(),
+        ));
+    }
 
     // Deterministic UUID from uppercased name — case-insensitive dedup
     let id = drink_type_uuid(&name);
@@ -55,13 +72,7 @@ pub async fn create_drink_type(
     // Check if this drink type already exists (by UUID)
     if let Some(existing) = drink_types::Entity::find_by_id(&id).one(&state.db).await? {
         // Return the existing entry (200, not 409)
-        return Ok(Json(DrinkTypeResponse {
-            id: existing.id,
-            name: existing.name,
-            alcoholic: existing.alcoholic,
-            created_by: existing.created_by,
-            created_at: existing.created_at,
-        }));
+        return Ok(Json(existing.into()));
     }
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -75,13 +86,7 @@ pub async fn create_drink_type(
 
     let inserted = sea_orm::ActiveModelTrait::insert(model, &state.db).await?;
 
-    Ok(Json(DrinkTypeResponse {
-        id: inserted.id,
-        name: inserted.name,
-        alcoholic: inserted.alcoholic,
-        created_by: inserted.created_by,
-        created_at: inserted.created_at,
-    }))
+    Ok(Json(inserted.into()))
 }
 
 pub async fn list_drink_types(
@@ -96,16 +101,7 @@ pub async fn list_drink_types(
 
     let items = query.all(&state.db).await?;
     Ok(Json(
-        items
-            .into_iter()
-            .map(|dt| DrinkTypeResponse {
-                id: dt.id,
-                name: dt.name,
-                alcoholic: dt.alcoholic,
-                created_by: dt.created_by,
-                created_at: dt.created_at,
-            })
-            .collect(),
+        items.into_iter().map(DrinkTypeResponse::from).collect(),
     ))
 }
 
@@ -119,11 +115,5 @@ pub async fn get_drink_type(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Drink type {id} not found")))?;
 
-    Ok(Json(DrinkTypeResponse {
-        id: dt.id,
-        name: dt.name,
-        alcoholic: dt.alcoholic,
-        created_by: dt.created_by,
-        created_at: dt.created_at,
-    }))
+    Ok(Json(dt.into()))
 }

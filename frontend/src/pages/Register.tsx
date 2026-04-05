@@ -21,7 +21,6 @@ export default function Register() {
     if (err) {
       setError(err)
     } else {
-      // After registration, redirect to onboarding to set up preferences
       navigate('/onboarding')
     }
   }

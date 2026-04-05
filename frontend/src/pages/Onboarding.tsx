@@ -13,6 +13,7 @@ export default function Onboarding() {
   const { user } = useAuth()
   const [phase, setPhase] = useState<Phase>('race-setup')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function saveRaceSetup(setup: {
     characterId: number
@@ -22,8 +23,9 @@ export default function Onboarding() {
   }) {
     if (!user) return
     setSaving(true)
+    setError(null)
     try {
-      await apiFetch(`/api/v1/users/${user.id}`, {
+      const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -33,9 +35,14 @@ export default function Onboarding() {
           preferred_glider_id: setup.gliderId,
         }),
       })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || 'Failed to save race setup')
+        return
+      }
       setPhase('drink-type')
     } catch {
-      // Silently continue
+      setError('Network error — please try again')
     } finally {
       setSaving(false)
     }
@@ -44,15 +51,21 @@ export default function Onboarding() {
   async function saveDrinkType(dt: DrinkType) {
     if (!user) return
     setSaving(true)
+    setError(null)
     try {
-      await apiFetch(`/api/v1/users/${user.id}`, {
+      const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preferred_drink_type_id: dt.id }),
       })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || 'Failed to save drink preference')
+        return
+      }
       navigate('/')
     } catch {
-      navigate('/')
+      setError('Network error — please try again')
     } finally {
       setSaving(false)
     }
@@ -70,6 +83,7 @@ export default function Onboarding() {
             ? 'Choose your go-to character, kart body, wheels, and glider. You can change these later.'
             : "What's your drink of choice? You can always change this later too."}
         </p>
+        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
       </div>
 
       {/* Content */}

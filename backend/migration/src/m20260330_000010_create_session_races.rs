@@ -1,12 +1,7 @@
 use sea_orm_migration::prelude::*;
 
-use crate::m20260330_000002_create_tracks::Tracks;
-use crate::m20260330_000004_create_users::Users;
-use crate::m20260330_000008_create_sessions::Sessions;
-
 /// Creates the session_races table — each race within a session.
-/// Tracks the sequence of tracks raced and who chose them.
-/// Composite unique on (session_id, race_number).
+/// Uses raw SQL for SQLite STRICT mode and composite unique index.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -14,62 +9,28 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .create_table(
-                Table::create()
-                    .table(SessionRaces::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(SessionRaces::Id)
-                            .text()
-                            .not_null()
-                            .primary_key(),
-                    )
-                    .col(ColumnDef::new(SessionRaces::SessionId).text().not_null())
-                    .col(
-                        ColumnDef::new(SessionRaces::RaceNumber)
-                            .integer()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(SessionRaces::TrackId).integer().not_null())
-                    .col(ColumnDef::new(SessionRaces::ChosenBy).text())
-                    .col(ColumnDef::new(SessionRaces::CreatedAt).text().not_null())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(SessionRaces::Table, SessionRaces::SessionId)
-                            .to(Sessions::Table, Sessions::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(SessionRaces::Table, SessionRaces::TrackId)
-                            .to(Tracks::Table, Tracks::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(SessionRaces::Table, SessionRaces::ChosenBy)
-                            .to(Users::Table, Users::Id),
-                    )
-                    .to_owned(),
+            .get_connection()
+            .execute_unprepared(
+                "CREATE TABLE IF NOT EXISTS session_races (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    session_id TEXT NOT NULL REFERENCES sessions(id),
+                    race_number INTEGER NOT NULL,
+                    track_id INTEGER NOT NULL REFERENCES tracks(id),
+                    chosen_by TEXT REFERENCES users(id),
+                    created_at TEXT NOT NULL,
+                    UNIQUE(session_id, race_number)
+                ) STRICT",
             )
             .await?;
-
-        // Composite unique index: no duplicate race numbers within a session
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_session_races_session_race_number")
-                    .table(SessionRaces::Table)
-                    .col(SessionRaces::SessionId)
-                    .col(SessionRaces::RaceNumber)
-                    .unique()
-                    .to_owned(),
-            )
-            .await
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(SessionRaces::Table).to_owned())
-            .await
+            .get_connection()
+            .execute_unprepared("DROP TABLE IF EXISTS session_races")
+            .await?;
+        Ok(())
     }
 }
 
