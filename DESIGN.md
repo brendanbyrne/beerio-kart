@@ -34,6 +34,7 @@ Consideration of these principles should go into every design decision made. If 
 
 - **Don't overengineer before OCR.** Many corner cases (time validation, race setup entry, session tracking) will be solved by OCR. Design the MVP for manual entry with hooks for OCR to slot in later.
 - **SQLite STRICT mode on all tables.** Enforces type checking at the database level (rejects inserting a string into an INTEGER column, etc.). Catches bugs early that would otherwise only surface during a PostgreSQL migration. Requires SQLite 3.37+ (2021).
+- **Must work on Firefox.** Firefox is a target browser alongside Chrome/Safari mobile. Avoid Chrome-only APIs or `-webkit-` prefixes without Firefox equivalents. Test on Firefox before shipping UI changes.
 
 ## Tech Stack
 
@@ -757,12 +758,12 @@ beerio-kart/
 - [x] Dockerfiles + compose.yaml
 
 ### Phase 2: Deployment
-- [ ] Validate single-container Dockerfile on Unraid (multi-stage build already exists from Phase 1)
-- [ ] Validate compose.yaml on Unraid (already exists from Phase 1, single service + volumes)
-- [ ] Configure Cloudflare tunnel to route domain to the app on Unraid
-- [ ] Set Cloudflare encryption mode to **Full (strict)** — Flexible encrypts browser-to-Cloudflare but forwards plaintext to the origin server, which means passwords travel unencrypted on the last hop
-- [ ] Verify HTTPS works end-to-end through Cloudflare
-- [ ] Test basic auth flow from phone over real network
+- [x] Validate single-container Dockerfile on Unraid (multi-stage build already exists from Phase 1)
+- [x] Validate compose.yaml on Unraid (already exists from Phase 1, single service + volumes)
+- [x] Configure Cloudflare tunnel to route domain to the app on Unraid
+- [x] Set Cloudflare encryption mode to **Full (strict)** — Flexible encrypts browser-to-Cloudflare but forwards plaintext to the origin server, which means passwords travel unencrypted on the last hop
+- [x] Verify HTTPS works end-to-end through Cloudflare
+- [x] Test basic auth flow from phone over real network
 - [x] Add .env / config for production vs development settings
 - [x] Upgrade auth to refresh token flow (short-lived access token + HttpOnly refresh cookie + `refresh_token_version` on users)
 

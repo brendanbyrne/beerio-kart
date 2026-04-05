@@ -10,7 +10,10 @@ Two handoff files enable async task passing between assistants. The writer creat
 - **`.claude/claude-code-handoff.md`** — Claude Code → Cowork. Write this when you have questions, research requests, or design decisions for Cowork. Cowork deletes it after addressing.
 
 ## Project Phase
-Phase 2 — Deployment (validate Docker on Unraid, Cloudflare tunnel, HTTPS, production config, refresh token auth).
+Phase 3 — Sessions & Run Recording (core gameplay loop).
+
+## UI Reference Device
+Use the **Pixel 9 Pro** as the reference phone for all UI mockups and layout work. Physical resolution: 1280 × 2856 pixels at 495 ppi. Logical (CSS) resolution: ~427 × 952 px at 3× device pixel ratio.
 
 ## Overview
 Beerio Kart is a mobile-first web app for tracking times and stats for a Mario Kart 8 Deluxe drinking game. Players race time trials, optionally drink, and the app tracks personal bests, leaderboards, and run history. Non-drinkers are equally welcome — inclusive by default is a core design principle.
