@@ -1,14 +1,7 @@
 use sea_orm_migration::prelude::*;
 
-use crate::m20260330_000001_create_base_tables::{Bodies, Characters, Gliders, Wheels};
-use crate::m20260330_000002_create_tracks::Tracks;
-use crate::m20260330_000003_create_drink_types::DrinkTypes;
-use crate::m20260330_000004_create_users::Users;
-use crate::m20260330_000006_create_runs::Runs;
-use crate::m20260330_000010_create_session_races::SessionRaces;
-
-/// Drops and recreates the runs table with new columns: session_race_id and
-/// disqualified. Also drops and recreates run_flags since it has a FK to runs.
+/// Drops and recreates the runs table with new columns (session_race_id,
+/// disqualified) and run_flags. Uses raw SQL for SQLite STRICT mode.
 /// Approved by Brendan — no production data to preserve.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -16,118 +9,55 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        let conn = manager.get_connection();
+
         // Drop run_flags first (FK dependency on runs)
-        manager
-            .drop_table(Table::drop().table(RunFlags::Table).if_exists().to_owned())
+        conn.execute_unprepared("DROP TABLE IF EXISTS run_flags")
             .await?;
 
         // Drop old runs table
-        manager
-            .drop_table(Table::drop().table(Runs::Table).if_exists().to_owned())
-            .await?;
+        conn.execute_unprepared("DROP TABLE IF EXISTS runs").await?;
 
-        // Recreate runs with new columns
-        manager
-            .create_table(
-                Table::create()
-                    .table(Runs::Table)
-                    .col(ColumnDef::new(Runs::Id).text().not_null().primary_key())
-                    .col(ColumnDef::new(Runs::UserId).text().not_null())
-                    .col(ColumnDef::new(Runs::SessionRaceId).text().not_null())
-                    .col(ColumnDef::new(Runs::TrackId).integer().not_null())
-                    .col(ColumnDef::new(Runs::CharacterId).integer().not_null())
-                    .col(ColumnDef::new(Runs::BodyId).integer().not_null())
-                    .col(ColumnDef::new(Runs::WheelId).integer().not_null())
-                    .col(ColumnDef::new(Runs::GliderId).integer().not_null())
-                    .col(ColumnDef::new(Runs::TrackTime).integer().not_null())
-                    .col(ColumnDef::new(Runs::Lap1Time).integer().not_null())
-                    .col(ColumnDef::new(Runs::Lap2Time).integer().not_null())
-                    .col(ColumnDef::new(Runs::Lap3Time).integer().not_null())
-                    .col(ColumnDef::new(Runs::DrinkTypeId).text().not_null())
-                    .col(
-                        ColumnDef::new(Runs::Disqualified)
-                            .integer()
-                            .not_null()
-                            .default(0),
-                    )
-                    .col(ColumnDef::new(Runs::PhotoPath).text())
-                    .col(ColumnDef::new(Runs::CreatedAt).text().not_null())
-                    .col(ColumnDef::new(Runs::Notes).text())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::UserId)
-                            .to(Users::Table, Users::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::SessionRaceId)
-                            .to(SessionRaces::Table, SessionRaces::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::TrackId)
-                            .to(Tracks::Table, Tracks::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::CharacterId)
-                            .to(Characters::Table, Characters::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::BodyId)
-                            .to(Bodies::Table, Bodies::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::WheelId)
-                            .to(Wheels::Table, Wheels::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::GliderId)
-                            .to(Gliders::Table, Gliders::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Runs::Table, Runs::DrinkTypeId)
-                            .to(DrinkTypes::Table, DrinkTypes::Id),
-                    )
-                    .to_owned(),
-            )
-            .await?;
+        // Recreate runs with new columns and STRICT mode
+        conn.execute_unprepared(
+            "CREATE TABLE runs (
+                id TEXT NOT NULL PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id),
+                session_race_id TEXT NOT NULL REFERENCES session_races(id),
+                track_id INTEGER NOT NULL REFERENCES tracks(id),
+                character_id INTEGER NOT NULL REFERENCES characters(id),
+                body_id INTEGER NOT NULL REFERENCES bodies(id),
+                wheel_id INTEGER NOT NULL REFERENCES wheels(id),
+                glider_id INTEGER NOT NULL REFERENCES gliders(id),
+                track_time INTEGER NOT NULL,
+                lap1_time INTEGER NOT NULL,
+                lap2_time INTEGER NOT NULL,
+                lap3_time INTEGER NOT NULL,
+                drink_type_id TEXT NOT NULL REFERENCES drink_types(id),
+                disqualified INTEGER NOT NULL DEFAULT 0,
+                photo_path TEXT,
+                created_at TEXT NOT NULL,
+                notes TEXT
+            ) STRICT",
+        )
+        .await?;
 
-        // Recreate run_flags
-        manager
-            .create_table(
-                Table::create()
-                    .table(RunFlags::Table)
-                    .col(ColumnDef::new(RunFlags::Id).text().not_null().primary_key())
-                    .col(ColumnDef::new(RunFlags::RunId).text().not_null())
-                    .col(ColumnDef::new(RunFlags::Reason).text().not_null())
-                    .col(ColumnDef::new(RunFlags::Note).text())
-                    .col(
-                        ColumnDef::new(RunFlags::HideWhilePending)
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
-                    .col(
-                        ColumnDef::new(RunFlags::AutoGenerated)
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
-                    .col(ColumnDef::new(RunFlags::CreatedAt).text().not_null())
-                    .col(ColumnDef::new(RunFlags::ResolvedAt).text())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(RunFlags::Table, RunFlags::RunId)
-                            .to(Runs::Table, Runs::Id),
-                    )
-                    .to_owned(),
-            )
-            .await
+        // Recreate run_flags with STRICT mode
+        conn.execute_unprepared(
+            "CREATE TABLE run_flags (
+                id TEXT NOT NULL PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES runs(id),
+                reason TEXT NOT NULL,
+                note TEXT,
+                hide_while_pending INTEGER NOT NULL DEFAULT 0,
+                auto_generated INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                resolved_at TEXT
+            ) STRICT",
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
@@ -136,20 +66,4 @@ impl MigrationTrait for Migration {
         // the original schema.
         Ok(())
     }
-}
-
-// Re-use Runs iden from migration 006 (it has the new SessionRaceId and
-// Disqualified variants added there for this migration to reference).
-
-#[derive(DeriveIden)]
-enum RunFlags {
-    Table,
-    Id,
-    RunId,
-    Reason,
-    Note,
-    HideWhilePending,
-    AutoGenerated,
-    CreatedAt,
-    ResolvedAt,
 }

@@ -22,7 +22,7 @@ pub struct Model {
     pub lap3_time: i32,
     #[sea_orm(column_type = "Text")]
     pub drink_type_id: String,
-    pub disqualified: i32,
+    pub disqualified: bool,
     #[sea_orm(column_type = "Text", nullable)]
     pub photo_path: Option<String>,
     #[sea_orm(column_type = "Text")]

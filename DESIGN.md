@@ -74,6 +74,7 @@ All route handlers return `Result<impl IntoResponse, AppError>` where `AppError`
 |---------|-------------|---------------------|
 | `BadRequest(msg)` | 400 | The provided `msg` |
 | `Unauthorized(msg)` | 401 | The provided `msg` |
+| `Forbidden(msg)` | 403 | The provided `msg` |
 | `NotFound(msg)` | 404 | The provided `msg` |
 | `Conflict(msg)` | 409 | The provided `msg` |
 | `Internal(log_msg)` | 500 | Generic `"Internal server error"` |

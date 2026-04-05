@@ -49,14 +49,7 @@ function App() {
                 </GuestOnly>
               }
             />
-            <Route
-              path="/register"
-              element={
-                <GuestOnly>
-                  <Register />
-                </GuestOnly>
-              }
-            />
+            <Route path="/register" element={<Register />} />
             <Route
               path="/onboarding"
               element={

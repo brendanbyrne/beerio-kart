@@ -22,6 +22,7 @@ export default function Profile() {
 
   const [editMode, setEditMode] = useState<EditMode>(null)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -29,11 +30,10 @@ export default function Profile() {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
-  const charName = characters.find((c) => c.id === profile?.preferred_character_id)?.name
-  const charImage = characters.find((c) => c.id === profile?.preferred_character_id)?.image_path
-  const bodyName = bodies.find((b) => b.id === profile?.preferred_body_id)?.name
-  const wheelName = wheels.find((w) => w.id === profile?.preferred_wheel_id)?.name
-  const gliderName = gliders.find((g) => g.id === profile?.preferred_glider_id)?.name
+  const char = characters.find((c) => c.id === profile?.preferred_character_id)
+  const body = bodies.find((b) => b.id === profile?.preferred_body_id)
+  const wheel = wheels.find((w) => w.id === profile?.preferred_wheel_id)
+  const glider = gliders.find((g) => g.id === profile?.preferred_glider_id)
 
   async function handleSaveRaceSetup(setup: {
     characterId: number
@@ -43,8 +43,9 @@ export default function Profile() {
   }) {
     if (!user) return
     setSaving(true)
+    setSaveError(null)
     try {
-      await apiFetch(`/api/v1/users/${user.id}`, {
+      const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -54,10 +55,15 @@ export default function Profile() {
           preferred_glider_id: setup.gliderId,
         }),
       })
+      if (!res.ok) {
+        const data = await res.json()
+        setSaveError(data.error || 'Failed to save race setup')
+        return
+      }
       refresh()
       setEditMode(null)
     } catch {
-      // silent
+      setSaveError('Network error — please try again')
     } finally {
       setSaving(false)
     }
@@ -66,16 +72,22 @@ export default function Profile() {
   async function handleSaveDrinkType(dt: DrinkType) {
     if (!user) return
     setSaving(true)
+    setSaveError(null)
     try {
-      await apiFetch(`/api/v1/users/${user.id}`, {
+      const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preferred_drink_type_id: dt.id }),
       })
+      if (!res.ok) {
+        const data = await res.json()
+        setSaveError(data.error || 'Failed to save drink preference')
+        return
+      }
       refresh()
       setEditMode(null)
     } catch {
-      // silent
+      setSaveError('Network error — please try again')
     } finally {
       setSaving(false)
     }
@@ -141,6 +153,7 @@ export default function Profile() {
           <h2 className="flex-1 text-center text-base font-semibold text-gray-900">Race Setup</h2>
           <div className="w-12" />
         </div>
+        {saveError && <p className="text-red-500 text-sm text-center px-4">{saveError}</p>}
         <div className="flex-1 flex flex-col min-h-0">
           {saving ? (
             <div className="text-center text-gray-400 py-8">Saving...</div>
@@ -171,6 +184,7 @@ export default function Profile() {
           </h2>
           <div className="w-12" />
         </div>
+        {saveError && <p className="text-red-500 text-sm text-center px-4">{saveError}</p>}
         <div className="flex-1 px-4 pt-2">
           {saving ? (
             <div className="text-center text-gray-400 py-8">Saving...</div>
@@ -206,19 +220,27 @@ export default function Profile() {
             <h3 className="text-sm font-semibold text-gray-700">Race Setup</h3>
             <span className="text-xs text-blue-500 font-medium">Edit</span>
           </div>
-          {charName ? (
-            <div className="flex items-center gap-3">
-              {charImage && (
-                <img src={`/${charImage}`} alt={charName} className="w-12 h-12 object-contain" />
-              )}
-              <div className="text-xs text-gray-500 space-y-0.5">
-                <div>
-                  <span className="font-medium text-gray-700">{charName}</span>
+          {char ? (
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Character', item: char },
+                { label: 'Body', item: body },
+                { label: 'Wheels', item: wheel },
+                { label: 'Glider', item: glider },
+              ].map(({ label, item }) => (
+                <div key={label} className="flex flex-col items-center">
+                  {item && (
+                    <img
+                      src={`/${item.image_path}`}
+                      alt={item.name}
+                      className="w-12 h-12 object-contain"
+                    />
+                  )}
+                  <span className="text-[10px] text-gray-500 text-center leading-tight mt-0.5">
+                    {item?.name}
+                  </span>
                 </div>
-                <div>
-                  {bodyName} / {wheelName} / {gliderName}
-                </div>
-              </div>
+              ))}
             </div>
           ) : (
             <p className="text-sm text-gray-400">Not set yet</p>

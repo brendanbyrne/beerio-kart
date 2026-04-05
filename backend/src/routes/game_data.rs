@@ -36,6 +36,33 @@ pub struct CupWithTracksResponse {
     pub tracks: Vec<TrackResponse>,
 }
 
+/// Convert any entity Model with (id: i32, name: String, image_path: String) to SimpleItem.
+macro_rules! impl_into_simple_item {
+    ($($module:ident),+) => {
+        $(
+            impl From<$module::Model> for SimpleItem {
+                fn from(m: $module::Model) -> Self {
+                    Self { id: m.id, name: m.name, image_path: m.image_path }
+                }
+            }
+        )+
+    };
+}
+
+impl_into_simple_item!(characters, bodies, wheels, gliders, cups);
+
+impl From<tracks::Model> for TrackResponse {
+    fn from(t: tracks::Model) -> Self {
+        Self {
+            id: t.id,
+            name: t.name,
+            cup_id: t.cup_id,
+            position: t.position,
+            image_path: t.image_path,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct TracksQuery {
     pub cup_id: Option<i32>,
@@ -48,16 +75,7 @@ pub async fn list_characters(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, AppError> {
     let items = characters::Entity::find().all(&state.db).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|m| SimpleItem {
-                id: m.id,
-                name: m.name,
-                image_path: m.image_path,
-            })
-            .collect(),
-    ))
+    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
 pub async fn list_bodies(
@@ -65,16 +83,7 @@ pub async fn list_bodies(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, AppError> {
     let items = bodies::Entity::find().all(&state.db).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|m| SimpleItem {
-                id: m.id,
-                name: m.name,
-                image_path: m.image_path,
-            })
-            .collect(),
-    ))
+    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
 pub async fn list_wheels(
@@ -82,16 +91,7 @@ pub async fn list_wheels(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, AppError> {
     let items = wheels::Entity::find().all(&state.db).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|m| SimpleItem {
-                id: m.id,
-                name: m.name,
-                image_path: m.image_path,
-            })
-            .collect(),
-    ))
+    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
 pub async fn list_gliders(
@@ -99,16 +99,7 @@ pub async fn list_gliders(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, AppError> {
     let items = gliders::Entity::find().all(&state.db).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|m| SimpleItem {
-                id: m.id,
-                name: m.name,
-                image_path: m.image_path,
-            })
-            .collect(),
-    ))
+    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
 pub async fn list_cups(
@@ -116,16 +107,7 @@ pub async fn list_cups(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, AppError> {
     let items = cups::Entity::find().all(&state.db).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|m| SimpleItem {
-                id: m.id,
-                name: m.name,
-                image_path: m.image_path,
-            })
-            .collect(),
-    ))
+    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
 pub async fn get_cup(
@@ -143,13 +125,7 @@ pub async fn get_cup(
         .all(&state.db)
         .await?
         .into_iter()
-        .map(|t| TrackResponse {
-            id: t.id,
-            name: t.name,
-            cup_id: t.cup_id,
-            position: t.position,
-            image_path: t.image_path,
-        })
+        .map(TrackResponse::from)
         .collect();
 
     Ok(Json(CupWithTracksResponse {
@@ -171,18 +147,7 @@ pub async fn list_tracks(
     }
 
     let items = query.all(&state.db).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|t| TrackResponse {
-                id: t.id,
-                name: t.name,
-                cup_id: t.cup_id,
-                position: t.position,
-                image_path: t.image_path,
-            })
-            .collect(),
-    ))
+    Ok(Json(items.into_iter().map(TrackResponse::from).collect()))
 }
 
 pub async fn get_track(
@@ -195,11 +160,5 @@ pub async fn get_track(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Track {id} not found")))?;
 
-    Ok(Json(TrackResponse {
-        id: track.id,
-        name: track.name,
-        cup_id: track.cup_id,
-        position: track.position,
-        image_path: track.image_path,
-    }))
+    Ok(Json(track.into()))
 }
