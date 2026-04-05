@@ -23,3 +23,6 @@ tools/.state/
 
 # Code review files
 reviews/
+
+# Asserts (for now)
+frontend/public/images
