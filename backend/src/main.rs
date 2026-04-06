@@ -127,6 +127,18 @@ async fn main() {
             "/api/v1/sessions/{id}/leave",
             post(routes::sessions::leave_session),
         )
+        .route(
+            "/api/v1/sessions/{id}/next-track",
+            post(routes::sessions::next_track),
+        )
+        .route(
+            "/api/v1/sessions/{id}/skip-turn",
+            post(routes::sessions::skip_turn),
+        )
+        .route(
+            "/api/v1/sessions/{id}/races",
+            get(routes::sessions::list_races),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         // Serve frontend static files. If no API route or static file matches,

@@ -78,3 +78,33 @@ pub async fn leave_session(
     sessions::leave_session(&state.db, &id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// POST /sessions/:id/next-track — pick the next random track.
+pub async fn next_track(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<sessions::SessionRaceInfo>), AppError> {
+    let race = sessions::next_track(&state.db, &id, &user.user_id).await?;
+    Ok((StatusCode::CREATED, Json(race)))
+}
+
+/// POST /sessions/:id/skip-turn — re-roll the current track.
+pub async fn skip_turn(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<sessions::SessionRaceInfo>), AppError> {
+    let race = sessions::skip_turn(&state.db, &id, &user.user_id).await?;
+    Ok((StatusCode::CREATED, Json(race)))
+}
+
+/// GET /sessions/:id/races — list all races in a session.
+pub async fn list_races(
+    _user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<sessions::RaceInfo>>, AppError> {
+    let races = sessions::list_races(&state.db, &id).await?;
+    Ok(Json(races))
+}

@@ -1,11 +1,12 @@
 use chrono::Utc;
+use rand::seq::SliceRandom;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
+    FromQueryResult, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
 };
 use uuid::Uuid;
 
-use crate::entities::{session_participants, session_races, sessions, users};
+use crate::entities::{cups, runs, session_participants, session_races, sessions, tracks, users};
 use crate::error::AppError;
 
 /// Allowed rulesets for this PR. Only "random" is supported.
@@ -183,6 +184,54 @@ struct ParticipantRow {
     left_at: Option<String>,
 }
 
+/// Info about a single race in the session (returned on create / skip / poll).
+#[derive(serde::Serialize, Clone)]
+pub struct SessionRaceInfo {
+    pub id: String,
+    pub race_number: i32,
+    pub track_id: i32,
+    pub track_name: String,
+    pub cup_name: String,
+    pub image_path: String,
+    pub created_at: String,
+}
+
+/// Race info for the race history list.
+#[derive(serde::Serialize)]
+pub struct RaceInfo {
+    pub id: String,
+    pub race_number: i32,
+    pub track_id: i32,
+    pub track_name: String,
+    pub cup_name: String,
+    pub run_count: i64,
+    pub created_at: String,
+}
+
+/// Row shape returned by the race history query.
+#[derive(Debug, FromQueryResult)]
+struct RaceHistoryRow {
+    id: String,
+    race_number: i32,
+    track_id: i32,
+    track_name: String,
+    cup_name: String,
+    run_count: i64,
+    created_at: String,
+}
+
+/// Row shape for the current race query.
+#[derive(Debug, FromQueryResult)]
+struct CurrentRaceRow {
+    id: String,
+    race_number: i32,
+    track_id: i32,
+    track_name: String,
+    cup_name: String,
+    image_path: String,
+    created_at: String,
+}
+
 /// Full session detail for polling.
 #[derive(serde::Serialize)]
 pub struct SessionDetail {
@@ -196,6 +245,7 @@ pub struct SessionDetail {
     pub last_activity_at: String,
     pub participants: Vec<ParticipantInfo>,
     pub race_number: usize,
+    pub current_race: Option<SessionRaceInfo>,
 }
 
 /// Get full session detail — the polling endpoint.
@@ -247,6 +297,36 @@ pub async fn get_session_detail(
         .await? as usize;
     let race_number = races_created.max(1);
 
+    // Fetch the most recent race with track + cup info in a single JOIN
+    let current_race_row =
+        CurrentRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
+            SELECT sr.id, sr.race_number, sr.track_id,
+                   t.name AS track_name, c.name AS cup_name,
+                   t.image_path, sr.created_at
+            FROM session_races sr
+            JOIN tracks t ON sr.track_id = t.id
+            JOIN cups c ON t.cup_id = c.id
+            WHERE sr.session_id = $1
+            ORDER BY sr.race_number DESC
+            LIMIT 1
+            "#,
+            [session_id.into()],
+        ))
+        .one(db)
+        .await?;
+
+    let current_race = current_race_row.map(|r| SessionRaceInfo {
+        id: r.id,
+        race_number: r.race_number,
+        track_id: r.track_id,
+        track_name: r.track_name,
+        cup_name: r.cup_name,
+        image_path: r.image_path,
+        created_at: r.created_at,
+    });
+
     Ok(SessionDetail {
         id: session.id,
         created_by: session.created_by,
@@ -258,6 +338,7 @@ pub async fn get_session_detail(
         last_activity_at: session.last_activity_at,
         participants,
         race_number,
+        current_race,
     })
 }
 
@@ -383,6 +464,204 @@ pub async fn leave_session(
     Ok(())
 }
 
+/// Pick the next track for a session. Host-only.
+/// Randomly selects from tracks not yet used in this session.
+/// If all tracks have been used, resets the pool.
+pub async fn next_track(
+    db: &DatabaseConnection,
+    session_id: &str,
+    user_id: &str,
+) -> Result<SessionRaceInfo, AppError> {
+    let session = sessions::Entity::find_by_id(session_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    if session.status != "active" {
+        return Err(AppError::BadRequest("Session is not active".to_string()));
+    }
+
+    if session.host_id != user_id {
+        return Err(AppError::Forbidden(
+            "Only the host can pick tracks".to_string(),
+        ));
+    }
+
+    // Get already-used track IDs
+    let used_races = session_races::Entity::find()
+        .filter(session_races::Column::SessionId.eq(session_id))
+        .all(db)
+        .await?;
+    let race_count = used_races.len() as i32;
+    let used_track_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
+
+    // Get all tracks
+    let all_tracks = tracks::Entity::find().all(db).await?;
+
+    // Filter to available tracks
+    let mut available: Vec<&tracks::Model> = all_tracks
+        .iter()
+        .filter(|t| !used_track_ids.contains(&t.id))
+        .collect();
+
+    // If pool is empty, reset — all tracks become available again
+    if available.is_empty() {
+        tracing::info!(
+            session_id = session_id,
+            "All {} tracks used — resetting pool",
+            all_tracks.len()
+        );
+        available = all_tracks.iter().collect();
+    }
+
+    // Pick a random track. Scope the rng so ThreadRng (which is !Send)
+    // doesn't live across the subsequent .await points.
+    let chosen_idx = {
+        let mut rng = rand::thread_rng();
+        available
+            .choose(&mut rng)
+            .map(|t| t.id)
+            .ok_or_else(|| AppError::Internal("No tracks available".to_string()))?
+    };
+    let chosen = all_tracks
+        .iter()
+        .find(|t| t.id == chosen_idx)
+        .ok_or_else(|| AppError::Internal("Track disappeared".to_string()))?;
+
+    let now = Utc::now().to_rfc3339();
+    let race_id = Uuid::new_v4().to_string();
+    let new_race_number = race_count + 1;
+
+    let txn = db.begin().await?;
+
+    session_races::ActiveModel {
+        id: Set(race_id.clone()),
+        session_id: Set(session_id.to_string()),
+        race_number: Set(new_race_number),
+        track_id: Set(chosen.id),
+        chosen_by: Set(Some(user_id.to_string())),
+        created_at: Set(now.clone()),
+    }
+    .insert(&txn)
+    .await?;
+
+    // Update last_activity_at
+    let mut active_session: sessions::ActiveModel = session.into();
+    active_session.last_activity_at = Set(now.clone());
+    active_session.update(&txn).await?;
+
+    txn.commit().await?;
+
+    // Look up cup name for the response
+    let cup = cups::Entity::find_by_id(chosen.cup_id)
+        .one(db)
+        .await?
+        .map(|c| c.name)
+        .unwrap_or_else(|| "Unknown Cup".to_string());
+
+    Ok(SessionRaceInfo {
+        id: race_id,
+        race_number: new_race_number,
+        track_id: chosen.id,
+        track_name: chosen.name.clone(),
+        cup_name: cup,
+        image_path: chosen.image_path.clone(),
+        created_at: now,
+    })
+}
+
+/// Re-roll the current track. Host-only.
+/// Only valid if the most recent race has no runs submitted.
+pub async fn skip_turn(
+    db: &DatabaseConnection,
+    session_id: &str,
+    user_id: &str,
+) -> Result<SessionRaceInfo, AppError> {
+    let session = sessions::Entity::find_by_id(session_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    if session.status != "active" {
+        return Err(AppError::BadRequest("Session is not active".to_string()));
+    }
+
+    if session.host_id != user_id {
+        return Err(AppError::Forbidden(
+            "Only the host can skip tracks".to_string(),
+        ));
+    }
+
+    // Find the most recent race
+    let current_race = session_races::Entity::find()
+        .filter(session_races::Column::SessionId.eq(session_id))
+        .order_by_desc(session_races::Column::RaceNumber)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::BadRequest("No track to skip".to_string()))?;
+
+    // Verify no runs exist for this race
+    let run_count = runs::Entity::find()
+        .filter(runs::Column::SessionRaceId.eq(&current_race.id))
+        .count(db)
+        .await?;
+
+    if run_count > 0 {
+        return Err(AppError::BadRequest(
+            "Can't skip — runs already submitted".to_string(),
+        ));
+    }
+
+    // Delete the current race, then pick a new one via next_track
+    current_race.delete(db).await?;
+
+    next_track(db, session_id, user_id).await
+}
+
+/// List all races in a session, ordered by race_number ASC.
+pub async fn list_races(
+    db: &DatabaseConnection,
+    session_id: &str,
+) -> Result<Vec<RaceInfo>, AppError> {
+    // Verify session exists
+    sessions::Entity::find_by_id(session_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    let rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+        SELECT sr.id, sr.race_number, sr.track_id,
+               t.name AS track_name, c.name AS cup_name,
+               COUNT(r.id) AS run_count, sr.created_at
+        FROM session_races sr
+        JOIN tracks t ON sr.track_id = t.id
+        JOIN cups c ON t.cup_id = c.id
+        LEFT JOIN runs r ON r.session_race_id = sr.id
+        WHERE sr.session_id = $1
+        GROUP BY sr.id
+        ORDER BY sr.race_number ASC
+        "#,
+        [session_id.into()],
+    ))
+    .all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| RaceInfo {
+            id: r.id,
+            race_number: r.race_number,
+            track_id: r.track_id,
+            track_name: r.track_name,
+            cup_name: r.cup_name,
+            run_count: r.run_count,
+            created_at: r.created_at,
+        })
+        .collect())
+}
+
 /// Close sessions that have had no activity for over an hour.
 /// Returns the number of sessions closed.
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppError> {
@@ -423,6 +702,43 @@ mod tests {
             .expect("pragma");
         Migrator::up(&db, None).await.expect("migrate");
         db
+    }
+
+    /// Seed a small set of cups and tracks for testing track selection.
+    /// Creates 3 cups with 2 tracks each (6 tracks total).
+    async fn seed_tracks_for_test(db: &DatabaseConnection) {
+        let cup_names = ["Test Cup A", "Test Cup B", "Test Cup C"];
+        for (i, name) in cup_names.iter().enumerate() {
+            cups::ActiveModel {
+                id: Set((i + 1) as i32),
+                name: Set(name.to_string()),
+                image_path: Set(format!("images/cups/test-cup-{}.webp", i + 1)),
+            }
+            .insert(db)
+            .await
+            .expect("insert cup");
+        }
+
+        let track_data = [
+            (1, "Track Alpha", 1, 1),
+            (2, "Track Beta", 1, 2),
+            (3, "Track Gamma", 2, 1),
+            (4, "Track Delta", 2, 2),
+            (5, "Track Epsilon", 3, 1),
+            (6, "Track Zeta", 3, 2),
+        ];
+        for (id, name, cup_id, position) in track_data {
+            tracks::ActiveModel {
+                id: Set(id),
+                name: Set(name.to_string()),
+                cup_id: Set(cup_id),
+                position: Set(position),
+                image_path: Set(format!("images/tracks/track-{id}.webp")),
+            }
+            .insert(db)
+            .await
+            .expect("insert track");
+        }
     }
 
     async fn create_user(db: &DatabaseConnection, username: &str) -> String {
@@ -671,5 +987,205 @@ mod tests {
         // Should succeed — left s1, now free to join s2
         let result = join_session(&db, &s2.id, &user_id).await;
         assert!(result.is_ok());
+    }
+
+    // ── Track selection tests ──────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_next_track_picks_random_track() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        assert_eq!(race.race_number, 1);
+        assert!((1..=6).contains(&race.track_id));
+        assert!(!race.track_name.is_empty());
+        assert!(!race.cup_name.is_empty());
+
+        // Verify session_race row was created
+        let rows = session_races::Entity::find()
+            .filter(session_races::Column::SessionId.eq(&session.id))
+            .all(&db)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].track_id, race.track_id);
+    }
+
+    #[tokio::test]
+    async fn test_next_track_excludes_already_used_tracks() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        let r1 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r2 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r3 = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // All three should be different tracks
+        let ids = vec![r1.track_id, r2.track_id, r3.track_id];
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), 3, "All 3 track picks should be unique");
+    }
+
+    #[tokio::test]
+    async fn test_next_track_resets_pool_when_exhausted() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        // Use all 6 tracks
+        for _ in 0..6 {
+            next_track(&db, &session.id, &host_id).await.unwrap();
+        }
+
+        // 7th call should succeed — pool resets
+        let r7 = next_track(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(r7.race_number, 7);
+        assert!((1..=6).contains(&r7.track_id));
+    }
+
+    #[tokio::test]
+    async fn test_next_track_only_host_can_call() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_id = create_user(&db, "user").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_id).await.unwrap();
+
+        let result = next_track(&db, &session.id, &user_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_next_track_fails_on_closed_session() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        // Close by having host leave
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        let result = next_track(&db, &session.id, &host_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_skip_turn_rerolls_current_track() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        let original = next_track(&db, &session.id, &host_id).await.unwrap();
+        let rerolled = skip_turn(&db, &session.id, &host_id).await.unwrap();
+
+        // The old race should be gone and a new one should exist
+        let old_race = session_races::Entity::find_by_id(&original.id)
+            .one(&db)
+            .await
+            .unwrap();
+        assert!(old_race.is_none(), "Old race should be deleted");
+
+        // New race should exist
+        let new_race = session_races::Entity::find_by_id(&rerolled.id)
+            .one(&db)
+            .await
+            .unwrap();
+        assert!(new_race.is_some(), "New race should exist");
+
+        // Race number should be 1 (replaced, not incremented)
+        assert_eq!(rerolled.race_number, 1);
+    }
+
+    #[tokio::test]
+    async fn test_skip_turn_fails_when_no_race_exists() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        let result = skip_turn(&db, &session.id, &host_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_skip_turn_only_host_can_call() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_id = create_user(&db, "user").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_id).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let result = skip_turn(&db, &session.id, &user_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_current_race_appears_in_session_detail() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        // Before any track pick, current_race should be None
+        let detail = get_session_detail(&db, &session.id).await.unwrap();
+        assert!(detail.current_race.is_none());
+
+        // After picking a track, current_race should be populated
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+        let detail = get_session_detail(&db, &session.id).await.unwrap();
+        let current = detail.current_race.expect("current_race should be Some");
+        assert_eq!(current.track_id, race.track_id);
+        assert_eq!(current.track_name, race.track_name);
+        assert_eq!(current.cup_name, race.cup_name);
+    }
+
+    #[tokio::test]
+    async fn test_race_number_increments_correctly() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        let r1 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r2 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r3 = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        assert_eq!(r1.race_number, 1);
+        assert_eq!(r2.race_number, 2);
+        assert_eq!(r3.race_number, 3);
+    }
+
+    #[tokio::test]
+    async fn test_list_races_returns_all_races_in_order() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        next_track(&db, &session.id, &host_id).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let races = list_races(&db, &session.id).await.unwrap();
+        assert_eq!(races.len(), 3);
+        assert_eq!(races[0].race_number, 1);
+        assert_eq!(races[1].race_number, 2);
+        assert_eq!(races[2].race_number, 3);
+
+        // All should have 0 runs (no run submission in this PR)
+        for race in &races {
+            assert_eq!(race.run_count, 0);
+        }
     }
 }

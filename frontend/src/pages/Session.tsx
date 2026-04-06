@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useSession } from '../hooks/useSession'
-import { joinSession, leaveSession } from '../api/sessions'
+import { joinSession, leaveSession, nextTrack, skipTurn, listRaces } from '../api/sessions'
+import type { RaceInfo } from '../api/types'
 import BottomNav from '../components/BottomNav'
 
 export default function Session() {
@@ -14,6 +15,11 @@ export default function Session() {
   const [joiningSession, setJoiningSession] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [headerExpanded, setHeaderExpanded] = useState(false)
+  const [pickingTrack, setPickingTrack] = useState(false)
+  const [skippingTrack, setSkippingTrack] = useState(false)
+  const [races, setRaces] = useState<RaceInfo[]>([])
+  const [historyExpanded, setHistoryExpanded] = useState(true)
+  const [trackImageError, setTrackImageError] = useState(false)
 
   const handleLeave = async () => {
     setLeaving(true)
@@ -35,6 +41,53 @@ export default function Session() {
       setJoiningSession(false)
     }
   }
+
+  const handleNextTrack = async () => {
+    setPickingTrack(true)
+    try {
+      await nextTrack(id!)
+    } catch {
+      // Poll will pick up any changes
+    } finally {
+      setPickingTrack(false)
+    }
+  }
+
+  const handleSkipTrack = async () => {
+    setSkippingTrack(true)
+    try {
+      await skipTurn(id!)
+    } catch {
+      // Poll will pick up any changes
+    } finally {
+      setSkippingTrack(false)
+    }
+  }
+
+  const fetchRaces = useCallback(async () => {
+    if (!id) return
+    const data = await listRaces(id)
+    setRaces(data)
+  }, [id])
+
+  // Fetch race history when session changes (piggyback on poll)
+  useEffect(() => {
+    if (session) {
+      fetchRaces()
+    }
+  }, [session, fetchRaces])
+
+  // Reset image error state when the track changes
+  useEffect(() => {
+    setTrackImageError(false)
+  }, [session?.current_race?.id])
+
+  // Auto-collapse history when > 3 races
+  useEffect(() => {
+    if (races.length > 3) {
+      setHistoryExpanded(false)
+    }
+  }, [races.length > 3]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -62,6 +115,9 @@ export default function Session() {
   const activeParticipants = session.participants.filter((p) => !p.left_at)
   const isParticipant = activeParticipants.some((p) => p.user_id === user?.id)
   const isHost = user?.id === session.host_id
+  const currentRace = session.current_race
+  // Past races = all except the most recent (current), shown newest-first
+  const pastRaces = [...races].reverse().filter((r) => r.id !== currentRace?.id)
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -104,19 +160,72 @@ export default function Session() {
 
       {/* Zone 2 — Track Card */}
       <div className="px-4 pt-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
-          <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-lg flex items-center justify-center">
-            <span className="text-xl text-gray-300">{'\uD83C\uDFCE\uFE0F'}</span>
+        {currentRace ? (
+          /* Active race — show track image and info */
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {/* Track image */}
+            {trackImageError ? (
+              <div className="h-40 bg-gray-100 flex items-center justify-center">
+                <span className="text-4xl">{'\uD83C\uDFCE\uFE0F'}</span>
+              </div>
+            ) : (
+              <img
+                src={`/${currentRace.image_path}`}
+                alt={currentRace.track_name}
+                className="w-full h-40 object-cover"
+                onError={() => setTrackImageError(true)}
+              />
+            )}
+            {/* Track info */}
+            <div className="px-4 py-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900">{currentRace.track_name}</h2>
+                <span className="text-[10px] font-semibold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                  Race {currentRace.race_number}
+                </span>
+              </div>
+              <p className="text-sm text-gray-500 mt-0.5">{currentRace.cup_name}</p>
+            </div>
           </div>
-          <p className="text-sm text-gray-500">Waiting for host to pick...</p>
-          {isHost && session.race_number === 0 && (
-            <p className="text-xs text-gray-400 mt-1">Track selection coming in a future update</p>
-          )}
-        </div>
+        ) : (
+          /* No race yet — waiting state */
+          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
+            <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-xl text-gray-300">{'\uD83C\uDFCE\uFE0F'}</span>
+            </div>
+            <p className="text-sm text-gray-500">
+              {isHost
+                ? 'Tap Next Track to get started!'
+                : `Waiting for ${session.host_username} to pick a track...`}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Zone 3 — Action Area */}
       <div className="px-4 pt-4 space-y-3">
+        {/* Host controls — Next Track and Skip Track */}
+        {isHost && isParticipant && (
+          <div className="space-y-2">
+            <button
+              onClick={handleNextTrack}
+              disabled={pickingTrack}
+              className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl disabled:opacity-50 active:bg-blue-600 transition-colors"
+            >
+              {pickingTrack ? 'Picking track...' : 'Next Track'}
+            </button>
+            {currentRace && (
+              <button
+                onClick={handleSkipTrack}
+                disabled={skippingTrack}
+                className="w-full py-2.5 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-xl disabled:opacity-50 active:bg-gray-50 transition-colors"
+              >
+                {skippingTrack ? 'Re-rolling...' : 'Skip Track'}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Participant cards */}
         <div>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mb-2">
@@ -136,6 +245,43 @@ export default function Session() {
             ))}
           </div>
         </div>
+
+        {/* Race History */}
+        {pastRaces.length > 0 && (
+          <div>
+            <button
+              onClick={() => setHistoryExpanded(!historyExpanded)}
+              className="w-full flex items-center justify-between px-1 mb-2"
+            >
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  Race History
+                </h3>
+                <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                  {pastRaces.length}
+                </span>
+              </div>
+              <span className="text-gray-400 text-xs">{historyExpanded ? '\u25B2' : '\u25BC'}</span>
+            </button>
+            {historyExpanded && (
+              <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                {pastRaces.map((race) => (
+                  <div key={race.id} className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-gray-400 w-5 text-center">
+                        {race.race_number}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{race.track_name}</p>
+                        <p className="text-xs text-gray-400">{race.cup_name}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Session info */}
         <div className="bg-white rounded-xl border border-gray-200 p-4">

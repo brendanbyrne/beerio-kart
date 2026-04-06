@@ -78,6 +78,26 @@ export interface ParticipantInfo {
   left_at: string | null
 }
 
+export interface SessionRaceInfo {
+  id: string
+  race_number: number
+  track_id: number
+  track_name: string
+  cup_name: string
+  image_path: string
+  created_at: string
+}
+
+export interface RaceInfo {
+  id: string
+  race_number: number
+  track_id: number
+  track_name: string
+  cup_name: string
+  run_count: number
+  created_at: string
+}
+
 export interface SessionDetail {
   id: string
   created_by: string
@@ -89,4 +109,5 @@ export interface SessionDetail {
   last_activity_at: string
   participants: ParticipantInfo[]
   race_number: number
+  current_race: SessionRaceInfo | null
 }

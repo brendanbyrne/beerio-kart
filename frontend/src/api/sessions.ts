@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { SessionSummary, SessionDetail } from './types'
+import type { SessionSummary, SessionDetail, SessionRaceInfo, RaceInfo } from './types'
 
 export async function getMySession(): Promise<string | null> {
   const res = await apiFetch('/api/v1/sessions/mine')
@@ -48,4 +48,28 @@ export async function leaveSession(id: string): Promise<void> {
     const err = await res.json()
     throw new Error(err.error || 'Failed to leave session')
   }
+}
+
+export async function nextTrack(sessionId: string): Promise<SessionRaceInfo> {
+  const res = await apiFetch(`/api/v1/sessions/${sessionId}/next-track`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to pick track')
+  }
+  return res.json()
+}
+
+export async function skipTurn(sessionId: string): Promise<SessionRaceInfo> {
+  const res = await apiFetch(`/api/v1/sessions/${sessionId}/skip-turn`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to skip track')
+  }
+  return res.json()
+}
+
+export async function listRaces(sessionId: string): Promise<RaceInfo[]> {
+  const res = await apiFetch(`/api/v1/sessions/${sessionId}/races`)
+  if (!res.ok) return []
+  return res.json()
 }
