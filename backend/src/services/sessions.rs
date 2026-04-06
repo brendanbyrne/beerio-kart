@@ -605,7 +605,8 @@ pub async fn next_track(
     })
 }
 
-/// Re-roll the current track. Host-only.
+/// Re-roll the current track. Any participant can trigger this
+/// (per DESIGN.md — "any participant can pass the chooser's turn").
 /// Only valid if the most recent race has no runs submitted.
 /// Deletes the current race and picks a new one in a single transaction,
 /// excluding the skipped track from the pool so it can't come back.
@@ -621,12 +622,6 @@ pub async fn skip_turn(
 
     if session.status != "active" {
         return Err(AppError::BadRequest("Session is not active".to_string()));
-    }
-
-    if session.host_id != user_id {
-        return Err(AppError::Forbidden(
-            "Only the host can skip tracks".to_string(),
-        ));
     }
 
     // Find the most recent race
@@ -1268,17 +1263,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_skip_turn_only_host_can_call() {
+    async fn test_skip_turn_any_participant_can_call() {
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
         let user_id = create_user(&db, "user").await;
         let session = create_session(&db, &host_id, "random").await.unwrap();
         join_session(&db, &session.id, &user_id).await.unwrap();
-        next_track(&db, &session.id, &host_id).await.unwrap();
+        let original = next_track(&db, &session.id, &host_id).await.unwrap();
 
+        // Non-host participant should be able to skip
         let result = skip_turn(&db, &session.id, &user_id).await;
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let rerolled = result.unwrap();
+        assert_ne!(rerolled.track_id, original.track_id);
     }
 
     #[tokio::test]
