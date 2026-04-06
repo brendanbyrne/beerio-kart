@@ -110,4 +110,5 @@ export interface SessionDetail {
   participants: ParticipantInfo[]
   race_number: number
   current_race: SessionRaceInfo | null
+  races: RaceInfo[]
 }
