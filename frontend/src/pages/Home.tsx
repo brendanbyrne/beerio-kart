@@ -69,8 +69,17 @@ export default function Home() {
 
         {/* Create session modal */}
         {showCreate && (
-          <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center">
-            <div className="bg-white w-full max-w-lg rounded-t-2xl p-5 space-y-4">
+          <div
+            className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center"
+            onClick={() => {
+              setShowCreate(false)
+              setError(null)
+            }}
+          >
+            <div
+              className="bg-white w-full max-w-lg rounded-t-2xl p-5 space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
               <h2 className="text-base font-bold text-gray-900">Pick a Ruleset</h2>
               <button
                 onClick={handleCreate}

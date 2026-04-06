@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::AppState;
 use crate::error::AppError;
@@ -16,34 +16,14 @@ pub struct CreateSessionRequest {
     pub ruleset: String,
 }
 
-#[derive(Serialize)]
-pub struct CreateSessionResponse {
-    pub id: String,
-    pub created_by: String,
-    pub host_id: String,
-    pub ruleset: String,
-    pub status: String,
-    pub created_at: String,
-    pub last_activity_at: String,
-}
-
-/// POST /sessions — create a new session.
+/// POST /sessions — create a new session. Returns full session detail.
 pub async fn create_session(
     user: AuthUser,
     State(state): State<AppState>,
     Json(body): Json<CreateSessionRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = sessions::create_session(&state.db, &user.user_id, &body.ruleset).await?;
-    let response = CreateSessionResponse {
-        id: session.id,
-        created_by: session.created_by,
-        host_id: session.host_id,
-        ruleset: session.ruleset,
-        status: session.status,
-        created_at: session.created_at,
-        last_activity_at: session.last_activity_at,
-    };
-    Ok((StatusCode::CREATED, Json(response)))
+    let detail = sessions::create_session(&state.db, &user.user_id, &body.ruleset).await?;
+    Ok((StatusCode::CREATED, Json(detail)))
 }
 
 /// GET /sessions — list active sessions.

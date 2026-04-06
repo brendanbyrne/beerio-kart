@@ -23,6 +23,16 @@ impl MigrationTrait for Migration {
                 ) STRICT",
             )
             .await?;
+
+        // Index for list_active_sessions and close_stale_sessions queries
+        manager
+            .get_connection()
+            .execute_unprepared(
+                "CREATE INDEX idx_sessions_status_last_activity
+                 ON sessions(status, last_activity_at)",
+            )
+            .await?;
+
         Ok(())
     }
 

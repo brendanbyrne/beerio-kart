@@ -20,6 +20,16 @@ impl MigrationTrait for Migration {
                 ) STRICT",
             )
             .await?;
+
+        // Index for the most common query pattern: filter by session + active status
+        manager
+            .get_connection()
+            .execute_unprepared(
+                "CREATE INDEX idx_session_participants_session_active
+                 ON session_participants(session_id, left_at)",
+            )
+            .await?;
+
         Ok(())
     }
 
