@@ -574,7 +574,7 @@ pub async fn next_track(
         session_id: Set(session_id.to_string()),
         race_number: Set(new_race_number),
         track_id: Set(chosen.id),
-        chosen_by: Set(Some(user_id.to_string())),
+        chosen_by: Set(None),
         created_at: Set(now.clone()),
     }
     .insert(&txn)
@@ -613,7 +613,7 @@ pub async fn next_track(
 pub async fn skip_turn(
     db: &DatabaseConnection,
     session_id: &str,
-    user_id: &str,
+    _user_id: &str,
 ) -> Result<SessionRaceInfo, AppError> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
@@ -704,7 +704,7 @@ pub async fn skip_turn(
         session_id: Set(session_id.to_string()),
         race_number: Set(keep_race_number),
         track_id: Set(chosen.id),
-        chosen_by: Set(Some(user_id.to_string())),
+        chosen_by: Set(None),
         created_at: Set(now.clone()),
     }
     .insert(&txn)
