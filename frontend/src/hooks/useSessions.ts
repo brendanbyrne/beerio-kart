@@ -1,22 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { listSessions } from '../api/sessions'
+import { getMySession, listSessions } from '../api/sessions'
 import type { SessionSummary } from '../api/types'
 
 const POLL_INTERVAL_MS = 5000
 
 /**
- * Fetches the active session list and polls every 5 seconds.
- * Pauses polling when the tab is backgrounded (Page Visibility API).
+ * Fetches the active session list and the user's current session ID.
+ * Polls every 5 seconds. Pauses when the tab is backgrounded.
  */
 export function useSessions() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [mySessionId, setMySessionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     const doFetch = () => {
-      listSessions().then((data) => {
-        setSessions(data)
+      Promise.all([listSessions(), getMySession()]).then(([sessionList, activeId]) => {
+        setSessions(sessionList)
+        setMySessionId(activeId)
         setLoading(false)
       })
     }
@@ -52,5 +54,5 @@ export function useSessions() {
     }
   }, [])
 
-  return { sessions, loading }
+  return { sessions, mySessionId, loading }
 }

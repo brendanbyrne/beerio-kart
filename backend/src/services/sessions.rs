@@ -36,6 +36,23 @@ async fn check_not_in_any_session(
     Ok(())
 }
 
+/// Returns the session ID the user is currently active in, or None.
+pub async fn get_active_session_id(
+    db: &DatabaseConnection,
+    user_id: &str,
+) -> Result<Option<String>, AppError> {
+    let row = session_participants::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_participants::Column::UserId.eq(user_id))
+                .add(session_participants::Column::LeftAt.is_null()),
+        )
+        .one(db)
+        .await?;
+
+    Ok(row.map(|r| r.session_id))
+}
+
 /// Create a new session. The creator becomes both the host and the first
 /// participant. Returns the full session detail.
 pub async fn create_session(

@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::error::AppError;
@@ -24,6 +24,20 @@ pub async fn create_session(
 ) -> Result<impl IntoResponse, AppError> {
     let detail = sessions::create_session(&state.db, &user.user_id, &body.ruleset).await?;
     Ok((StatusCode::CREATED, Json(detail)))
+}
+
+#[derive(Serialize)]
+pub struct MySessionResponse {
+    pub session_id: Option<String>,
+}
+
+/// GET /sessions/mine — get the user's current active session ID.
+pub async fn my_session(
+    user: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<MySessionResponse>, AppError> {
+    let session_id = sessions::get_active_session_id(&state.db, &user.user_id).await?;
+    Ok(Json(MySessionResponse { session_id }))
 }
 
 /// GET /sessions — list active sessions.

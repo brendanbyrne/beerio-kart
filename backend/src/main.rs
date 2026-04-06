@@ -117,6 +117,7 @@ async fn main() {
             "/api/v1/sessions",
             get(routes::sessions::list_sessions).post(routes::sessions::create_session),
         )
+        .route("/api/v1/sessions/mine", get(routes::sessions::my_session))
         .route("/api/v1/sessions/{id}", get(routes::sessions::get_session))
         .route(
             "/api/v1/sessions/{id}/join",
