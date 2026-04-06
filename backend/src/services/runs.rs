@@ -1,0 +1,919 @@
+use chrono::Utc;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
+    FromQueryResult, ModelTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
+};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::entities::{
+    bodies, characters, drink_types, gliders, runs, session_participants, session_races, sessions,
+    users, wheels,
+};
+use crate::error::AppError;
+
+/// Maximum allowed track time: 10 minutes in milliseconds.
+const MAX_TRACK_TIME_MS: i32 = 600_000;
+
+#[derive(Deserialize)]
+pub struct CreateRunRequest {
+    pub session_race_id: String,
+    pub track_time: i32,
+    pub lap1_time: i32,
+    pub lap2_time: i32,
+    pub lap3_time: i32,
+    pub character_id: i32,
+    pub body_id: i32,
+    pub wheel_id: i32,
+    pub glider_id: i32,
+    pub drink_type_id: String,
+    pub disqualified: bool,
+}
+
+#[derive(Serialize)]
+pub struct RunDetail {
+    pub id: String,
+    pub user_id: String,
+    pub username: String,
+    pub session_race_id: String,
+    pub track_id: i32,
+    pub track_time: i32,
+    pub lap1_time: i32,
+    pub lap2_time: i32,
+    pub lap3_time: i32,
+    pub character_id: i32,
+    pub body_id: i32,
+    pub wheel_id: i32,
+    pub glider_id: i32,
+    pub drink_type_id: String,
+    pub drink_type_name: String,
+    pub disqualified: bool,
+    pub created_at: String,
+}
+
+/// Row shape for the run detail JOIN query.
+#[derive(Debug, FromQueryResult)]
+struct RunDetailRow {
+    id: String,
+    user_id: String,
+    username: String,
+    session_race_id: String,
+    track_id: i32,
+    track_time: i32,
+    lap1_time: i32,
+    lap2_time: i32,
+    lap3_time: i32,
+    character_id: i32,
+    body_id: i32,
+    wheel_id: i32,
+    glider_id: i32,
+    drink_type_id: String,
+    drink_type_name: String,
+    disqualified: bool,
+    created_at: String,
+}
+
+impl From<RunDetailRow> for RunDetail {
+    fn from(r: RunDetailRow) -> Self {
+        Self {
+            id: r.id,
+            user_id: r.user_id,
+            username: r.username,
+            session_race_id: r.session_race_id,
+            track_id: r.track_id,
+            track_time: r.track_time,
+            lap1_time: r.lap1_time,
+            lap2_time: r.lap2_time,
+            lap3_time: r.lap3_time,
+            character_id: r.character_id,
+            body_id: r.body_id,
+            wheel_id: r.wheel_id,
+            glider_id: r.glider_id,
+            drink_type_id: r.drink_type_id,
+            drink_type_name: r.drink_type_name,
+            disqualified: r.disqualified,
+            created_at: r.created_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct RunDefaults {
+    pub drink_type_id: Option<String>,
+    pub character_id: Option<i32>,
+    pub body_id: Option<i32>,
+    pub wheel_id: Option<i32>,
+    pub glider_id: Option<i32>,
+    pub source: String,
+}
+
+pub struct RunFilters {
+    pub session_race_id: Option<String>,
+    pub user_id: Option<String>,
+    pub track_id: Option<i32>,
+}
+
+/// Create a run for a session race. Validates all inputs before inserting.
+pub async fn create_run(
+    db: &DatabaseConnection,
+    user_id: &str,
+    body: CreateRunRequest,
+) -> Result<RunDetail, AppError> {
+    // Validate time fields
+    if body.track_time <= 0 || body.track_time > MAX_TRACK_TIME_MS {
+        return Err(AppError::BadRequest(format!(
+            "track_time must be between 1 and {MAX_TRACK_TIME_MS} ms"
+        )));
+    }
+    if body.lap1_time <= 0 || body.lap2_time <= 0 || body.lap3_time <= 0 {
+        return Err(AppError::BadRequest(
+            "All lap times must be positive".to_string(),
+        ));
+    }
+
+    // Validate session_race exists and belongs to an active session
+    let session_race = session_races::Entity::find_by_id(&body.session_race_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Session race not found".to_string()))?;
+
+    let session = sessions::Entity::find_by_id(&session_race.session_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    if session.status != "active" {
+        return Err(AppError::BadRequest(
+            "Cannot submit run for a closed session".to_string(),
+        ));
+    }
+
+    // User must be an active participant
+    let participant = session_participants::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_participants::Column::SessionId.eq(&session_race.session_id))
+                .add(session_participants::Column::UserId.eq(user_id))
+                .add(session_participants::Column::LeftAt.is_null()),
+        )
+        .one(db)
+        .await?;
+
+    if participant.is_none() {
+        return Err(AppError::Forbidden(
+            "Must be an active participant to submit a run".to_string(),
+        ));
+    }
+
+    // Check for duplicate submission
+    let existing = runs::Entity::find()
+        .filter(
+            Condition::all()
+                .add(runs::Column::SessionRaceId.eq(&body.session_race_id))
+                .add(runs::Column::UserId.eq(user_id)),
+        )
+        .one(db)
+        .await?;
+
+    if existing.is_some() {
+        return Err(AppError::Conflict(
+            "Already submitted a run for this race".to_string(),
+        ));
+    }
+
+    // Validate FK references exist
+    if characters::Entity::find_by_id(body.character_id)
+        .one(db)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::BadRequest("Invalid character_id".to_string()));
+    }
+    if bodies::Entity::find_by_id(body.body_id)
+        .one(db)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::BadRequest("Invalid body_id".to_string()));
+    }
+    if wheels::Entity::find_by_id(body.wheel_id)
+        .one(db)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::BadRequest("Invalid wheel_id".to_string()));
+    }
+    if gliders::Entity::find_by_id(body.glider_id)
+        .one(db)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::BadRequest("Invalid glider_id".to_string()));
+    }
+    if drink_types::Entity::find_by_id(&body.drink_type_id)
+        .one(db)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::BadRequest("Invalid drink_type_id".to_string()));
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let run_id = Uuid::new_v4().to_string();
+
+    let txn = db.begin().await?;
+
+    runs::ActiveModel {
+        id: Set(run_id.clone()),
+        user_id: Set(user_id.to_string()),
+        session_race_id: Set(body.session_race_id.clone()),
+        track_id: Set(session_race.track_id),
+        character_id: Set(body.character_id),
+        body_id: Set(body.body_id),
+        wheel_id: Set(body.wheel_id),
+        glider_id: Set(body.glider_id),
+        track_time: Set(body.track_time),
+        lap1_time: Set(body.lap1_time),
+        lap2_time: Set(body.lap2_time),
+        lap3_time: Set(body.lap3_time),
+        drink_type_id: Set(body.drink_type_id),
+        disqualified: Set(body.disqualified),
+        photo_path: Set(None),
+        created_at: Set(now.clone()),
+        notes: Set(None),
+    }
+    .insert(&txn)
+    .await?;
+
+    // Update session last_activity_at
+    let mut active_session: sessions::ActiveModel = session.into();
+    active_session.last_activity_at = Set(now);
+    active_session.update(&txn).await?;
+
+    txn.commit().await?;
+
+    get_run(db, &run_id).await
+}
+
+/// Fetch a single run by ID with JOINed username and drink_type_name.
+pub async fn get_run(db: &DatabaseConnection, run_id: &str) -> Result<RunDetail, AppError> {
+    let row = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+        SELECT r.id, r.user_id, u.username, r.session_race_id, r.track_id,
+               r.track_time, r.lap1_time, r.lap2_time, r.lap3_time,
+               r.character_id, r.body_id, r.wheel_id, r.glider_id,
+               r.drink_type_id, dt.name AS drink_type_name,
+               r.disqualified, r.created_at
+        FROM runs r
+        JOIN users u ON r.user_id = u.id
+        JOIN drink_types dt ON r.drink_type_id = dt.id
+        WHERE r.id = $1
+        "#,
+        [run_id.into()],
+    ))
+    .one(db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Run not found".to_string()))?;
+
+    Ok(row.into())
+}
+
+/// List runs with optional filters, ordered by track_time ASC.
+pub async fn list_runs(
+    db: &DatabaseConnection,
+    filters: RunFilters,
+) -> Result<Vec<RunDetail>, AppError> {
+    let mut conditions = Vec::new();
+    let mut params: Vec<sea_orm::Value> = Vec::new();
+    let mut param_idx = 1;
+
+    if let Some(ref sr_id) = filters.session_race_id {
+        conditions.push(format!("r.session_race_id = ${param_idx}"));
+        params.push(sr_id.clone().into());
+        param_idx += 1;
+    }
+    if let Some(ref uid) = filters.user_id {
+        conditions.push(format!("r.user_id = ${param_idx}"));
+        params.push(uid.clone().into());
+        param_idx += 1;
+    }
+    if let Some(tid) = filters.track_id {
+        conditions.push(format!("r.track_id = ${param_idx}"));
+        params.push(tid.into());
+        let _ = param_idx; // suppress unused warning
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let sql = format!(
+        r#"
+        SELECT r.id, r.user_id, u.username, r.session_race_id, r.track_id,
+               r.track_time, r.lap1_time, r.lap2_time, r.lap3_time,
+               r.character_id, r.body_id, r.wheel_id, r.glider_id,
+               r.drink_type_id, dt.name AS drink_type_name,
+               r.disqualified, r.created_at
+        FROM runs r
+        JOIN users u ON r.user_id = u.id
+        JOIN drink_types dt ON r.drink_type_id = dt.id
+        {where_clause}
+        ORDER BY r.track_time ASC
+        "#
+    );
+
+    let rows = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        &sql,
+        params,
+    ))
+    .all(db)
+    .await?;
+
+    Ok(rows.into_iter().map(RunDetail::from).collect())
+}
+
+/// Delete a run. Only the run's owner can delete, and the session must be active.
+pub async fn delete_run(
+    db: &DatabaseConnection,
+    run_id: &str,
+    user_id: &str,
+) -> Result<(), AppError> {
+    let run = runs::Entity::find_by_id(run_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Run not found".to_string()))?;
+
+    if run.user_id != user_id {
+        return Err(AppError::Forbidden(
+            "Only the run's owner can delete it".to_string(),
+        ));
+    }
+
+    // Check that the session is still active
+    let session_race = session_races::Entity::find_by_id(&run.session_race_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::Internal("Session race not found for run".to_string()))?;
+
+    let session = sessions::Entity::find_by_id(&session_race.session_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::Internal("Session not found for run".to_string()))?;
+
+    if session.status != "active" {
+        return Err(AppError::BadRequest(
+            "Cannot delete run from a closed session".to_string(),
+        ));
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let txn = db.begin().await?;
+
+    run.delete(&txn).await?;
+
+    // Update session last_activity_at
+    let mut active_session: sessions::ActiveModel = session.into();
+    active_session.last_activity_at = Set(now);
+    active_session.update(&txn).await?;
+
+    txn.commit().await?;
+
+    Ok(())
+}
+
+/// Get run defaults for pre-filling the run entry form.
+/// Cascade: previous run → user preferences → none.
+pub async fn get_run_defaults(
+    db: &DatabaseConnection,
+    user_id: &str,
+) -> Result<RunDefaults, AppError> {
+    // Try most recent run
+    let latest_run = runs::Entity::find()
+        .filter(runs::Column::UserId.eq(user_id))
+        .order_by_desc(runs::Column::CreatedAt)
+        .one(db)
+        .await?;
+
+    if let Some(run) = latest_run {
+        return Ok(RunDefaults {
+            drink_type_id: Some(run.drink_type_id),
+            character_id: Some(run.character_id),
+            body_id: Some(run.body_id),
+            wheel_id: Some(run.wheel_id),
+            glider_id: Some(run.glider_id),
+            source: "previous_run".to_string(),
+        });
+    }
+
+    // Fall back to user preferences
+    let user = users::Entity::find_by_id(user_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    if user.preferred_character_id.is_some() {
+        return Ok(RunDefaults {
+            drink_type_id: user.preferred_drink_type_id,
+            character_id: user.preferred_character_id,
+            body_id: user.preferred_body_id,
+            wheel_id: user.preferred_wheel_id,
+            glider_id: user.preferred_glider_id,
+            source: "preferences".to_string(),
+        });
+    }
+
+    Ok(RunDefaults {
+        drink_type_id: None,
+        character_id: None,
+        body_id: None,
+        wheel_id: None,
+        glider_id: None,
+        source: "none".to_string(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entities::{cups, tracks};
+    use crate::services::sessions;
+    use migration::{Migrator, MigratorTrait};
+    use sea_orm::Database;
+
+    async fn setup_db() -> DatabaseConnection {
+        let db = Database::connect("sqlite::memory:").await.expect("connect");
+        db.execute_unprepared("PRAGMA foreign_keys = ON")
+            .await
+            .expect("pragma");
+        Migrator::up(&db, None).await.expect("migrate");
+        db
+    }
+
+    async fn create_user(db: &DatabaseConnection, username: &str) -> String {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let hash = "$argon2id$v=19$m=19456,t=2,p=1$dGVzdHNhbHQ$abc123";
+        users::ActiveModel {
+            id: Set(id.clone()),
+            username: Set(username.to_string()),
+            email: Set(None),
+            password_hash: Set(hash.to_string()),
+            preferred_character_id: Set(None),
+            preferred_body_id: Set(None),
+            preferred_wheel_id: Set(None),
+            preferred_glider_id: Set(None),
+            preferred_drink_type_id: Set(None),
+            refresh_token_version: Set(0),
+            created_at: Set(now.clone()),
+            updated_at: Set(now),
+        }
+        .insert(db)
+        .await
+        .expect("insert user");
+        id
+    }
+
+    /// Seed minimal game data required for run creation.
+    async fn seed_game_data(db: &DatabaseConnection) {
+        // Cup
+        cups::ActiveModel {
+            id: Set(1),
+            name: Set("Test Cup".to_string()),
+            image_path: Set("images/cups/test.webp".to_string()),
+        }
+        .insert(db)
+        .await
+        .expect("insert cup");
+
+        // Track
+        tracks::ActiveModel {
+            id: Set(1),
+            name: Set("Test Track".to_string()),
+            cup_id: Set(1),
+            position: Set(1),
+            image_path: Set("images/tracks/test.webp".to_string()),
+        }
+        .insert(db)
+        .await
+        .expect("insert track");
+
+        // Character
+        characters::ActiveModel {
+            id: Set(1),
+            name: Set("Mario".to_string()),
+            image_path: Set("images/characters/mario.webp".to_string()),
+        }
+        .insert(db)
+        .await
+        .expect("insert character");
+
+        // Body
+        bodies::ActiveModel {
+            id: Set(1),
+            name: Set("Standard Kart".to_string()),
+            image_path: Set("images/bodies/standard.webp".to_string()),
+        }
+        .insert(db)
+        .await
+        .expect("insert body");
+
+        // Wheels
+        wheels::ActiveModel {
+            id: Set(1),
+            name: Set("Standard".to_string()),
+            image_path: Set("images/wheels/standard.webp".to_string()),
+        }
+        .insert(db)
+        .await
+        .expect("insert wheels");
+
+        // Glider
+        gliders::ActiveModel {
+            id: Set(1),
+            name: Set("Super Glider".to_string()),
+            image_path: Set("images/gliders/super.webp".to_string()),
+        }
+        .insert(db)
+        .await
+        .expect("insert glider");
+
+        // Drink type
+        let drink_id = crate::drink_type_id::drink_type_uuid("Test Beer");
+        drink_types::ActiveModel {
+            id: Set(drink_id),
+            name: Set("Test Beer".to_string()),
+            alcoholic: Set(true),
+            created_at: Set(Utc::now().to_rfc3339()),
+            created_by: Set(None),
+        }
+        .insert(db)
+        .await
+        .expect("insert drink type");
+    }
+
+    fn test_drink_id() -> String {
+        crate::drink_type_id::drink_type_uuid("Test Beer")
+    }
+
+    fn valid_run_request(session_race_id: &str) -> CreateRunRequest {
+        CreateRunRequest {
+            session_race_id: session_race_id.to_string(),
+            track_time: 120_000,
+            lap1_time: 40_000,
+            lap2_time: 39_000,
+            lap3_time: 41_000,
+            character_id: 1,
+            body_id: 1,
+            wheel_id: 1,
+            glider_id: 1,
+            drink_type_id: test_drink_id(),
+            disqualified: false,
+        }
+    }
+
+    /// Helper: create session, pick a track, return (session_id, session_race_id)
+    async fn setup_session_with_race(db: &DatabaseConnection, host_id: &str) -> (String, String) {
+        let session = sessions::create_session(db, host_id, "random")
+            .await
+            .expect("create session");
+        let race = sessions::next_track(db, &session.id, host_id)
+            .await
+            .expect("next track");
+        (session.id, race.id)
+    }
+
+    #[tokio::test]
+    async fn test_create_run_succeeds_with_valid_data() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        let run = create_run(&db, &host_id, valid_run_request(&race_id))
+            .await
+            .unwrap();
+
+        assert_eq!(run.user_id, host_id);
+        assert_eq!(run.track_time, 120_000);
+        assert_eq!(run.lap1_time, 40_000);
+        assert_eq!(run.username, "host");
+        assert_eq!(run.drink_type_name, "Test Beer");
+        assert!(!run.disqualified);
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_if_not_participant() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let outsider_id = create_user(&db, "outsider").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        let result = create_run(&db, &outsider_id, valid_run_request(&race_id)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_if_duplicate_submission() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        create_run(&db, &host_id, valid_run_request(&race_id))
+            .await
+            .unwrap();
+        let result = create_run(&db, &host_id, valid_run_request(&race_id)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_if_session_closed() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (session_id, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        // Close session by having host leave
+        sessions::leave_session(&db, &session_id, &host_id)
+            .await
+            .unwrap();
+
+        let result = create_run(&db, &host_id, valid_run_request(&race_id)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_with_invalid_track_time() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        // Negative time
+        let mut req = valid_run_request(&race_id);
+        req.track_time = -1;
+        assert!(create_run(&db, &host_id, req).await.is_err());
+
+        // Over 10 minutes
+        let mut req = valid_run_request(&race_id);
+        req.track_time = 600_001;
+        assert!(create_run(&db, &host_id, req).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_with_invalid_character_id() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        let mut req = valid_run_request(&race_id);
+        req.character_id = 999;
+        assert!(create_run(&db, &host_id, req).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_with_invalid_drink_type_id() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        let mut req = valid_run_request(&race_id);
+        req.drink_type_id = "nonexistent-uuid".to_string();
+        assert!(create_run(&db, &host_id, req).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_run_succeeds_for_owner() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        let run = create_run(&db, &host_id, valid_run_request(&race_id))
+            .await
+            .unwrap();
+        assert!(delete_run(&db, &run.id, &host_id).await.is_ok());
+
+        // Verify it's gone
+        assert!(get_run(&db, &run.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_run_fails_for_non_owner() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_id = create_user(&db, "user").await;
+        let (session_id, race_id) = setup_session_with_race(&db, &host_id).await;
+        sessions::join_session(&db, &session_id, &user_id)
+            .await
+            .unwrap();
+
+        let run = create_run(&db, &host_id, valid_run_request(&race_id))
+            .await
+            .unwrap();
+        let result = delete_run(&db, &run.id, &user_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_run_fails_if_session_closed() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_id = create_user(&db, "user").await;
+        let (session_id, race_id) = setup_session_with_race(&db, &host_id).await;
+        sessions::join_session(&db, &session_id, &user_id)
+            .await
+            .unwrap();
+
+        let run = create_run(&db, &host_id, valid_run_request(&race_id))
+            .await
+            .unwrap();
+
+        // Close by having everyone leave
+        sessions::leave_session(&db, &session_id, &host_id)
+            .await
+            .ok();
+        sessions::leave_session(&db, &session_id, &user_id)
+            .await
+            .ok();
+
+        // Force-close in case leave order was wrong
+        use crate::entities::sessions as sessions_entity;
+        let s = sessions_entity::Entity::find_by_id(&session_id)
+            .one(&db)
+            .await
+            .unwrap();
+        if let Some(s) = s {
+            let mut active: sessions_entity::ActiveModel = s.into();
+            active.status = Set("closed".to_string());
+            active.update(&db).await.unwrap();
+        }
+
+        let result = delete_run(&db, &run.id, &host_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_list_runs_filters_by_session_race_id() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (session_id, race1_id) = setup_session_with_race(&db, &host_id).await;
+
+        create_run(&db, &host_id, valid_run_request(&race1_id))
+            .await
+            .unwrap();
+
+        // Create a second race
+        let race2 = sessions::next_track(&db, &session_id, &host_id)
+            .await
+            .unwrap();
+        // Need a second user for race2 since host already submitted for race1
+        // Actually, host can submit for race2 too (different session_race_id)
+        create_run(&db, &host_id, valid_run_request(&race2.id))
+            .await
+            .unwrap();
+
+        let filtered = list_runs(
+            &db,
+            RunFilters {
+                session_race_id: Some(race1_id),
+                user_id: None,
+                track_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(filtered.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_list_runs_ordered_by_time_ascending() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_id = create_user(&db, "user").await;
+        let (session_id, race_id) = setup_session_with_race(&db, &host_id).await;
+        sessions::join_session(&db, &session_id, &user_id)
+            .await
+            .unwrap();
+
+        // Host submits slower time
+        let mut slow = valid_run_request(&race_id);
+        slow.track_time = 150_000;
+        create_run(&db, &host_id, slow).await.unwrap();
+
+        // User submits faster time
+        let mut fast = valid_run_request(&race_id);
+        fast.track_time = 100_000;
+        create_run(&db, &user_id, fast).await.unwrap();
+
+        let runs = list_runs(
+            &db,
+            RunFilters {
+                session_race_id: Some(race_id),
+                user_id: None,
+                track_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].track_time, 100_000); // fastest first
+        assert_eq!(runs[1].track_time, 150_000);
+    }
+
+    #[tokio::test]
+    async fn test_get_run_defaults_returns_previous_run_data() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        create_run(&db, &host_id, valid_run_request(&race_id))
+            .await
+            .unwrap();
+
+        let defaults = get_run_defaults(&db, &host_id).await.unwrap();
+        assert_eq!(defaults.source, "previous_run");
+        assert_eq!(defaults.character_id, Some(1));
+        assert_eq!(defaults.drink_type_id, Some(test_drink_id()));
+    }
+
+    #[tokio::test]
+    async fn test_get_run_defaults_falls_back_to_preferences() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+
+        // Set preferences on the user
+        let user = users::Entity::find_by_id(&host_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut active: users::ActiveModel = user.into();
+        active.preferred_character_id = Set(Some(1));
+        active.preferred_body_id = Set(Some(1));
+        active.preferred_wheel_id = Set(Some(1));
+        active.preferred_glider_id = Set(Some(1));
+        active.preferred_drink_type_id = Set(Some(test_drink_id()));
+        active.update(&db).await.unwrap();
+
+        let defaults = get_run_defaults(&db, &host_id).await.unwrap();
+        assert_eq!(defaults.source, "preferences");
+        assert_eq!(defaults.character_id, Some(1));
+    }
+
+    #[tokio::test]
+    async fn test_get_run_defaults_returns_none_when_no_data() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+
+        let defaults = get_run_defaults(&db, &host_id).await.unwrap();
+        assert_eq!(defaults.source, "none");
+        assert!(defaults.character_id.is_none());
+        assert!(defaults.drink_type_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_submissions_appear_in_session_detail() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (session_id, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        // Before submitting
+        let detail = sessions::get_session_detail(&db, &session_id)
+            .await
+            .unwrap();
+        let current = detail.current_race.unwrap();
+        assert!(current.submissions.is_empty());
+
+        // Submit a run
+        create_run(&db, &host_id, valid_run_request(&race_id))
+            .await
+            .unwrap();
+
+        // After submitting
+        let detail = sessions::get_session_detail(&db, &session_id)
+            .await
+            .unwrap();
+        let current = detail.current_race.unwrap();
+        assert_eq!(current.submissions.len(), 1);
+        assert_eq!(current.submissions[0].username, "host");
+        assert_eq!(current.submissions[0].track_time, 120_000);
+        assert!(!current.submissions[0].disqualified);
+    }
+}

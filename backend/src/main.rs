@@ -139,6 +139,16 @@ async fn main() {
             "/api/v1/sessions/{id}/races",
             get(routes::sessions::list_races),
         )
+        // Runs — /defaults before /{id} so literal matches first
+        .route(
+            "/api/v1/runs",
+            get(routes::runs::list_runs).post(routes::runs::create_run),
+        )
+        .route("/api/v1/runs/defaults", get(routes::runs::get_defaults))
+        .route(
+            "/api/v1/runs/{id}",
+            get(routes::runs::get_run).delete(routes::runs::delete_run),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         // Serve frontend static files. If no API route or static file matches,

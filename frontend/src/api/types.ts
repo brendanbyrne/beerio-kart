@@ -78,6 +78,13 @@ export interface ParticipantInfo {
   left_at: string | null
 }
 
+export interface RaceSubmission {
+  user_id: string
+  username: string
+  track_time: number
+  disqualified: boolean
+}
+
 export interface SessionRaceInfo {
   id: string
   race_number: number
@@ -86,6 +93,50 @@ export interface SessionRaceInfo {
   cup_name: string
   image_path: string
   created_at: string
+  submissions: RaceSubmission[]
+}
+
+export interface CreateRunRequest {
+  session_race_id: string
+  track_time: number
+  lap1_time: number
+  lap2_time: number
+  lap3_time: number
+  character_id: number
+  body_id: number
+  wheel_id: number
+  glider_id: number
+  drink_type_id: string
+  disqualified: boolean
+}
+
+export interface RunDetail {
+  id: string
+  user_id: string
+  username: string
+  session_race_id: string
+  track_id: number
+  track_time: number
+  lap1_time: number
+  lap2_time: number
+  lap3_time: number
+  character_id: number
+  body_id: number
+  wheel_id: number
+  glider_id: number
+  drink_type_id: string
+  drink_type_name: string
+  disqualified: boolean
+  created_at: string
+}
+
+export interface RunDefaults {
+  drink_type_id: string | null
+  character_id: number | null
+  body_id: number | null
+  wheel_id: number | null
+  glider_id: number | null
+  source: 'previous_run' | 'preferences' | 'none'
 }
 
 export interface RaceInfo {
