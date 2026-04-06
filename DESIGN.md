@@ -900,3 +900,4 @@ Random ideas that may or may not be pursued.
 - Ability to Change Username.
 - Ability to send emails.
    - Account recovery.
+- Handle concurrent `next_track` calls gracefully. Currently a double-tap can hit the `UNIQUE(session_id, race_number)` constraint and return a 500. Options: retry-on-conflict or optimistic locking. Low priority — single host makes this very unlikely.

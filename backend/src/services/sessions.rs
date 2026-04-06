@@ -246,6 +246,7 @@ pub struct SessionDetail {
     pub participants: Vec<ParticipantInfo>,
     pub race_number: usize,
     pub current_race: Option<SessionRaceInfo>,
+    pub races: Vec<RaceInfo>,
 }
 
 /// Get full session detail — the polling endpoint.
@@ -327,6 +328,39 @@ pub async fn get_session_detail(
         created_at: r.created_at,
     });
 
+    // Fetch all races for history (reuses the same query shape as list_races)
+    let race_rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+            SELECT sr.id, sr.race_number, sr.track_id,
+                   t.name AS track_name, c.name AS cup_name,
+                   COUNT(r.id) AS run_count, sr.created_at
+            FROM session_races sr
+            JOIN tracks t ON sr.track_id = t.id
+            JOIN cups c ON t.cup_id = c.id
+            LEFT JOIN runs r ON r.session_race_id = sr.id
+            WHERE sr.session_id = $1
+            GROUP BY sr.id
+            ORDER BY sr.race_number ASC
+            "#,
+        [session_id.into()],
+    ))
+    .all(db)
+    .await?;
+
+    let races: Vec<RaceInfo> = race_rows
+        .into_iter()
+        .map(|r| RaceInfo {
+            id: r.id,
+            race_number: r.race_number,
+            track_id: r.track_id,
+            track_name: r.track_name,
+            cup_name: r.cup_name,
+            run_count: r.run_count,
+            created_at: r.created_at,
+        })
+        .collect();
+
     Ok(SessionDetail {
         id: session.id,
         created_by: session.created_by,
@@ -339,6 +373,7 @@ pub async fn get_session_detail(
         participants,
         race_number,
         current_race,
+        races,
     })
 }
 
@@ -572,6 +607,8 @@ pub async fn next_track(
 
 /// Re-roll the current track. Host-only.
 /// Only valid if the most recent race has no runs submitted.
+/// Deletes the current race and picks a new one in a single transaction,
+/// excluding the skipped track from the pool so it can't come back.
 pub async fn skip_turn(
     db: &DatabaseConnection,
     session_id: &str,
@@ -612,10 +649,93 @@ pub async fn skip_turn(
         ));
     }
 
-    // Delete the current race, then pick a new one via next_track
-    current_race.delete(db).await?;
+    let skipped_track_id = current_race.track_id;
+    let keep_race_number = current_race.race_number;
 
-    next_track(db, session_id, user_id).await
+    // Build the exclusion list: all tracks used in this session (including
+    // the one being skipped, which next_track wouldn't see after deletion).
+    let used_races = session_races::Entity::find()
+        .filter(session_races::Column::SessionId.eq(session_id))
+        .all(db)
+        .await?;
+    let mut exclude_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
+    // Ensure the skipped track stays excluded even though its row is about to be deleted
+    if !exclude_ids.contains(&skipped_track_id) {
+        exclude_ids.push(skipped_track_id);
+    }
+
+    // Get all tracks and filter
+    let all_tracks = tracks::Entity::find().all(db).await?;
+    let mut available: Vec<&tracks::Model> = all_tracks
+        .iter()
+        .filter(|t| !exclude_ids.contains(&t.id))
+        .collect();
+
+    // If pool is empty (all tracks used + skipped), reset but still exclude the skipped track
+    if available.is_empty() {
+        tracing::info!(
+            session_id = session_id,
+            "All tracks used during skip — resetting pool (excluding skipped track {})",
+            skipped_track_id
+        );
+        available = all_tracks
+            .iter()
+            .filter(|t| t.id != skipped_track_id)
+            .collect();
+    }
+
+    let chosen_idx = {
+        let mut rng = rand::thread_rng();
+        available
+            .choose(&mut rng)
+            .map(|t| t.id)
+            .ok_or_else(|| AppError::Internal("No tracks available for skip".to_string()))?
+    };
+    let chosen = all_tracks
+        .iter()
+        .find(|t| t.id == chosen_idx)
+        .ok_or_else(|| AppError::Internal("Track disappeared".to_string()))?;
+
+    let now = Utc::now().to_rfc3339();
+    let race_id = Uuid::new_v4().to_string();
+
+    // Delete old race + insert new one + update activity in a single transaction
+    let txn = db.begin().await?;
+
+    current_race.delete(&txn).await?;
+
+    session_races::ActiveModel {
+        id: Set(race_id.clone()),
+        session_id: Set(session_id.to_string()),
+        race_number: Set(keep_race_number),
+        track_id: Set(chosen.id),
+        chosen_by: Set(Some(user_id.to_string())),
+        created_at: Set(now.clone()),
+    }
+    .insert(&txn)
+    .await?;
+
+    let mut active_session: sessions::ActiveModel = session.into();
+    active_session.last_activity_at = Set(now.clone());
+    active_session.update(&txn).await?;
+
+    txn.commit().await?;
+
+    let cup = cups::Entity::find_by_id(chosen.cup_id)
+        .one(db)
+        .await?
+        .map(|c| c.name)
+        .unwrap_or_else(|| "Unknown Cup".to_string());
+
+    Ok(SessionRaceInfo {
+        id: race_id,
+        race_number: keep_race_number,
+        track_id: chosen.id,
+        track_name: chosen.name.clone(),
+        cup_name: cup,
+        image_path: chosen.image_path.clone(),
+        created_at: now,
+    })
 }
 
 /// List all races in a session, ordered by race_number ASC.
@@ -1103,6 +1223,37 @@ mod tests {
 
         // Race number should be 1 (replaced, not incremented)
         assert_eq!(rerolled.race_number, 1);
+
+        // Skipped track must not come back
+        assert_ne!(
+            rerolled.track_id, original.track_id,
+            "Skip must not re-roll to the same track"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_skip_turn_excludes_skipped_track_even_near_pool_exhaustion() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await; // 6 tracks
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        // Use 5 of 6 tracks, leaving only 1 available
+        for _ in 0..5 {
+            next_track(&db, &session.id, &host_id).await.unwrap();
+        }
+
+        // Pick the 6th (last) track
+        let last = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // Skip it — pool is now fully exhausted, but the skipped track
+        // must still be excluded. The reset should offer 5 tracks.
+        let rerolled = skip_turn(&db, &session.id, &host_id).await.unwrap();
+        assert_ne!(
+            rerolled.track_id, last.track_id,
+            "Skip near pool exhaustion must not re-roll to the same track"
+        );
+        assert_eq!(rerolled.race_number, 6, "Race number should stay at 6");
     }
 
     #[tokio::test]

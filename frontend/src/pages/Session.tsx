@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useSession } from '../hooks/useSession'
-import { joinSession, leaveSession, nextTrack, skipTurn, listRaces } from '../api/sessions'
-import type { RaceInfo } from '../api/types'
+import { joinSession, leaveSession, nextTrack, skipTurn } from '../api/sessions'
 import BottomNav from '../components/BottomNav'
 
 export default function Session() {
@@ -17,7 +16,7 @@ export default function Session() {
   const [headerExpanded, setHeaderExpanded] = useState(false)
   const [pickingTrack, setPickingTrack] = useState(false)
   const [skippingTrack, setSkippingTrack] = useState(false)
-  const [races, setRaces] = useState<RaceInfo[]>([])
+  const [trackError, setTrackError] = useState<string | null>(null)
   const [historyExpanded, setHistoryExpanded] = useState(true)
   const [trackImageError, setTrackImageError] = useState(false)
 
@@ -44,10 +43,11 @@ export default function Session() {
 
   const handleNextTrack = async () => {
     setPickingTrack(true)
+    setTrackError(null)
     try {
       await nextTrack(id!)
-    } catch {
-      // Poll will pick up any changes
+    } catch (e) {
+      setTrackError(e instanceof Error ? e.message : 'Failed to pick track')
     } finally {
       setPickingTrack(false)
     }
@@ -55,39 +55,31 @@ export default function Session() {
 
   const handleSkipTrack = async () => {
     setSkippingTrack(true)
+    setTrackError(null)
     try {
       await skipTurn(id!)
-    } catch {
-      // Poll will pick up any changes
+    } catch (e) {
+      setTrackError(e instanceof Error ? e.message : 'Failed to skip track')
     } finally {
       setSkippingTrack(false)
     }
   }
-
-  const fetchRaces = useCallback(async () => {
-    if (!id) return
-    const data = await listRaces(id)
-    setRaces(data)
-  }, [id])
-
-  // Fetch race history when session changes (piggyback on poll)
-  useEffect(() => {
-    if (session) {
-      fetchRaces()
-    }
-  }, [session, fetchRaces])
 
   // Reset image error state when the track changes
   useEffect(() => {
     setTrackImageError(false)
   }, [session?.current_race?.id])
 
-  // Auto-collapse history when > 3 races
+  // Clear track error when a successful poll shows the state changed
   useEffect(() => {
-    if (races.length > 3) {
-      setHistoryExpanded(false)
-    }
-  }, [races.length > 3]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (trackError) setTrackError(null)
+  }, [session?.current_race?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-collapse history when > 3 races
+  const hasMany = (session?.races.length ?? 0) > 3
+  useEffect(() => {
+    if (hasMany) setHistoryExpanded(false)
+  }, [hasMany])
 
   if (loading) {
     return (
@@ -117,7 +109,7 @@ export default function Session() {
   const isHost = user?.id === session.host_id
   const currentRace = session.current_race
   // Past races = all except the most recent (current), shown newest-first
-  const pastRaces = [...races].reverse().filter((r) => r.id !== currentRace?.id)
+  const pastRaces = [...session.races].reverse().filter((r) => r.id !== currentRace?.id)
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -223,6 +215,7 @@ export default function Session() {
                 {skippingTrack ? 'Re-rolling...' : 'Skip Track'}
               </button>
             )}
+            {trackError && <p className="text-xs text-red-500 text-center">{trackError}</p>}
           </div>
         )}
 
