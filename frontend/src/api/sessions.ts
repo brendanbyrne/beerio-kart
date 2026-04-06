@@ -1,6 +1,13 @@
 import { apiFetch } from './client'
 import type { SessionSummary, SessionDetail } from './types'
 
+export async function getMySession(): Promise<string | null> {
+  const res = await apiFetch('/api/v1/sessions/mine')
+  if (!res.ok) return null
+  const data = await res.json()
+  return data.session_id ?? null
+}
+
 export async function createSession(ruleset: string): Promise<SessionDetail> {
   const res = await apiFetch('/api/v1/sessions', {
     method: 'POST',

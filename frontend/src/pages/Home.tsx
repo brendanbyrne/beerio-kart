@@ -11,7 +11,7 @@ export default function Home() {
   const { user } = useAuth()
   const { profile } = useUserProfile(user?.id)
   const { items: characters } = useCharacters()
-  const { sessions, loading: sessionsLoading } = useSessions()
+  const { sessions, mySessionId, loading: sessionsLoading } = useSessions()
   const navigate = useNavigate()
 
   const [showCreate, setShowCreate] = useState(false)
@@ -19,6 +19,14 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
 
   const preferredChar = characters.find((c) => c.id === profile?.preferred_character_id)
+
+  const handleStartButton = () => {
+    if (mySessionId) {
+      navigate(`/session/${mySessionId}`)
+    } else {
+      setShowCreate(true)
+    }
+  }
 
   const handleCreate = async () => {
     setCreating(true)
@@ -58,12 +66,12 @@ export default function Home() {
 
       {/* Content */}
       <div className="px-4 pt-4 space-y-3">
-        {/* Start Session button */}
+        {/* Start / Jump to session button */}
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={handleStartButton}
           className="w-full py-4 bg-blue-500 text-white rounded-xl text-sm font-semibold active:bg-blue-600 transition-colors"
         >
-          Start a Session
+          {mySessionId ? 'Jump to Current Session' : 'Start a Session'}
         </button>
 
         {/* Create session modal */}
@@ -114,32 +122,44 @@ export default function Home() {
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">
               Active Sessions
             </h2>
-            {sessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => navigate(`/session/${s.id}`)}
-                className="w-full bg-white rounded-xl border border-gray-200 p-4 text-left active:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {s.host_username}&apos;s session
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-400">
-                        {s.participant_count} player{s.participant_count !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {'\u00B7'} Race {s.race_number}
-                      </span>
+            {sessions.map((s) => {
+              const isMySession = s.id === mySessionId
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => navigate(`/session/${s.id}`)}
+                  className={`w-full rounded-xl border p-4 text-left active:bg-gray-50 transition-colors ${
+                    isMySession ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {s.host_username}&apos;s session
+                        </p>
+                        {isMySession && (
+                          <span className="text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
+                            Joined
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-400">
+                          {s.participant_count} player{s.participant_count !== 1 ? 's' : ''}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {'\u00B7'} Race {s.race_number}
+                        </span>
+                      </div>
                     </div>
+                    <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                      {s.ruleset}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
-                    {s.ruleset}
-                  </span>
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
