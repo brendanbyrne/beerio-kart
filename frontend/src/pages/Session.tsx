@@ -164,7 +164,7 @@ export default function Session() {
               <img
                 src={`/${currentRace.image_path}`}
                 alt={currentRace.track_name}
-                className="w-full h-40 object-cover"
+                className="w-full h-40 object-contain bg-gray-100"
                 onError={() => setTrackImageError(true)}
               />
             )}
