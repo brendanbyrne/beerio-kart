@@ -92,7 +92,7 @@ export default function Session() {
               <div key={p.user_id} className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-2">
                   {p.user_id === session.host_id && (
-                    <span className="text-xs">{'\uD83D\uDC51'}</span>
+                    <span className="text-xs">{'\uD83C\uDFE0'}</span>
                   )}
                   <span className="text-sm text-gray-900">{p.username}</span>
                 </div>
@@ -127,7 +127,7 @@ export default function Session() {
               <div key={p.user_id} className="px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {p.user_id === session.host_id && (
-                    <span className="text-xs">{'\uD83D\uDC51'}</span>
+                    <span className="text-xs">{'\uD83C\uDFE0'}</span>
                   )}
                   <span className="text-sm font-medium text-gray-900">{p.username}</span>
                 </div>
