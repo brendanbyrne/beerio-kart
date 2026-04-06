@@ -196,16 +196,20 @@ export default function Session() {
 
       {/* Zone 3 — Action Area */}
       <div className="px-4 pt-4 space-y-3">
-        {/* Host controls — Next Track and Skip Track */}
-        {isHost && isParticipant && (
+        {/* Track controls */}
+        {isParticipant && (
           <div className="space-y-2">
-            <button
-              onClick={handleNextTrack}
-              disabled={pickingTrack}
-              className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl disabled:opacity-50 active:bg-blue-600 transition-colors"
-            >
-              {pickingTrack ? 'Picking track...' : 'Next Track'}
-            </button>
+            {/* Next Track — host only */}
+            {isHost && (
+              <button
+                onClick={handleNextTrack}
+                disabled={pickingTrack}
+                className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl disabled:opacity-50 active:bg-blue-600 transition-colors"
+              >
+                {pickingTrack ? 'Picking track...' : 'Next Track'}
+              </button>
+            )}
+            {/* Skip Track — any participant */}
             {currentRace && (
               <button
                 onClick={handleSkipTrack}
