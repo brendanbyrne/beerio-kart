@@ -891,8 +891,12 @@ Required test scenarios per ruleset: normal flow, recusal by one player, recusal
 - **Cloudflare Tunnel (not port forwarding)** for exposing the app. Outbound-only connection from Unraid to Cloudflare edge. No open ports on the home network.
 - **Docker Compose Manager plugin** on Unraid for container management. compose.yaml as the single source of truth for the deployment.
 
-## Future Ideas (Not Committed)
+## Backlog
 
-These are loose ideas that may or may not be pursued. No guarantees.
+
+Random ideas that may or may not be pursued.
 
 - Turn list of previous players into invite emails to join.
+- Ability to Change Username.
+- Ability to send emails.
+   - Account recovery.
