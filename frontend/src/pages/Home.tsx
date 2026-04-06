@@ -52,7 +52,6 @@ export default function Home() {
             <h1 className="text-lg font-bold text-gray-900">
               Hey, {profile?.username ?? user?.username}!
             </h1>
-            {preferredChar && <p className="text-xs text-gray-400">{preferredChar.name} main</p>}
           </div>
         </div>
       </div>
