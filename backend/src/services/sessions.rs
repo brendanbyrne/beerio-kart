@@ -1142,7 +1142,7 @@ mod tests {
         let r3 = next_track(&db, &session.id, &host_id).await.unwrap();
 
         // All three should be different tracks
-        let ids = vec![r1.track_id, r2.track_id, r3.track_id];
+        let ids = [r1.track_id, r2.track_id, r3.track_id];
         let unique: std::collections::HashSet<_> = ids.iter().collect();
         assert_eq!(unique.len(), 3, "All 3 track picks should be unique");
     }
