@@ -184,6 +184,24 @@ struct ParticipantRow {
     left_at: Option<String>,
 }
 
+/// Submission info for a single participant in a race.
+#[derive(serde::Serialize, Clone)]
+pub struct RaceSubmission {
+    pub user_id: String,
+    pub username: String,
+    pub track_time: i32,
+    pub disqualified: bool,
+}
+
+/// Row shape for the submissions query.
+#[derive(Debug, FromQueryResult)]
+struct SubmissionRow {
+    user_id: String,
+    username: String,
+    track_time: i32,
+    disqualified: bool,
+}
+
 /// Info about a single race in the session (returned on create / skip / poll).
 #[derive(serde::Serialize, Clone)]
 pub struct SessionRaceInfo {
@@ -194,6 +212,7 @@ pub struct SessionRaceInfo {
     pub cup_name: String,
     pub image_path: String,
     pub created_at: String,
+    pub submissions: Vec<RaceSubmission>,
 }
 
 /// Race info for the race history list.
@@ -318,6 +337,33 @@ pub async fn get_session_detail(
         .one(db)
         .await?;
 
+    // Fetch submissions for the current race (if any)
+    let submissions = if let Some(ref race_row) = current_race_row {
+        SubmissionRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
+            SELECT r.user_id, u.username, r.track_time, r.disqualified
+            FROM runs r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.session_race_id = $1
+            ORDER BY r.track_time ASC
+            "#,
+            [race_row.id.clone().into()],
+        ))
+        .all(db)
+        .await?
+        .into_iter()
+        .map(|s| RaceSubmission {
+            user_id: s.user_id,
+            username: s.username,
+            track_time: s.track_time,
+            disqualified: s.disqualified,
+        })
+        .collect()
+    } else {
+        Vec::new()
+    };
+
     let current_race = current_race_row.map(|r| SessionRaceInfo {
         id: r.id,
         race_number: r.race_number,
@@ -326,6 +372,7 @@ pub async fn get_session_detail(
         cup_name: r.cup_name,
         image_path: r.image_path,
         created_at: r.created_at,
+        submissions,
     });
 
     // Fetch all races for history (reuses the same query shape as list_races)
@@ -602,6 +649,7 @@ pub async fn next_track(
         cup_name: cup,
         image_path: chosen.image_path.clone(),
         created_at: now,
+        submissions: Vec::new(),
     })
 }
 
@@ -730,6 +778,7 @@ pub async fn skip_turn(
         cup_name: cup,
         image_path: chosen.image_path.clone(),
         created_at: now,
+        submissions: Vec::new(),
     })
 }
 

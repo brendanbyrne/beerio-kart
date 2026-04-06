@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useSession } from '../hooks/useSession'
 import { joinSession, leaveSession, nextTrack, skipTurn } from '../api/sessions'
+import { formatTime } from '../utils/time'
+import RunEntrySheet from '../components/RunEntrySheet'
 import BottomNav from '../components/BottomNav'
 
 export default function Session() {
@@ -19,6 +21,7 @@ export default function Session() {
   const [trackError, setTrackError] = useState<string | null>(null)
   const [historyExpanded, setHistoryExpanded] = useState(true)
   const [trackImageError, setTrackImageError] = useState(false)
+  const [showRunEntry, setShowRunEntry] = useState(false)
 
   const handleLeave = async () => {
     setLeaving(true)
@@ -108,8 +111,12 @@ export default function Session() {
   const isParticipant = activeParticipants.some((p) => p.user_id === user?.id)
   const isHost = user?.id === session.host_id
   const currentRace = session.current_race
-  // Past races = all except the most recent (current), shown newest-first
   const pastRaces = [...session.races].reverse().filter((r) => r.id !== currentRace?.id)
+
+  // Submission status
+  const submissions = currentRace?.submissions ?? []
+  const mySubmission = submissions.find((s) => s.user_id === user?.id)
+  const hasSubmitted = !!mySubmission
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -133,7 +140,6 @@ export default function Session() {
           </div>
         </button>
 
-        {/* Expanded participant list */}
         {headerExpanded && (
           <div className="px-4 pb-3 border-t border-gray-100 pt-2 space-y-1.5">
             {activeParticipants.map((p) => (
@@ -153,9 +159,7 @@ export default function Session() {
       {/* Zone 2 — Track Card */}
       <div className="px-4 pt-4">
         {currentRace ? (
-          /* Active race — show track image and info */
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            {/* Track image */}
             {trackImageError ? (
               <div className="h-40 bg-gray-100 flex items-center justify-center">
                 <span className="text-4xl">{'\uD83C\uDFCE\uFE0F'}</span>
@@ -168,7 +172,6 @@ export default function Session() {
                 onError={() => setTrackImageError(true)}
               />
             )}
-            {/* Track info */}
             <div className="px-4 py-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold text-gray-900">{currentRace.track_name}</h2>
@@ -180,7 +183,6 @@ export default function Session() {
             </div>
           </div>
         ) : (
-          /* No race yet — waiting state */
           <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
             <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-lg flex items-center justify-center">
               <span className="text-xl text-gray-300">{'\uD83C\uDFCE\uFE0F'}</span>
@@ -199,7 +201,6 @@ export default function Session() {
         {/* Track controls */}
         {isParticipant && (
           <div className="space-y-2">
-            {/* Next Track — host only */}
             {isHost && (
               <button
                 onClick={handleNextTrack}
@@ -209,7 +210,6 @@ export default function Session() {
                 {pickingTrack ? 'Picking track...' : 'Next Track'}
               </button>
             )}
-            {/* Skip Track — any participant */}
             {currentRace && (
               <button
                 onClick={handleSkipTrack}
@@ -223,23 +223,79 @@ export default function Session() {
           </div>
         )}
 
-        {/* Participant cards */}
+        {/* Submit Time / Your Time */}
+        {isParticipant && currentRace && (
+          <>
+            {hasSubmitted ? (
+              <div
+                className={`rounded-xl border p-4 text-center ${
+                  mySubmission.disqualified
+                    ? 'bg-red-50 border-red-200'
+                    : 'bg-green-50 border-green-200'
+                }`}
+              >
+                <p
+                  className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                    mySubmission.disqualified ? 'text-red-500' : 'text-green-600'
+                  }`}
+                >
+                  {mySubmission.disqualified ? 'Your Time (DQ)' : 'Your Time'}
+                </p>
+                <p
+                  className={`text-2xl font-mono font-bold ${
+                    mySubmission.disqualified ? 'text-red-600 line-through' : 'text-green-700'
+                  }`}
+                >
+                  {formatTime(mySubmission.track_time)}
+                </p>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowRunEntry(true)}
+                className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl active:bg-blue-600 transition-colors"
+              >
+                Submit Time
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Participant cards — submission-aware */}
         <div>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mb-2">
             Players
           </h3>
           <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-            {activeParticipants.map((p) => (
-              <div key={p.user_id} className="px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {p.user_id === session.host_id && (
-                    <span className="text-xs">{'\uD83C\uDFE0'}</span>
+            {activeParticipants.map((p) => {
+              const sub = submissions.find((s) => s.user_id === p.user_id)
+              return (
+                <div key={p.user_id} className="px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {p.user_id === session.host_id && (
+                      <span className="text-xs">{'\uD83C\uDFE0'}</span>
+                    )}
+                    <span className="text-sm font-medium text-gray-900">{p.username}</span>
+                  </div>
+                  {currentRace ? (
+                    sub ? (
+                      sub.disqualified ? (
+                        <span className="text-xs font-medium text-red-500">
+                          DQ {formatTime(sub.track_time)}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium text-green-600">
+                          {'\u2705'} {formatTime(sub.track_time)}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-xs text-gray-400">{'\u23F3'} Racing...</span>
+                    )
+                  ) : (
+                    <span className="text-xs text-gray-400">{'\u23F3'} waiting</span>
                   )}
-                  <span className="text-sm font-medium text-gray-900">{p.username}</span>
                 </div>
-                <span className="text-xs text-gray-400">{'\u23F3'} waiting</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
@@ -289,7 +345,6 @@ export default function Session() {
         </div>
 
         {isParticipant ? (
-          /* Leave button — only shown to participants */
           <button
             onClick={handleLeave}
             disabled={leaving}
@@ -298,7 +353,6 @@ export default function Session() {
             {leaving ? 'Leaving...' : 'Leave Session'}
           </button>
         ) : (
-          /* Join button — shown to non-participants */
           <div className="space-y-2">
             <button
               onClick={handleJoin}
@@ -313,6 +367,15 @@ export default function Session() {
       </div>
 
       <BottomNav />
+
+      {/* Run entry bottom sheet */}
+      {showRunEntry && currentRace && (
+        <RunEntrySheet
+          race={currentRace}
+          onClose={() => setShowRunEntry(false)}
+          onSubmitted={() => setShowRunEntry(false)}
+        />
+      )}
     </div>
   )
 }
