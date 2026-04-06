@@ -30,6 +30,16 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // A user can only be active in one session at a time.
+        // Partial unique index: only applies to rows where left_at IS NULL.
+        manager
+            .get_connection()
+            .execute_unprepared(
+                "CREATE UNIQUE INDEX idx_session_participants_one_active_session
+                 ON session_participants(user_id) WHERE left_at IS NULL",
+            )
+            .await?;
+
         Ok(())
     }
 

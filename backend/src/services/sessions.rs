@@ -11,6 +11,31 @@ use crate::error::AppError;
 /// Allowed rulesets for this PR. Only "random" is supported.
 const VALID_RULESETS: &[&str] = &["random"];
 
+/// Check that the user is not already active in any session. Returns an error
+/// with the existing session ID if they are.
+async fn check_not_in_any_session(
+    db: &impl ConnectionTrait,
+    user_id: &str,
+) -> Result<(), AppError> {
+    let existing = session_participants::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_participants::Column::UserId.eq(user_id))
+                .add(session_participants::Column::LeftAt.is_null()),
+        )
+        .one(db)
+        .await?;
+
+    if let Some(row) = existing {
+        return Err(AppError::Conflict(format!(
+            "Already in session {}",
+            row.session_id
+        )));
+    }
+
+    Ok(())
+}
+
 /// Create a new session. The creator becomes both the host and the first
 /// participant. Returns the full session detail.
 pub async fn create_session(
@@ -24,6 +49,8 @@ pub async fn create_session(
             VALID_RULESETS.join(", ")
         )));
     }
+
+    check_not_in_any_session(db, user_id).await?;
 
     let now = Utc::now().to_rfc3339();
     let session_id = Uuid::new_v4().to_string();
@@ -235,20 +262,8 @@ pub async fn join_session(
         ));
     }
 
-    // Check if user already has an active row (left_at IS NULL)
-    let existing = session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::SessionId.eq(session_id))
-                .add(session_participants::Column::UserId.eq(user_id))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
-        .one(db)
-        .await?;
-
-    if existing.is_some() {
-        return Err(AppError::Conflict("Already in this session".to_string()));
-    }
+    // Check user isn't already active in any session (including this one)
+    check_not_in_any_session(db, user_id).await?;
 
     let now = Utc::now().to_rfc3339();
     let txn = db.begin().await?;
@@ -543,28 +558,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_active_sessions_uses_single_query() {
+    async fn test_list_active_sessions_returns_correct_counts() {
         let db = setup_db().await;
         let host_id = create_user(&db, "host").await;
         let user2_id = create_user(&db, "user2").await;
+        let user3_id = create_user(&db, "user3").await;
 
-        // Create two sessions
+        // host creates s1, user2 creates s2
         let s1 = create_session(&db, &host_id, "random").await.unwrap();
         let _s2 = create_session(&db, &user2_id, "random").await.unwrap();
 
-        // user2 joins s1
-        join_session(&db, &s1.id, &user2_id).await.unwrap();
+        // user3 joins s1 (user3 is not in any session yet)
+        join_session(&db, &s1.id, &user3_id).await.unwrap();
 
         let summaries = list_active_sessions(&db).await.unwrap();
         assert_eq!(summaries.len(), 2);
 
-        // Find s1 — should have 2 participants
         let s1_summary = summaries.iter().find(|s| s.id == s1.id).unwrap();
         assert_eq!(s1_summary.participant_count, 2);
         assert_eq!(s1_summary.host_username, "host");
         assert_eq!(s1_summary.race_number, 1);
 
-        // s2 — should have 1 participant
         let s2_summary = summaries.iter().find(|s| s.id != s1.id).unwrap();
         assert_eq!(s2_summary.participant_count, 1);
         assert_eq!(s2_summary.host_username, "user2");
@@ -584,7 +598,6 @@ mod tests {
         assert_eq!(detail.host_username, "host");
         assert_eq!(detail.race_number, 1);
 
-        // Participants should have real usernames, not "Unknown"
         let usernames: Vec<&str> = detail
             .participants
             .iter()
@@ -592,5 +605,54 @@ mod tests {
             .collect();
         assert!(usernames.contains(&"host"));
         assert!(usernames.contains(&"user2"));
+    }
+
+    #[tokio::test]
+    async fn test_cannot_join_another_session_while_active_in_one() {
+        let db = setup_db().await;
+        let host1_id = create_user(&db, "host1").await;
+        let host2_id = create_user(&db, "host2").await;
+        let user_id = create_user(&db, "user").await;
+
+        let s1 = create_session(&db, &host1_id, "random").await.unwrap();
+        let s2 = create_session(&db, &host2_id, "random").await.unwrap();
+
+        join_session(&db, &s1.id, &user_id).await.unwrap();
+
+        // Should fail — already active in s1
+        let result = join_session(&db, &s2.id, &user_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_cannot_create_session_while_active_in_one() {
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+        let user_id = create_user(&db, "user").await;
+
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_id).await.unwrap();
+
+        // Should fail — user is already active in a session
+        let result = create_session(&db, &user_id, "random").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_can_join_new_session_after_leaving_previous() {
+        let db = setup_db().await;
+        let host1_id = create_user(&db, "host1").await;
+        let host2_id = create_user(&db, "host2").await;
+        let user_id = create_user(&db, "user").await;
+
+        let s1 = create_session(&db, &host1_id, "random").await.unwrap();
+        let s2 = create_session(&db, &host2_id, "random").await.unwrap();
+
+        join_session(&db, &s1.id, &user_id).await.unwrap();
+        leave_session(&db, &s1.id, &user_id).await.unwrap();
+
+        // Should succeed — left s1, now free to join s2
+        let result = join_session(&db, &s2.id, &user_id).await;
+        assert!(result.is_ok());
     }
 }
