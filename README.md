@@ -1,5 +1,7 @@
 # beerio-kart
 
+[![codecov](https://codecov.io/gh/brendanbyrne/beerio-kart/graph/badge.svg)](https://codecov.io/gh/brendanbyrne/beerio-kart)
+
 We're really doing this thing.
 
 ## Prerequisites
