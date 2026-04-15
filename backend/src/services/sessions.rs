@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use rand::seq::SliceRandom;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
@@ -94,7 +94,7 @@ pub async fn create_session(
 
     check_not_in_any_session(db, user_id).await?;
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
     let session_id = Uuid::new_v4().to_string();
 
     let txn = db.begin().await?;
@@ -106,8 +106,8 @@ pub async fn create_session(
         ruleset: Set(ruleset.to_string()),
         least_played_drink_category: Set(None),
         status: Set("active".to_string()),
-        created_at: Set(now.clone()),
-        last_activity_at: Set(now.clone()),
+        created_at: Set(now),
+        last_activity_at: Set(now),
     }
     .insert(&txn)
     .await?;
@@ -135,7 +135,7 @@ pub struct SessionSummary {
     pub participant_count: i64,
     pub race_number: i64,
     pub ruleset: String,
-    pub last_activity_at: String,
+    pub last_activity_at: DateTime<Utc>,
 }
 
 /// Row shape returned by the list-sessions JOIN query.
@@ -146,7 +146,7 @@ struct SessionSummaryRow {
     participant_count: i64,
     race_count: i64,
     ruleset: String,
-    last_activity_at: String,
+    last_activity_at: NaiveDateTime,
 }
 
 /// List active sessions sorted by last_activity_at DESC.
@@ -185,7 +185,7 @@ pub async fn list_active_sessions(
             participant_count: r.participant_count,
             race_number: r.race_count.max(1),
             ruleset: r.ruleset,
-            last_activity_at: r.last_activity_at,
+            last_activity_at: r.last_activity_at.and_utc(),
         })
         .collect())
 }
@@ -195,8 +195,8 @@ pub async fn list_active_sessions(
 pub struct ParticipantInfo {
     pub user_id: String,
     pub username: String,
-    pub joined_at: String,
-    pub left_at: Option<String>,
+    pub joined_at: DateTime<Utc>,
+    pub left_at: Option<DateTime<Utc>>,
 }
 
 /// Row shape returned by the participant JOIN query.
@@ -204,8 +204,8 @@ pub struct ParticipantInfo {
 struct ParticipantRow {
     user_id: String,
     username: String,
-    joined_at: String,
-    left_at: Option<String>,
+    joined_at: NaiveDateTime,
+    left_at: Option<NaiveDateTime>,
 }
 
 /// Submission info for a single participant in a race.
@@ -235,7 +235,7 @@ pub struct SessionRaceInfo {
     pub track_name: String,
     pub cup_name: String,
     pub image_path: String,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
     pub submissions: Vec<RaceSubmission>,
 }
 
@@ -248,7 +248,7 @@ pub struct RaceInfo {
     pub track_name: String,
     pub cup_name: String,
     pub run_count: i64,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Row shape returned by the race history query.
@@ -260,7 +260,7 @@ struct RaceHistoryRow {
     track_name: String,
     cup_name: String,
     run_count: i64,
-    created_at: String,
+    created_at: NaiveDateTime,
 }
 
 /// Row shape for the current race query.
@@ -272,7 +272,7 @@ struct CurrentRaceRow {
     track_name: String,
     cup_name: String,
     image_path: String,
-    created_at: String,
+    created_at: NaiveDateTime,
 }
 
 /// Full session detail for polling.
@@ -284,8 +284,8 @@ pub struct SessionDetail {
     pub host_username: String,
     pub ruleset: String,
     pub status: String,
-    pub created_at: String,
-    pub last_activity_at: String,
+    pub created_at: DateTime<Utc>,
+    pub last_activity_at: DateTime<Utc>,
     pub participants: Vec<ParticipantInfo>,
     pub race_number: usize,
     pub current_race: Option<SessionRaceInfo>,
@@ -330,8 +330,8 @@ pub async fn get_session_detail(
         .map(|r| ParticipantInfo {
             user_id: r.user_id,
             username: r.username,
-            joined_at: r.joined_at,
-            left_at: r.left_at,
+            joined_at: r.joined_at.and_utc(),
+            left_at: r.left_at.map(|t| t.and_utc()),
         })
         .collect();
 
@@ -395,7 +395,7 @@ pub async fn get_session_detail(
         track_name: r.track_name,
         cup_name: r.cup_name,
         image_path: r.image_path,
-        created_at: r.created_at,
+        created_at: r.created_at.and_utc(),
         submissions,
     });
 
@@ -428,7 +428,7 @@ pub async fn get_session_detail(
             track_name: r.track_name,
             cup_name: r.cup_name,
             run_count: r.run_count,
-            created_at: r.created_at,
+            created_at: r.created_at.and_utc(),
         })
         .collect();
 
@@ -439,8 +439,8 @@ pub async fn get_session_detail(
         host_username,
         ruleset: session.ruleset,
         status: session.status,
-        created_at: session.created_at,
-        last_activity_at: session.last_activity_at,
+        created_at: session.created_at.and_utc(),
+        last_activity_at: session.last_activity_at.and_utc(),
         participants,
         race_number,
         current_race,
@@ -469,14 +469,14 @@ pub async fn join_session(
     // Check user isn't already active in any session (including this one)
     check_not_in_any_session(db, user_id).await?;
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
 
     session_participants::ActiveModel {
         id: Set(Uuid::new_v4().to_string()),
         session_id: Set(session_id.to_string()),
         user_id: Set(user_id.to_string()),
-        joined_at: Set(now.clone()),
+        joined_at: Set(now),
         left_at: Set(None),
     }
     .insert(&txn)
@@ -514,12 +514,12 @@ pub async fn leave_session(
         .await?
         .ok_or_else(|| AppError::BadRequest("Not currently in this session".to_string()))?;
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
 
     // Set left_at
     let mut active_participant: session_participants::ActiveModel = participant.into();
-    active_participant.left_at = Set(Some(now.clone()));
+    active_participant.left_at = Set(Some(now));
     active_participant.update(&txn).await?;
 
     // Check if host is leaving
@@ -634,7 +634,7 @@ pub async fn next_track(
         .find(|t| t.id == chosen_idx)
         .ok_or_else(|| AppError::Internal("Track disappeared".to_string()))?;
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
     let race_id = Uuid::new_v4().to_string();
     let new_race_number = race_count + 1;
 
@@ -646,14 +646,14 @@ pub async fn next_track(
         race_number: Set(new_race_number),
         track_id: Set(chosen.id),
         chosen_by: Set(None),
-        created_at: Set(now.clone()),
+        created_at: Set(now),
     }
     .insert(&txn)
     .await?;
 
     // Update last_activity_at
     let mut active_session: sessions::ActiveModel = session.into();
-    active_session.last_activity_at = Set(now.clone());
+    active_session.last_activity_at = Set(now);
     active_session.update(&txn).await?;
 
     txn.commit().await?;
@@ -672,7 +672,7 @@ pub async fn next_track(
         track_name: chosen.name.clone(),
         cup_name: cup,
         image_path: chosen.image_path.clone(),
-        created_at: now,
+        created_at: now.and_utc(),
         submissions: Vec::new(),
     })
 }
@@ -763,7 +763,7 @@ pub async fn skip_turn(
         .find(|t| t.id == chosen_idx)
         .ok_or_else(|| AppError::Internal("Track disappeared".to_string()))?;
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
     let race_id = Uuid::new_v4().to_string();
 
     // Delete old race + insert new one + update activity in a single transaction
@@ -777,13 +777,13 @@ pub async fn skip_turn(
         race_number: Set(keep_race_number),
         track_id: Set(chosen.id),
         chosen_by: Set(None),
-        created_at: Set(now.clone()),
+        created_at: Set(now),
     }
     .insert(&txn)
     .await?;
 
     let mut active_session: sessions::ActiveModel = session.into();
-    active_session.last_activity_at = Set(now.clone());
+    active_session.last_activity_at = Set(now);
     active_session.update(&txn).await?;
 
     txn.commit().await?;
@@ -801,7 +801,7 @@ pub async fn skip_turn(
         track_name: chosen.name.clone(),
         cup_name: cup,
         image_path: chosen.image_path.clone(),
-        created_at: now,
+        created_at: now.and_utc(),
         submissions: Vec::new(),
     })
 }
@@ -845,7 +845,7 @@ pub async fn list_races(
             track_name: r.track_name,
             cup_name: r.cup_name,
             run_count: r.run_count,
-            created_at: r.created_at,
+            created_at: r.created_at.and_utc(),
         })
         .collect())
 }
@@ -855,19 +855,19 @@ pub async fn list_races(
 /// users from being soft-locked out of creating/joining new sessions.
 /// Returns the number of sessions closed.
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppError> {
-    let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
+    let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).naive_utc();
 
     let stale = sessions::Entity::find()
         .filter(
             Condition::all()
                 .add(sessions::Column::Status.eq("active"))
-                .add(sessions::Column::LastActivityAt.lt(&one_hour_ago)),
+                .add(sessions::Column::LastActivityAt.lt(one_hour_ago)),
         )
         .all(db)
         .await?;
 
     let count = stale.len() as u64;
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
 
     let txn = db.begin().await?;
     for session in stale {
@@ -875,10 +875,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
 
         // Mark all still-active participants as left
         session_participants::Entity::update_many()
-            .col_expr(
-                session_participants::Column::LeftAt,
-                Expr::value(now.clone()),
-            )
+            .col_expr(session_participants::Column::LeftAt, Expr::value(now))
             .filter(
                 Condition::all()
                     .add(session_participants::Column::SessionId.eq(&session_id))
@@ -950,7 +947,7 @@ mod tests {
 
     async fn create_user(db: &DatabaseConnection, username: &str) -> String {
         let id = Uuid::new_v4().to_string();
-        let now = Utc::now().to_rfc3339();
+        let now = Utc::now().naive_utc();
         let hash = "$argon2id$v=19$m=19456,t=2,p=1$dGVzdHNhbHQ$abc123";
         users::ActiveModel {
             id: Set(id.clone()),
@@ -963,7 +960,7 @@ mod tests {
             preferred_glider_id: Set(None),
             preferred_drink_type_id: Set(None),
             refresh_token_version: Set(0),
-            created_at: Set(now.clone()),
+            created_at: Set(now),
             updated_at: Set(now),
         }
         .insert(db)
@@ -1440,7 +1437,7 @@ mod tests {
         join_session(&db, &session.id, &user_id).await.unwrap();
 
         // Backdate last_activity_at past the stale threshold
-        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).to_rfc3339();
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
         let s = sessions::Entity::find_by_id(&session.id)
             .one(&db)
             .await

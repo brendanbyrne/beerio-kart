@@ -13,12 +13,13 @@ pub struct Model {
     pub track_id: i32,
     #[sea_orm(column_type = "Text", nullable)]
     pub chosen_by: Option<String>,
-    #[sea_orm(column_type = "Text")]
-    pub created_at: String,
+    pub created_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::runs::Entity")]
+    Runs,
     #[sea_orm(
         belongs_to = "super::sessions::Entity",
         from = "Column::SessionId",
@@ -43,8 +44,12 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Users,
-    #[sea_orm(has_many = "super::runs::Entity")]
-    Runs,
+}
+
+impl Related<super::runs::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Runs.def()
+    }
 }
 
 impl Related<super::sessions::Entity> for Entity {
@@ -59,9 +64,9 @@ impl Related<super::tracks::Entity> for Entity {
     }
 }
 
-impl Related<super::runs::Entity> for Entity {
+impl Related<super::users::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Runs.def()
+        Relation::Users.def()
     }
 }
 

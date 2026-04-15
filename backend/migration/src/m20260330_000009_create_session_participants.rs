@@ -1,7 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 /// Creates the session_participants table — tracks who is in a session
-/// and when they joined/left. Uses raw SQL for SQLite STRICT mode.
+/// and when they joined/left. Uses raw SQL for SQLite-specific features.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -15,9 +15,9 @@ impl MigrationTrait for Migration {
                     id TEXT NOT NULL PRIMARY KEY,
                     session_id TEXT NOT NULL REFERENCES sessions(id),
                     user_id TEXT NOT NULL REFERENCES users(id),
-                    joined_at TEXT NOT NULL,
-                    left_at TEXT
-                ) STRICT",
+                    joined_at datetime_text NOT NULL,
+                    left_at datetime_text
+                )",
             )
             .await?;
 

@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     FromQueryResult, ModelTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
@@ -48,7 +48,7 @@ pub struct RunDetail {
     pub drink_type_id: String,
     pub drink_type_name: String,
     pub disqualified: bool,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Row shape for the run detail JOIN query.
@@ -70,7 +70,7 @@ struct RunDetailRow {
     drink_type_id: String,
     drink_type_name: String,
     disqualified: bool,
-    created_at: String,
+    created_at: NaiveDateTime,
 }
 
 impl From<RunDetailRow> for RunDetail {
@@ -92,7 +92,7 @@ impl From<RunDetailRow> for RunDetail {
             drink_type_id: r.drink_type_id,
             drink_type_name: r.drink_type_name,
             disqualified: r.disqualified,
-            created_at: r.created_at,
+            created_at: r.created_at.and_utc(),
         }
     }
 }
@@ -235,7 +235,7 @@ pub async fn create_run(
         return Err(AppError::BadRequest("Invalid drink_type_id".to_string()));
     }
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
     let run_id = Uuid::new_v4().to_string();
 
     let txn = db.begin().await?;
@@ -256,7 +256,7 @@ pub async fn create_run(
         drink_type_id: Set(body.drink_type_id),
         disqualified: Set(body.disqualified),
         photo_path: Set(None),
-        created_at: Set(now.clone()),
+        created_at: Set(now),
         notes: Set(None),
     }
     .insert(&txn)
@@ -387,7 +387,7 @@ pub async fn delete_run(
         ));
     }
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
 
     run.delete(&txn).await?;
@@ -472,7 +472,7 @@ mod tests {
 
     async fn create_user(db: &DatabaseConnection, username: &str) -> String {
         let id = Uuid::new_v4().to_string();
-        let now = Utc::now().to_rfc3339();
+        let now = Utc::now().naive_utc();
         let hash = "$argon2id$v=19$m=19456,t=2,p=1$dGVzdHNhbHQ$abc123";
         users::ActiveModel {
             id: Set(id.clone()),
@@ -485,7 +485,7 @@ mod tests {
             preferred_glider_id: Set(None),
             preferred_drink_type_id: Set(None),
             refresh_token_version: Set(0),
-            created_at: Set(now.clone()),
+            created_at: Set(now),
             updated_at: Set(now),
         }
         .insert(db)
@@ -564,7 +564,7 @@ mod tests {
             id: Set(drink_id),
             name: Set("Test Beer".to_string()),
             alcoholic: Set(true),
-            created_at: Set(Utc::now().to_rfc3339()),
+            created_at: Set(Utc::now().naive_utc()),
             created_by: Set(None),
         }
         .insert(db)

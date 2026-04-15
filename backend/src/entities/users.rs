@@ -20,10 +20,8 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub preferred_drink_type_id: Option<String>,
     pub refresh_token_version: i32,
-    #[sea_orm(column_type = "Text")]
-    pub created_at: String,
-    #[sea_orm(column_type = "Text")]
-    pub updated_at: String,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -62,8 +60,10 @@ pub enum Relation {
     Gliders,
     #[sea_orm(has_many = "super::runs::Entity")]
     Runs,
-    #[sea_orm(has_many = "super::session_participants::Entity")]
+    #[sea_orm(has_one = "super::session_participants::Entity")]
     SessionParticipants,
+    #[sea_orm(has_many = "super::session_races::Entity")]
+    SessionRaces,
     #[sea_orm(
         belongs_to = "super::wheels::Entity",
         from = "Column::PreferredWheelId",
@@ -104,15 +104,21 @@ impl Related<super::runs::Entity> for Entity {
     }
 }
 
-impl Related<super::wheels::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Wheels.def()
-    }
-}
-
 impl Related<super::session_participants::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::SessionParticipants.def()
+    }
+}
+
+impl Related<super::session_races::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SessionRaces.def()
+    }
+}
+
+impl Related<super::wheels::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Wheels.def()
     }
 }
 

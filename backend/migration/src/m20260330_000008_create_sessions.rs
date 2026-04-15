@@ -1,7 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 /// Creates the sessions table — the organizational unit for group play.
-/// Uses raw SQL for SQLite STRICT mode (SeaORM's builder doesn't support it).
+/// Uses raw SQL for SQLite-specific features (SeaORM's builder doesn't support them).
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -18,9 +18,9 @@ impl MigrationTrait for Migration {
                     ruleset TEXT NOT NULL,
                     least_played_drink_category TEXT,
                     status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    last_activity_at TEXT NOT NULL
-                ) STRICT",
+                    created_at datetime_text NOT NULL,
+                    last_activity_at datetime_text NOT NULL
+                )",
             )
             .await?;
 

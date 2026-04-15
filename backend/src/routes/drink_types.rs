@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use chrono::{DateTime, Utc};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +20,7 @@ pub struct DrinkTypeResponse {
     pub name: String,
     pub alcoholic: bool,
     pub created_by: Option<String>,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
 }
 
 impl From<drink_types::Model> for DrinkTypeResponse {
@@ -29,7 +30,7 @@ impl From<drink_types::Model> for DrinkTypeResponse {
             name: m.name,
             alcoholic: m.alcoholic,
             created_by: m.created_by,
-            created_at: m.created_at,
+            created_at: m.created_at.and_utc(),
         }
     }
 }
@@ -75,7 +76,7 @@ pub async fn create_drink_type(
         return Ok(Json(existing.into()));
     }
 
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().naive_utc();
     let model = drink_types::ActiveModel {
         id: Set(id),
         name: Set(name),
