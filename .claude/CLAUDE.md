@@ -9,6 +9,10 @@ Two handoff files enable async task passing between assistants. The writer creat
 - **`.claude/cowork-handoff.md`** — Cowork → Claude Code. Check before starting work. Contains task instructions from the architecture/design assistant. Delete after completing the work.
 - **`.claude/claude-code-handoff.md`** — Claude Code → Cowork. Write this when you have questions, research requests, or design decisions for Cowork. Cowork deletes it after addressing.
 
+**Anything intended for the other assistant to act on — task specs, code review findings, bug reports, design decisions, answers to their questions — MUST be written to the appropriate handoff file.** Delivering it only in chat means the other assistant won't see it. If you find yourself composing a substantive response that the other assistant needs, stop and write it to the handoff file instead.
+
+**Do not use handoff files for your own session notes.** The handoff files are one-way channels between assistants — if the file exists, the recipient assumes there's work to do. For self-notes or session state you want to preserve across your own sessions, use `.claude/cowork-notes.md` (Cowork) or a similar assistant-specific notes file.
+
 ## Project Phase
 Phase 3 — Sessions & Run Recording (core gameplay loop).
 

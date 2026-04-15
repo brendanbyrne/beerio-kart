@@ -303,22 +303,21 @@ pub async fn list_runs(
 ) -> Result<Vec<RunDetail>, AppError> {
     let mut conditions = Vec::new();
     let mut params: Vec<sea_orm::Value> = Vec::new();
-    let mut param_idx = 1;
+
+    let mut add_filter = |column: &str, value: sea_orm::Value| {
+        let idx = params.len() + 1;
+        conditions.push(format!("{column} = ${idx}"));
+        params.push(value);
+    };
 
     if let Some(ref sr_id) = filters.session_race_id {
-        conditions.push(format!("r.session_race_id = ${param_idx}"));
-        params.push(sr_id.clone().into());
-        param_idx += 1;
+        add_filter("r.session_race_id", sr_id.clone().into());
     }
     if let Some(ref uid) = filters.user_id {
-        conditions.push(format!("r.user_id = ${param_idx}"));
-        params.push(uid.clone().into());
-        param_idx += 1;
+        add_filter("r.user_id", uid.clone().into());
     }
     if let Some(tid) = filters.track_id {
-        conditions.push(format!("r.track_id = ${param_idx}"));
-        params.push(tid.into());
-        let _ = param_idx; // suppress unused warning
+        add_filter("r.track_id", tid.into());
     }
 
     let where_clause = if conditions.is_empty() {

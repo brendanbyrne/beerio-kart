@@ -3,6 +3,7 @@ use rand::seq::SliceRandom;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     FromQueryResult, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
+    sea_query::Expr,
 };
 use uuid::Uuid;
 
@@ -12,18 +13,33 @@ use crate::error::AppError;
 /// Allowed rulesets for this PR. Only "random" is supported.
 const VALID_RULESETS: &[&str] = &["random"];
 
-/// Check that the user is not already active in any session. Returns an error
-/// with the existing session ID if they are.
+/// Row shape for the active-participant-in-active-session query.
+#[derive(Debug, FromQueryResult)]
+struct ActiveParticipantRow {
+    session_id: String,
+}
+
+/// Check that the user is not already active in any *active* session.
+/// Returns an error with the existing session ID if they are.
+/// JOINs sessions to ensure closed sessions don't block the user.
 async fn check_not_in_any_session(
     db: &impl ConnectionTrait,
     user_id: &str,
 ) -> Result<(), AppError> {
-    let existing = session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::UserId.eq(user_id))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
+    let existing =
+        ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
+            SELECT sp.session_id
+            FROM session_participants sp
+            JOIN sessions s ON sp.session_id = s.id
+            WHERE sp.user_id = $1
+              AND sp.left_at IS NULL
+              AND s.status = 'active'
+            LIMIT 1
+            "#,
+            [user_id.into()],
+        ))
         .one(db)
         .await?;
 
@@ -38,18 +54,26 @@ async fn check_not_in_any_session(
 }
 
 /// Returns the session ID the user is currently active in, or None.
+/// Only considers active sessions (not closed/stale ones).
 pub async fn get_active_session_id(
     db: &DatabaseConnection,
     user_id: &str,
 ) -> Result<Option<String>, AppError> {
-    let row = session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::UserId.eq(user_id))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
-        .one(db)
-        .await?;
+    let row = ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+        SELECT sp.session_id
+        FROM session_participants sp
+        JOIN sessions s ON sp.session_id = s.id
+        WHERE sp.user_id = $1
+          AND sp.left_at IS NULL
+          AND s.status = 'active'
+        LIMIT 1
+        "#,
+        [user_id.into()],
+    ))
+    .one(db)
+    .await?;
 
     Ok(row.map(|r| r.session_id))
 }
@@ -827,6 +851,8 @@ pub async fn list_races(
 }
 
 /// Close sessions that have had no activity for over an hour.
+/// Also marks all remaining active participants as left, preventing
+/// users from being soft-locked out of creating/joining new sessions.
 /// Returns the number of sessions closed.
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppError> {
     let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
@@ -841,9 +867,26 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
         .await?;
 
     let count = stale.len() as u64;
+    let now = Utc::now().to_rfc3339();
 
     let txn = db.begin().await?;
     for session in stale {
+        let session_id = session.id.clone();
+
+        // Mark all still-active participants as left
+        session_participants::Entity::update_many()
+            .col_expr(
+                session_participants::Column::LeftAt,
+                Expr::value(now.clone()),
+            )
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(&session_id))
+                    .add(session_participants::Column::LeftAt.is_null()),
+            )
+            .exec(&txn)
+            .await?;
+
         let mut active: sessions::ActiveModel = session.into();
         active.status = Set("closed".to_string());
         active.update(&txn).await?;
@@ -1385,5 +1428,38 @@ mod tests {
         for race in &races {
             assert_eq!(race.run_count, 0);
         }
+    }
+
+    #[tokio::test]
+    async fn test_stale_cleanup_marks_participants_as_left() {
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+        let user_id = create_user(&db, "user").await;
+
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_id).await.unwrap();
+
+        // Backdate last_activity_at past the stale threshold
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).to_rfc3339();
+        let s = sessions::Entity::find_by_id(&session.id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut active: sessions::ActiveModel = s.into();
+        active.last_activity_at = Set(two_hours_ago);
+        active.update(&db).await.unwrap();
+
+        close_stale_sessions(&db).await.unwrap();
+
+        // Both users must be able to create a new session after their old one times out
+        assert!(
+            create_session(&db, &host_id, "random").await.is_ok(),
+            "host should be freed from stale session"
+        );
+        assert!(
+            create_session(&db, &user_id, "random").await.is_ok(),
+            "user should be freed from stale session"
+        );
     }
 }

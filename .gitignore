@@ -16,6 +16,9 @@ target/
 # Assistant handoff files (ephemeral)
 .claude/*-handoff.md
 
+# Assistant self-notes (ephemeral session state)
+.claude/*-notes.md
+
 # Tool state (tokens, cookies)
 tools/.state/
 

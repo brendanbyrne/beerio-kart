@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { SessionRaceInfo, CreateRunRequest, RunDefaults, DrinkType } from '../api/types'
 import { createRun, getRunDefaults } from '../api/runs'
 import { parseTimeFields } from '../utils/time'
+import { useDrinkTypes } from '../hooks/useGameData'
+import { useCharacters, useBodies, useWheels, useGliders } from '../hooks/useGameData'
 import DrinkTypeSelector from './DrinkTypeSelector'
 import RaceSetupPicker from './RaceSetupPicker'
 
@@ -40,6 +42,13 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
   const [showDrinkPicker, setShowDrinkPicker] = useState(false)
   const [showSetupPicker, setShowSetupPicker] = useState(false)
 
+  // Load game data for resolving default names
+  const { items: drinkTypes } = useDrinkTypes()
+  const { items: characters } = useCharacters()
+  const { items: bodies } = useBodies()
+  const { items: wheels } = useWheels()
+  const { items: gliders } = useGliders()
+
   // Load defaults on mount
   useEffect(() => {
     getRunDefaults().then((d: RunDefaults) => {
@@ -57,6 +66,28 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
       )
     })
   }, [])
+
+  // Derive drink type object from ID + loaded data (or explicit user pick)
+  const resolvedDrinkType = useMemo(() => {
+    if (drinkType) return drinkType
+    if (drinkTypeId && drinkTypes.length > 0) {
+      return drinkTypes.find((dt) => dt.id === drinkTypeId) ?? null
+    }
+    return null
+  }, [drinkType, drinkTypeId, drinkTypes])
+
+  // Derive setup summary from IDs + loaded game data
+  const setupSummary = useMemo(() => {
+    if (!characterId || !characters.length || !bodies.length || !wheels.length || !gliders.length)
+      return ''
+    const parts = [
+      characters.find((c) => c.id === characterId)?.name,
+      bodies.find((b) => b.id === bodyId)?.name,
+      wheels.find((w) => w.id === wheelId)?.name,
+      gliders.find((g) => g.id === gliderId)?.name,
+    ].filter(Boolean)
+    return parts.length === 4 ? parts.join(' \u00B7 ') : ''
+  }, [characterId, bodyId, wheelId, gliderId, characters, bodies, wheels, gliders])
 
   const parsedTotal = parseTimeFields(totalTime.m, totalTime.ss, totalTime.mmm)
   const parsedLap1 = parseTimeFields(lap1.m, lap1.ss, lap1.mmm)
@@ -200,21 +231,23 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               onClick={() => setShowDrinkPicker(true)}
               className="w-full flex items-center justify-between px-3.5 min-h-[48px] bg-gray-50 border border-gray-200 rounded-xl text-left"
             >
-              {drinkType ? (
+              {resolvedDrinkType ? (
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">
-                    {drinkType.alcoholic ? '\uD83C\uDF7A' : '\uD83E\uDDCA'}
+                    {resolvedDrinkType.alcoholic ? '\uD83C\uDF7A' : '\uD83E\uDDCA'}
                   </span>
-                  <span className="text-[14px] font-medium text-gray-800">{drinkType.name}</span>
+                  <span className="text-[14px] font-medium text-gray-800">
+                    {resolvedDrinkType.name}
+                  </span>
                 </div>
               ) : drinkTypeId ? (
-                <span className="text-[14px] text-gray-500">Drink selected</span>
+                <span className="text-[14px] text-gray-500">Loading...</span>
               ) : (
                 <span className="text-[14px] text-gray-400">Select drink</span>
               )}
               <span className="text-gray-400 text-[12px]">Change</span>
             </button>
-            {defaultsSource && !drinkType && (
+            {defaultsSource && (
               <p className="text-[10px] text-gray-400 mt-1 px-1">{defaultsSource}</p>
             )}
           </div>
@@ -229,13 +262,15 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               className="w-full flex items-center justify-between px-3.5 min-h-[48px] bg-gray-50 border border-gray-200 rounded-xl text-left"
             >
               {hasSetup ? (
-                <span className="text-[13px] font-medium text-gray-800">Setup selected</span>
+                <span className="text-[13px] font-medium text-gray-800">
+                  {setupSummary || 'Setup selected'}
+                </span>
               ) : (
                 <span className="text-[14px] text-gray-400">Select race setup</span>
               )}
               <span className="text-gray-400 text-[12px]">Edit</span>
             </button>
-            {defaultsSource && !hasSetup && (
+            {defaultsSource && (
               <p className="text-[10px] text-gray-400 mt-1 px-1">{defaultsSource}</p>
             )}
           </div>
