@@ -1,0 +1,32 @@
+# Codecov configuration
+# Docs: https://docs.codecov.com/docs/codecovyml-reference
+
+coverage:
+  status:
+    project:
+      default:
+        # Project-wide target: track base branch coverage.
+        # Don't allow regression, but tolerate small noise.
+        target: auto
+        threshold: 0.5%
+        informational: false  # blocking status check
+    patch:
+      default:
+        # New/changed code must be 80% covered.
+        target: 80%
+        threshold: 0%
+        informational: false  # blocking status check
+
+# Exclude generated/wiring code from coverage calculation.
+ignore:
+  - "backend/src/entities/**"          # SeaORM-generated entities
+  - "backend/migration/**"             # One-time startup migrations
+  - "backend/src/main.rs"              # Server wiring
+  - "backend/src/seed.rs"              # One-time seeding at startup
+  - "frontend/**"                       # Frontend not yet instrumented
+
+# Comment settings — what Codecov posts on PRs.
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
