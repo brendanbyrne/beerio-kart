@@ -421,7 +421,13 @@ function TimeInputGroup({
   const handleChange = (field: 'm' | 'ss' | 'mmm', maxLen: number) => {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value.replace(/\D/g, '')
-      if (val.length > maxLen) return
+      if (val.length > maxLen) {
+        // Field is full — advance focus without changing the value
+        if (field === 'm') ssRef.current?.focus()
+        else if (field === 'ss') resolvedMmmRef.current?.focus()
+        else if (field === 'mmm') onComplete?.()
+        return
+      }
       setFields((prev) => ({ ...prev, [field]: val }))
       if (val.length === maxLen) {
         if (field === 'm') ssRef.current?.focus()
