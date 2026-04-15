@@ -331,7 +331,7 @@ Notes:
 Validation (application-level):
 - `track_time` must be positive.
 - All three lap times must be positive and non-zero.
-- Lap times should roughly sum to `track_time` (with tolerance for game rounding).
+- Lap times must sum exactly to `track_time`. The frontend warns if they don't match; the backend rejects the submission.
 - Race setup columns pre-fill from previous run (or preferred from profile), but are all required.
 - `track_id` must match the track on the referenced `session_race_id`.
 
