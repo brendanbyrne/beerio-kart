@@ -37,8 +37,8 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(0),
                     )
-                    .col(ColumnDef::new(Users::CreatedAt).text().not_null())
-                    .col(ColumnDef::new(Users::UpdatedAt).text().not_null())
+                    .col(ColumnDef::new(Users::CreatedAt).date_time().not_null())
+                    .col(ColumnDef::new(Users::UpdatedAt).date_time().not_null())
                     .foreign_key(
                         ForeignKey::create()
                             .from(Users::Table, Users::PreferredCharacterId)

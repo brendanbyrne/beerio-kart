@@ -10,8 +10,7 @@ pub struct Model {
     #[sea_orm(column_type = "Text", unique)]
     pub name: String,
     pub alcoholic: bool,
-    #[sea_orm(column_type = "Text")]
-    pub created_at: String,
+    pub created_at: DateTime,
     #[sea_orm(column_type = "Text", nullable)]
     pub created_by: Option<String>,
 }

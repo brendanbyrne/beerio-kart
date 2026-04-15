@@ -368,7 +368,7 @@ async fn test_stale_session_cleanup() {
     let session_id = session["id"].as_str().unwrap().to_string();
 
     // Manually set last_activity_at to 2 hours ago
-    let two_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(2)).to_rfc3339();
+    let two_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(2)).naive_utc();
     use beerio_kart::entities::sessions;
     use sea_orm::EntityTrait;
     let session_model = sessions::Entity::find_by_id(&session_id)

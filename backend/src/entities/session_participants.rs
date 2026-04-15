@@ -9,12 +9,10 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub session_id: String,
-    #[sea_orm(column_type = "Text")]
+    #[sea_orm(column_type = "Text", unique)]
     pub user_id: String,
-    #[sea_orm(column_type = "Text")]
-    pub joined_at: String,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub left_at: Option<String>,
+    pub joined_at: DateTime,
+    pub left_at: Option<DateTime>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

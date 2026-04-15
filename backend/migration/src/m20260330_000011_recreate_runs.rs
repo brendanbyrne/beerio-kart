@@ -1,7 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 /// Drops and recreates the runs table with new columns (session_race_id,
-/// disqualified) and run_flags. Uses raw SQL for SQLite STRICT mode.
+/// disqualified) and run_flags. Uses raw SQL for SQLite-specific features.
 /// Approved by Brendan — no production data to preserve.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -18,7 +18,7 @@ impl MigrationTrait for Migration {
         // Drop old runs table
         conn.execute_unprepared("DROP TABLE IF EXISTS runs").await?;
 
-        // Recreate runs with new columns and STRICT mode
+        // Recreate runs with new columns
         conn.execute_unprepared(
             "CREATE TABLE runs (
                 id TEXT NOT NULL PRIMARY KEY,
@@ -34,26 +34,26 @@ impl MigrationTrait for Migration {
                 lap2_time INTEGER NOT NULL,
                 lap3_time INTEGER NOT NULL,
                 drink_type_id TEXT NOT NULL REFERENCES drink_types(id),
-                disqualified INTEGER NOT NULL DEFAULT 0,
+                disqualified BOOLEAN NOT NULL DEFAULT 0,
                 photo_path TEXT,
-                created_at TEXT NOT NULL,
+                created_at datetime_text NOT NULL,
                 notes TEXT
-            ) STRICT",
+            )",
         )
         .await?;
 
-        // Recreate run_flags with STRICT mode
+        // Recreate run_flags
         conn.execute_unprepared(
             "CREATE TABLE run_flags (
                 id TEXT NOT NULL PRIMARY KEY,
                 run_id TEXT NOT NULL REFERENCES runs(id),
                 reason TEXT NOT NULL,
                 note TEXT,
-                hide_while_pending INTEGER NOT NULL DEFAULT 0,
-                auto_generated INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL,
-                resolved_at TEXT
-            ) STRICT",
+                hide_while_pending BOOLEAN NOT NULL DEFAULT 0,
+                auto_generated BOOLEAN NOT NULL DEFAULT 0,
+                created_at datetime_text NOT NULL,
+                resolved_at datetime_text
+            )",
         )
         .await?;
 

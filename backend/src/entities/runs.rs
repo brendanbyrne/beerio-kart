@@ -25,8 +25,7 @@ pub struct Model {
     pub disqualified: bool,
     #[sea_orm(column_type = "Text", nullable)]
     pub photo_path: Option<String>,
-    #[sea_orm(column_type = "Text")]
-    pub created_at: String,
+    pub created_at: DateTime,
     #[sea_orm(column_type = "Text", nullable)]
     pub notes: Option<String>,
 }

@@ -33,7 +33,7 @@ Consideration of these principles should go into every design decision made. If 
 ## Technical Constraints
 
 - **Don't overengineer before OCR.** Many corner cases (time validation, race setup entry, session tracking) will be solved by OCR. Design the MVP for manual entry with hooks for OCR to slot in later.
-- **SQLite STRICT mode on all tables.** Enforces type checking at the database level (rejects inserting a string into an INTEGER column, etc.). Catches bugs early that would otherwise only surface during a PostgreSQL migration. Requires SQLite 3.37+ (2021).
+- **SQLite STRICT mode on lookup / static tables.** Enforces type checking at the DB level where it adds real safety (static game data tables: `characters`, `bodies`, `wheels`, `gliders`, `cups`, `tracks`). Dropped on tables with timestamp columns (`users`, `sessions`, `session_participants`, `session_races`, `runs`, `drink_types`, `run_flags`) because SQLite STRICT does not accept the `DATETIME` type, and proper Rust-side `DateTime<Utc>` typing outweighs the duplicative safety (Rust's type system already enforces column types for this Rust-only codebase). Requires SQLite 3.37+ (2021).
 - **Must work on Firefox.** Firefox is a target browser alongside Chrome/Safari mobile. Avoid Chrome-only APIs or `-webkit-` prefixes without Firefox equivalents. Test on Firefox before shipping UI changes.
 
 ## Tech Stack
@@ -860,7 +860,7 @@ Required test scenarios per ruleset: normal flow, recusal by one player, recusal
 
 ## Resolved Decisions
 
-- **SQLite STRICT mode on all tables.** Enforces type checking at the database level. Catches bugs early that would otherwise only surface during a PostgreSQL migration. Requires SQLite 3.37+ (2021).
+- **SQLite STRICT mode on lookup / static tables; DATETIME columns on timestamped tables.** STRICT kept on static game data tables for type safety at insert time. Dropped on timestamped tables so columns use `DATETIME` type, giving Rust `DateTime<Utc>` via SeaORM codegen instead of stringly-typed timestamps.
 - **Global leaderboard ranking:** Most track records held.
 - **Account recovery:** Admin reset for now.
 - **Time entry validation:** No validation against plausible track times. Rely on photos and eventual OCR.

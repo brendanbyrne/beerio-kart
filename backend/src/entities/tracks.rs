@@ -27,6 +27,8 @@ pub enum Relation {
     Cups,
     #[sea_orm(has_many = "super::runs::Entity")]
     Runs,
+    #[sea_orm(has_many = "super::session_races::Entity")]
+    SessionRaces,
 }
 
 impl Related<super::cups::Entity> for Entity {
@@ -38,6 +40,12 @@ impl Related<super::cups::Entity> for Entity {
 impl Related<super::runs::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Runs.def()
+    }
+}
+
+impl Related<super::session_races::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SessionRaces.def()
     }
 }
 

@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use chrono::{DateTime, Utc};
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +22,7 @@ pub struct UserPublicProfile {
     pub preferred_wheel_id: Option<i32>,
     pub preferred_glider_id: Option<i32>,
     pub preferred_drink_type_id: Option<String>,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -33,7 +34,7 @@ pub struct UserDetailProfile {
     pub preferred_wheel_id: Option<i32>,
     pub preferred_glider_id: Option<i32>,
     pub preferred_drink_type: Option<DrinkTypeInfo>,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -89,7 +90,7 @@ pub async fn list_users(
                 preferred_wheel_id: u.preferred_wheel_id,
                 preferred_glider_id: u.preferred_glider_id,
                 preferred_drink_type_id: u.preferred_drink_type_id,
-                created_at: u.created_at,
+                created_at: u.created_at.and_utc(),
             })
             .collect(),
     ))
@@ -126,7 +127,7 @@ pub async fn get_user(
         preferred_wheel_id: user.preferred_wheel_id,
         preferred_glider_id: user.preferred_glider_id,
         preferred_drink_type: drink_type,
-        created_at: user.created_at,
+        created_at: user.created_at.and_utc(),
     }))
 }
 
@@ -229,7 +230,7 @@ pub async fn update_user(
         active.preferred_drink_type_id = Set(dt_id_option);
     }
 
-    active.updated_at = Set(chrono::Utc::now().to_rfc3339());
+    active.updated_at = Set(chrono::Utc::now().naive_utc());
     let updated = active.update(&state.db).await?;
 
     // Fetch drink type details for response
@@ -254,6 +255,6 @@ pub async fn update_user(
         preferred_wheel_id: updated.preferred_wheel_id,
         preferred_glider_id: updated.preferred_glider_id,
         preferred_drink_type: drink_type,
-        created_at: updated.created_at,
+        created_at: updated.created_at.and_utc(),
     }))
 }

@@ -28,7 +28,7 @@ impl MigrationTrait for Migration {
                             .unique_key(),
                     )
                     .col(ColumnDef::new(DrinkTypes::Alcoholic).boolean().not_null())
-                    .col(ColumnDef::new(DrinkTypes::CreatedAt).text().not_null())
+                    .col(ColumnDef::new(DrinkTypes::CreatedAt).date_time().not_null())
                     .to_owned(),
             )
             .await

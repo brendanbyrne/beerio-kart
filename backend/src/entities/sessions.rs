@@ -17,22 +17,16 @@ pub struct Model {
     pub least_played_drink_category: Option<String>,
     #[sea_orm(column_type = "Text")]
     pub status: String,
-    #[sea_orm(column_type = "Text")]
-    pub created_at: String,
-    #[sea_orm(column_type = "Text")]
-    pub last_activity_at: String,
+    pub created_at: DateTime,
+    pub last_activity_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::users::Entity",
-        from = "Column::CreatedBy",
-        to = "super::users::Column::Id",
-        on_update = "NoAction",
-        on_delete = "NoAction"
-    )]
-    CreatedByUser,
+    #[sea_orm(has_many = "super::session_participants::Entity")]
+    SessionParticipants,
+    #[sea_orm(has_many = "super::session_races::Entity")]
+    SessionRaces,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::HostId",
@@ -40,11 +34,15 @@ pub enum Relation {
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    HostUser,
-    #[sea_orm(has_many = "super::session_participants::Entity")]
-    SessionParticipants,
-    #[sea_orm(has_many = "super::session_races::Entity")]
-    SessionRaces,
+    Users2,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::CreatedBy",
+        to = "super::users::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Users1,
 }
 
 impl Related<super::session_participants::Entity> for Entity {

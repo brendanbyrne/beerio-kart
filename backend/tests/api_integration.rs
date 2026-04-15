@@ -221,7 +221,7 @@ async fn seed_test_data(db: &sea_orm::DatabaseConnection) {
     let dt_json: Vec<SeedDrinkType> =
         serde_json::from_str(include_str!("../../data/drink_types.json"))
             .expect("drink_types.json");
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().naive_utc();
     let txn = db.begin().await.expect("begin");
     for item in &dt_json {
         let id = drink_type_uuid(&item.name);
@@ -229,7 +229,7 @@ async fn seed_test_data(db: &sea_orm::DatabaseConnection) {
             id: Set(id),
             name: Set(item.name.clone()),
             alcoholic: Set(item.alcoholic),
-            created_at: Set(now.clone()),
+            created_at: Set(now),
             created_by: Set(None),
         }
         .insert(&txn)

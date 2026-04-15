@@ -15,10 +15,8 @@ pub struct Model {
     pub note: Option<String>,
     pub hide_while_pending: bool,
     pub auto_generated: bool,
-    #[sea_orm(column_type = "Text")]
-    pub created_at: String,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub resolved_at: Option<String>,
+    pub created_at: DateTime,
+    pub resolved_at: Option<DateTime>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

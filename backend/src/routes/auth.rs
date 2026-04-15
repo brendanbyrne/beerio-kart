@@ -120,7 +120,7 @@ pub async fn register(
 
     // Generate user ID and timestamps
     let user_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().naive_utc();
 
     // Insert user
     let new_user = users::ActiveModel {
@@ -134,7 +134,7 @@ pub async fn register(
         preferred_glider_id: Set(None),
         preferred_drink_type_id: Set(None),
         refresh_token_version: Set(0),
-        created_at: Set(now.clone()),
+        created_at: Set(now),
         updated_at: Set(now),
     };
 
@@ -286,7 +286,7 @@ pub async fn logout(
     let new_version = db_user.refresh_token_version + 1;
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.refresh_token_version = Set(new_version);
-    active.updated_at = Set(chrono::Utc::now().to_rfc3339());
+    active.updated_at = Set(chrono::Utc::now().naive_utc());
 
     active.update(&state.db).await?;
 
@@ -347,7 +347,7 @@ pub async fn change_password(
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.password_hash = Set(new_hash);
     active.refresh_token_version = Set(new_version);
-    active.updated_at = Set(chrono::Utc::now().to_rfc3339());
+    active.updated_at = Set(chrono::Utc::now().naive_utc());
 
     active.update(&state.db).await?;
 

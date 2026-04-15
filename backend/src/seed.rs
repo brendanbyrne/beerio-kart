@@ -205,7 +205,7 @@ async fn seed_drink_types(db: &DatabaseConnection) -> Result<(), Box<dyn std::er
     let items: Vec<SeedDrinkType> = serde_json::from_str(json_data)?;
     let num_items = items.len();
 
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().naive_utc();
     let txn = db.begin().await?;
     for item in items {
         let id = drink_type_uuid(&item.name);
@@ -213,7 +213,7 @@ async fn seed_drink_types(db: &DatabaseConnection) -> Result<(), Box<dyn std::er
             id: Set(id),
             name: Set(item.name),
             alcoholic: Set(item.alcoholic),
-            created_at: Set(now.clone()),
+            created_at: Set(now),
             created_by: Set(None), // Pre-seeded entries have no creator
         };
         model.insert(&txn).await?;

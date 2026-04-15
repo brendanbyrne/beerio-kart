@@ -32,8 +32,8 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(false),
                     )
-                    .col(ColumnDef::new(RunFlags::CreatedAt).text().not_null())
-                    .col(ColumnDef::new(RunFlags::ResolvedAt).text())
+                    .col(ColumnDef::new(RunFlags::CreatedAt).date_time().not_null())
+                    .col(ColumnDef::new(RunFlags::ResolvedAt).date_time())
                     .foreign_key(
                         ForeignKey::create()
                             .from(RunFlags::Table, RunFlags::RunId)
