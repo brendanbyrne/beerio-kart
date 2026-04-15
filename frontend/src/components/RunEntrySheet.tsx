@@ -39,6 +39,10 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const lap1MRef = useRef<HTMLInputElement>(null)
+  const lap2MRef = useRef<HTMLInputElement>(null)
+  const lap3MRef = useRef<HTMLInputElement>(null)
+
   const [showDrinkPicker, setShowDrinkPicker] = useState(false)
   const [showSetupPicker, setShowSetupPicker] = useState(false)
 
@@ -182,7 +186,12 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
             <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Total Time
             </label>
-            <TimeInputGroup fields={totalTime} setFields={setTotalTime} large />
+            <TimeInputGroup
+              fields={totalTime}
+              setFields={setTotalTime}
+              large
+              onComplete={() => lap1MRef.current?.focus()}
+            />
           </div>
 
           {/* Lap Times */}
@@ -194,19 +203,29 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">L1</span>
                 <div className="flex-1">
-                  <TimeInputGroup fields={lap1} setFields={setLap1} />
+                  <TimeInputGroup
+                    fields={lap1}
+                    setFields={setLap1}
+                    mRef={lap1MRef}
+                    onComplete={() => lap2MRef.current?.focus()}
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">L2</span>
                 <div className="flex-1">
-                  <TimeInputGroup fields={lap2} setFields={setLap2} />
+                  <TimeInputGroup
+                    fields={lap2}
+                    setFields={setLap2}
+                    mRef={lap2MRef}
+                    onComplete={() => lap3MRef.current?.focus()}
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">L3</span>
                 <div className="flex-1">
-                  <TimeInputGroup fields={lap3} setFields={setLap3} />
+                  <TimeInputGroup fields={lap3} setFields={setLap3} mRef={lap3MRef} />
                 </div>
               </div>
             </div>
@@ -358,9 +377,11 @@ interface TimeInputGroupProps {
   fields: TimeFields
   setFields: React.Dispatch<React.SetStateAction<TimeFields>>
   large?: boolean
+  mRef?: React.RefObject<HTMLInputElement | null>
+  onComplete?: () => void
 }
 
-function TimeInputGroup({ fields, setFields, large }: TimeInputGroupProps) {
+function TimeInputGroup({ fields, setFields, large, mRef, onComplete }: TimeInputGroupProps) {
   const ssRef = useRef<HTMLInputElement>(null)
   const mmmRef = useRef<HTMLInputElement>(null)
 
@@ -379,6 +400,7 @@ function TimeInputGroup({ fields, setFields, large }: TimeInputGroupProps) {
       if (val.length === maxLen) {
         if (field === 'm') ssRef.current?.focus()
         else if (field === 'ss') mmmRef.current?.focus()
+        else if (field === 'mmm') onComplete?.()
       }
     }
   }
@@ -386,6 +408,7 @@ function TimeInputGroup({ fields, setFields, large }: TimeInputGroupProps) {
   return (
     <div className="flex items-center gap-1.5 justify-center">
       <input
+        ref={mRef}
         className={`${inputClass} ${large ? 'w-14' : 'w-10'}`}
         value={fields.m}
         onChange={handleChange('m', 1)}
