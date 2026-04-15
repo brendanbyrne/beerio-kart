@@ -139,12 +139,12 @@ pub async fn create_run(
         )));
     }
 
-    // Lap sum should roughly match track_time (backend tolerance: 1s)
+    // Lap times must sum exactly to track_time
     let lap_sum = body.lap1_time + body.lap2_time + body.lap3_time;
-    let diff = (lap_sum - body.track_time).abs();
-    if diff > 1000 {
+    if lap_sum != body.track_time {
+        let diff = (lap_sum - body.track_time).abs();
         return Err(AppError::BadRequest(format!(
-            "Lap times don't match total time (off by {diff}ms, max tolerance 1000ms)"
+            "Lap times must add up to total time (off by {diff}ms)"
         )));
     }
 
@@ -692,7 +692,7 @@ mod tests {
         let host_id = create_user(&db, "host").await;
         let (_, race_id) = setup_session_with_race(&db, &host_id).await;
 
-        // Laps sum to 60000, total is 120000 — off by 60s, way beyond 1s tolerance
+        // Laps sum to 60000 but total is 120000 — must match exactly
         let mut req = valid_run_request(&race_id);
         req.lap1_time = 20_000;
         req.lap2_time = 20_000;

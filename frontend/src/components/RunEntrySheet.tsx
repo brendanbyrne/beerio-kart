@@ -109,7 +109,7 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
       ? parsedLap1 + parsedLap2 + parsedLap3
       : null
   const sumDiff = lapSum !== null && parsedTotal !== null ? Math.abs(lapSum - parsedTotal) : null
-  const showSumWarning = sumDiff !== null && sumDiff > 50
+  const showSumWarning = sumDiff !== null && sumDiff > 0
 
   const handleSubmit = async () => {
     if (
