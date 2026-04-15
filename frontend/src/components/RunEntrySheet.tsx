@@ -39,8 +39,11 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const totalMmmRef = useRef<HTMLInputElement>(null)
   const lap1MRef = useRef<HTMLInputElement>(null)
+  const lap1MmmRef = useRef<HTMLInputElement>(null)
   const lap2MRef = useRef<HTMLInputElement>(null)
+  const lap2MmmRef = useRef<HTMLInputElement>(null)
   const lap3MRef = useRef<HTMLInputElement>(null)
 
   const [showDrinkPicker, setShowDrinkPicker] = useState(false)
@@ -190,6 +193,7 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               fields={totalTime}
               setFields={setTotalTime}
               large
+              mmmRef={totalMmmRef}
               onComplete={() => lap1MRef.current?.focus()}
             />
           </div>
@@ -207,7 +211,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
                     fields={lap1}
                     setFields={setLap1}
                     mRef={lap1MRef}
+                    mmmRef={lap1MmmRef}
                     onComplete={() => lap2MRef.current?.focus()}
+                    onBackspace={() => totalMmmRef.current?.focus()}
                   />
                 </div>
               </div>
@@ -218,14 +224,21 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
                     fields={lap2}
                     setFields={setLap2}
                     mRef={lap2MRef}
+                    mmmRef={lap2MmmRef}
                     onComplete={() => lap3MRef.current?.focus()}
+                    onBackspace={() => lap1MmmRef.current?.focus()}
                   />
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">L3</span>
                 <div className="flex-1">
-                  <TimeInputGroup fields={lap3} setFields={setLap3} mRef={lap3MRef} />
+                  <TimeInputGroup
+                    fields={lap3}
+                    setFields={setLap3}
+                    mRef={lap3MRef}
+                    onBackspace={() => lap2MmmRef.current?.focus()}
+                  />
                 </div>
               </div>
             </div>
@@ -378,12 +391,25 @@ interface TimeInputGroupProps {
   setFields: React.Dispatch<React.SetStateAction<TimeFields>>
   large?: boolean
   mRef?: React.RefObject<HTMLInputElement | null>
+  mmmRef?: React.RefObject<HTMLInputElement | null>
   onComplete?: () => void
+  onBackspace?: () => void
 }
 
-function TimeInputGroup({ fields, setFields, large, mRef, onComplete }: TimeInputGroupProps) {
+function TimeInputGroup({
+  fields,
+  setFields,
+  large,
+  mRef,
+  mmmRef: extMmmRef,
+  onComplete,
+  onBackspace,
+}: TimeInputGroupProps) {
+  const fallbackMRef = useRef<HTMLInputElement>(null)
   const ssRef = useRef<HTMLInputElement>(null)
-  const mmmRef = useRef<HTMLInputElement>(null)
+  const fallbackMmmRef = useRef<HTMLInputElement>(null)
+  const resolvedMRef = mRef ?? fallbackMRef
+  const resolvedMmmRef = extMmmRef ?? fallbackMmmRef
 
   const inputClass = large
     ? 'h-12 text-center text-xl font-mono bg-gray-100 rounded-xl border border-gray-300 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'
@@ -399,8 +425,19 @@ function TimeInputGroup({ fields, setFields, large, mRef, onComplete }: TimeInpu
       setFields((prev) => ({ ...prev, [field]: val }))
       if (val.length === maxLen) {
         if (field === 'm') ssRef.current?.focus()
-        else if (field === 'ss') mmmRef.current?.focus()
+        else if (field === 'ss') resolvedMmmRef.current?.focus()
         else if (field === 'mmm') onComplete?.()
+      }
+    }
+  }
+
+  const handleKeyDown = (field: 'm' | 'ss' | 'mmm') => {
+    return (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Backspace' && e.currentTarget.value === '') {
+        e.preventDefault()
+        if (field === 'mmm') ssRef.current?.focus()
+        else if (field === 'ss') resolvedMRef.current?.focus()
+        else if (field === 'm') onBackspace?.()
       }
     }
   }
@@ -408,10 +445,11 @@ function TimeInputGroup({ fields, setFields, large, mRef, onComplete }: TimeInpu
   return (
     <div className="flex items-center gap-1.5 justify-center">
       <input
-        ref={mRef}
+        ref={resolvedMRef}
         className={`${inputClass} ${large ? 'w-14' : 'w-10'}`}
         value={fields.m}
         onChange={handleChange('m', 1)}
+        onKeyDown={handleKeyDown('m')}
         inputMode="numeric"
         pattern="[0-9]*"
         placeholder="M"
@@ -423,6 +461,7 @@ function TimeInputGroup({ fields, setFields, large, mRef, onComplete }: TimeInpu
         className={`${inputClass} ${large ? 'w-16' : 'w-12'}`}
         value={fields.ss}
         onChange={handleChange('ss', 2)}
+        onKeyDown={handleKeyDown('ss')}
         inputMode="numeric"
         pattern="[0-9]*"
         placeholder="SS"
@@ -430,10 +469,11 @@ function TimeInputGroup({ fields, setFields, large, mRef, onComplete }: TimeInpu
       />
       <span className={sepClass}>.</span>
       <input
-        ref={mmmRef}
+        ref={resolvedMmmRef}
         className={`${inputClass} ${large ? 'w-[72px]' : 'w-14'}`}
         value={fields.mmm}
         onChange={handleChange('mmm', 3)}
+        onKeyDown={handleKeyDown('mmm')}
         inputMode="numeric"
         pattern="[0-9]*"
         placeholder="mmm"
