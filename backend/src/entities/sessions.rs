@@ -34,7 +34,7 @@ pub enum Relation {
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    Users2,
+    HostUser,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::CreatedBy",
@@ -42,7 +42,7 @@ pub enum Relation {
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    Users1,
+    CreatedByUser,
 }
 
 impl Related<super::session_participants::Entity> for Entity {

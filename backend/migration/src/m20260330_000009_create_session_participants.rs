@@ -2,6 +2,9 @@ use sea_orm_migration::prelude::*;
 
 /// Creates the session_participants table — tracks who is in a session
 /// and when they joined/left. Uses raw SQL for SQLite-specific features.
+///
+/// Timestamp columns use the literal type `datetime_text` (not `DATETIME`)
+/// so SeaORM's codegen maps them to `chrono::NaiveDateTime` on regen.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
