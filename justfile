@@ -23,3 +23,16 @@ entities:
 build:
     cd backend && cargo build --release
     cd frontend && bun run build
+
+# Generate HTML coverage report and print path
+coverage:
+    cd backend && cargo llvm-cov --workspace --html
+    @echo "Open backend/target/llvm-cov/html/index.html"
+
+# Quick text summary of coverage
+coverage-summary:
+    cd backend && cargo llvm-cov --workspace --summary-only
+
+# Generate lcov.info file (what CI uses)
+coverage-lcov:
+    cd backend && cargo llvm-cov --workspace --lcov --output-path lcov.info
