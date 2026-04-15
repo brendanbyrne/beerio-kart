@@ -421,13 +421,7 @@ function TimeInputGroup({
   const handleChange = (field: 'm' | 'ss' | 'mmm', maxLen: number) => {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value.replace(/\D/g, '')
-      if (val.length > maxLen) {
-        // Field is full — advance focus without changing the value
-        if (field === 'm') ssRef.current?.focus()
-        else if (field === 'ss') resolvedMmmRef.current?.focus()
-        else if (field === 'mmm') onComplete?.()
-        return
-      }
+      if (val.length > maxLen) return
       setFields((prev) => ({ ...prev, [field]: val }))
       if (val.length === maxLen) {
         if (field === 'm') ssRef.current?.focus()
@@ -437,13 +431,22 @@ function TimeInputGroup({
     }
   }
 
-  const handleKeyDown = (field: 'm' | 'ss' | 'mmm') => {
+  const advanceFrom = (field: 'm' | 'ss' | 'mmm') => {
+    if (field === 'm') ssRef.current?.focus()
+    else if (field === 'ss') resolvedMmmRef.current?.focus()
+    else if (field === 'mmm') onComplete?.()
+  }
+
+  const handleKeyDown = (field: 'm' | 'ss' | 'mmm', maxLen: number) => {
     return (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Backspace' && e.currentTarget.value === '') {
         e.preventDefault()
         if (field === 'mmm') ssRef.current?.focus()
         else if (field === 'ss') resolvedMRef.current?.focus()
         else if (field === 'm') onBackspace?.()
+      } else if (/^[0-9]$/.test(e.key) && e.currentTarget.value.length >= maxLen) {
+        // Field is full and user typed a digit — advance focus
+        advanceFrom(field)
       }
     }
   }
@@ -455,7 +458,7 @@ function TimeInputGroup({
         className={`${inputClass} ${large ? 'w-14' : 'w-10'}`}
         value={fields.m}
         onChange={handleChange('m', 1)}
-        onKeyDown={handleKeyDown('m')}
+        onKeyDown={handleKeyDown('m', 1)}
         inputMode="numeric"
         pattern="[0-9]*"
         placeholder="M"
@@ -467,7 +470,7 @@ function TimeInputGroup({
         className={`${inputClass} ${large ? 'w-16' : 'w-12'}`}
         value={fields.ss}
         onChange={handleChange('ss', 2)}
-        onKeyDown={handleKeyDown('ss')}
+        onKeyDown={handleKeyDown('ss', 2)}
         inputMode="numeric"
         pattern="[0-9]*"
         placeholder="SS"
@@ -479,7 +482,7 @@ function TimeInputGroup({
         className={`${inputClass} ${large ? 'w-[72px]' : 'w-14'}`}
         value={fields.mmm}
         onChange={handleChange('mmm', 3)}
-        onKeyDown={handleKeyDown('mmm')}
+        onKeyDown={handleKeyDown('mmm', 3)}
         inputMode="numeric"
         pattern="[0-9]*"
         placeholder="mmm"
