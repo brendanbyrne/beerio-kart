@@ -92,6 +92,14 @@ Log output is controlled via the `RUST_LOG` environment variable. Defaults to `i
 - `RUST_LOG=debug` — all debug-level output
 - `RUST_LOG=beerio_kart=debug` — debug only for application code, info for dependencies
 
+## Coverage & CI
+
+- **Local:** `just coverage` generates an HTML report; `just coverage-summary` prints a text summary.
+- **CI:** GitHub Actions runs `cargo-llvm-cov` on every PR and push to main. Results upload to Codecov.
+- **Exclusions:** `entities/` (SeaORM codegen), `migration/`, `main.rs` (wiring), `seed.rs` (startup), `frontend/` (not yet instrumented). Only business logic counts.
+- **Policy:** No regression from the base branch (`target: auto`, 0.5% threshold). New/changed code must be 80% covered (`patch: 80%`). As coverage rises from the audit, we'll lock in a hard floor.
+- **Reports:** Codecov posts a PR comment with coverage delta, patch coverage, and per-file breakdown.
+
 ## Naming Conventions
 
 - Table names: plural, snake_case (`drink_types`, `characters`)
