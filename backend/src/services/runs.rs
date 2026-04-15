@@ -130,6 +130,23 @@ pub async fn create_run(
             "All lap times must be positive".to_string(),
         ));
     }
+    if body.lap1_time > MAX_TRACK_TIME_MS
+        || body.lap2_time > MAX_TRACK_TIME_MS
+        || body.lap3_time > MAX_TRACK_TIME_MS
+    {
+        return Err(AppError::BadRequest(format!(
+            "Each lap time must be at most {MAX_TRACK_TIME_MS} ms"
+        )));
+    }
+
+    // Lap sum should roughly match track_time (backend tolerance: 1s)
+    let lap_sum = body.lap1_time + body.lap2_time + body.lap3_time;
+    let diff = (lap_sum - body.track_time).abs();
+    if diff > 1000 {
+        return Err(AppError::BadRequest(format!(
+            "Lap times don't match total time (off by {diff}ms, max tolerance 1000ms)"
+        )));
+    }
 
     // Validate session_race exists and belongs to an active session
     let session_race = session_races::Entity::find_by_id(&body.session_race_id)
@@ -322,6 +339,7 @@ pub async fn list_runs(
         JOIN drink_types dt ON r.drink_type_id = dt.id
         {where_clause}
         ORDER BY r.track_time ASC
+        LIMIT 100
         "#
     );
 
@@ -415,7 +433,7 @@ pub async fn get_run_defaults(
         .await?
         .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
-    if user.preferred_character_id.is_some() {
+    if user.preferred_character_id.is_some() || user.preferred_drink_type_id.is_some() {
         return Ok(RunDefaults {
             drink_type_id: user.preferred_drink_type_id,
             character_id: user.preferred_character_id,
@@ -659,9 +677,39 @@ mod tests {
         req.track_time = -1;
         assert!(create_run(&db, &host_id, req).await.is_err());
 
-        // Over 10 minutes
+        // Over 10 minutes (also adjust laps to match so we test track_time cap, not lap sum)
         let mut req = valid_run_request(&race_id);
         req.track_time = 600_001;
+        req.lap1_time = 200_000;
+        req.lap2_time = 200_000;
+        req.lap3_time = 200_001;
+        assert!(create_run(&db, &host_id, req).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_with_lap_sum_mismatch() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        // Laps sum to 60000, total is 120000 — off by 60s, way beyond 1s tolerance
+        let mut req = valid_run_request(&race_id);
+        req.lap1_time = 20_000;
+        req.lap2_time = 20_000;
+        req.lap3_time = 20_000;
+        assert!(create_run(&db, &host_id, req).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_run_fails_with_lap_time_exceeding_max() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_, race_id) = setup_session_with_race(&db, &host_id).await;
+
+        let mut req = valid_run_request(&race_id);
+        req.lap1_time = 600_001;
         assert!(create_run(&db, &host_id, req).await.is_err());
     }
 
@@ -810,11 +858,17 @@ mod tests {
         // Host submits slower time
         let mut slow = valid_run_request(&race_id);
         slow.track_time = 150_000;
+        slow.lap1_time = 50_000;
+        slow.lap2_time = 50_000;
+        slow.lap3_time = 50_000;
         create_run(&db, &host_id, slow).await.unwrap();
 
         // User submits faster time
         let mut fast = valid_run_request(&race_id);
         fast.track_time = 100_000;
+        fast.lap1_time = 33_000;
+        fast.lap2_time = 33_000;
+        fast.lap3_time = 34_000;
         create_run(&db, &user_id, fast).await.unwrap();
 
         let runs = list_runs(
