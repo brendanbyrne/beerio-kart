@@ -1,5 +1,6 @@
 /** Format milliseconds as M:SS.mmm (no leading zero on minutes). */
 export function formatTime(ms: number): string {
+  if (ms < 0) return '\u2014'
   const minutes = Math.floor(ms / 60000)
   const seconds = Math.floor((ms % 60000) / 1000)
   const millis = ms % 1000

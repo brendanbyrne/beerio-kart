@@ -11,6 +11,7 @@ pub mod m20260330_000008_create_sessions;
 pub mod m20260330_000009_create_session_participants;
 pub mod m20260330_000010_create_session_races;
 pub mod m20260330_000011_recreate_runs;
+pub mod m20260330_000012_add_runs_unique_constraint;
 
 pub struct Migrator;
 
@@ -29,6 +30,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260330_000009_create_session_participants::Migration),
             Box::new(m20260330_000010_create_session_races::Migration),
             Box::new(m20260330_000011_recreate_runs::Migration),
+            Box::new(m20260330_000012_add_runs_unique_constraint::Migration),
         ]
     }
 }
