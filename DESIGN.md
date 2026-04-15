@@ -450,7 +450,7 @@ Future enhancement: prioritize sessions containing players you've competed with 
 2. Everyone in the session sees the track. Each person races on their TV in Time Trial mode.
 3. After racing, each person submits their time:
    - Track is already known (from the session race) — no track selection needed.
-   - Enter time (M:SS.mmm — minutes field accepts 1-2 digits with no leading zero, manual entry for v1, camera/OCR later).
+   - Enter time (M:SS.mmm — single digit minutes, no leading zero, manual entry for v1, camera/OCR later).
    - Drink defaults to previous, fallback to preferred. Can change or add new inline.
    - Race setup defaults to previous, fallback to preferred. Can change.
    - Option to mark the run as DQ'd (didn't finish drink before finishing race).
@@ -643,7 +643,7 @@ The main play screen. Shows:
 
 ### 4. Run Entry (within session)
 Streamlined compared to standalone entry — the track is already known from the session.
-1. Enter time (M:SS.mmm — minutes field accepts 1-2 digits with no leading zero, manual entry for v1, camera/OCR later).
+1. Enter time (M:SS.mmm — single digit minutes, no leading zero, manual entry for v1, camera/OCR later).
 2. Drink defaults to previous, fallback to preferred. Can change or add new inline.
 3. Race setup defaults to previous, fallback to preferred. Can change.
 4. Option to mark run as DQ'd (didn't finish drink before finishing race).
