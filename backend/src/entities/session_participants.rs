@@ -9,7 +9,9 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub session_id: String,
-    #[sea_orm(column_type = "Text", unique)]
+    // codegen: partial unique index (WHERE left_at IS NULL) is read as a full
+    // unique constraint; removed here so the users relation stays has_many.
+    #[sea_orm(column_type = "Text")]
     pub user_id: String,
     pub joined_at: DateTime,
     pub left_at: Option<DateTime>,

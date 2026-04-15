@@ -2,6 +2,9 @@ use sea_orm_migration::prelude::*;
 
 /// Creates the session_races table — each race within a session.
 /// Uses raw SQL for SQLite-specific features and composite unique index.
+///
+/// Timestamp columns use the literal type `datetime_text` (not `DATETIME`)
+/// so SeaORM's codegen maps them to `chrono::NaiveDateTime` on regen.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 

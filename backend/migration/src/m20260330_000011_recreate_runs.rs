@@ -3,6 +3,9 @@ use sea_orm_migration::prelude::*;
 /// Drops and recreates the runs table with new columns (session_race_id,
 /// disqualified) and run_flags. Uses raw SQL for SQLite-specific features.
 /// Approved by Brendan — no production data to preserve.
+///
+/// Timestamp columns use the literal type `datetime_text` (not `DATETIME`)
+/// so SeaORM's codegen maps them to `chrono::NaiveDateTime` on regen.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 

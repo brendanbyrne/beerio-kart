@@ -2,6 +2,10 @@ use sea_orm_migration::prelude::*;
 
 /// Creates the sessions table — the organizational unit for group play.
 /// Uses raw SQL for SQLite-specific features (SeaORM's builder doesn't support them).
+///
+/// Timestamp columns use the literal type `datetime_text` (not `DATETIME`)
+/// because that's the exact name SeaORM's codegen recognizes when mapping
+/// SQLite columns back to `chrono::NaiveDateTime`.
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 

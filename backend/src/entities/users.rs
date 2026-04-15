@@ -60,7 +60,10 @@ pub enum Relation {
     Gliders,
     #[sea_orm(has_many = "super::runs::Entity")]
     Runs,
-    #[sea_orm(has_one = "super::session_participants::Entity")]
+    // codegen: partial unique index on session_participants.user_id produces
+    // has_one; corrected to has_many because a user has one active and many
+    // historical participant rows.
+    #[sea_orm(has_many = "super::session_participants::Entity")]
     SessionParticipants,
     #[sea_orm(has_many = "super::session_races::Entity")]
     SessionRaces,
