@@ -386,13 +386,13 @@ function TimeInputGroup({ fields, setFields, large }: TimeInputGroupProps) {
   return (
     <div className="flex items-center gap-1.5 justify-center">
       <input
-        className={`${inputClass} ${large ? 'w-14' : 'w-12'}`}
+        className={`${inputClass} ${large ? 'w-14' : 'w-10'}`}
         value={fields.m}
-        onChange={handleChange('m', 2)}
+        onChange={handleChange('m', 1)}
         inputMode="numeric"
         pattern="[0-9]*"
         placeholder="M"
-        maxLength={2}
+        maxLength={1}
       />
       <span className={sepClass}>:</span>
       <input
