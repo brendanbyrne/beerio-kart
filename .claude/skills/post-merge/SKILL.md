@@ -1,48 +1,56 @@
 ---
 name: post-merge
 description: >
-  Clean up after a PR has been merged. Checks out main, pulls the latest changes,
-  and deletes the merged PR branch both locally and from the remote. Use this skill
-  when the user says a PR has been merged, or asks to clean up after a merge.
+  Clean up after a PR has been merged. Determines the branch to delete, checks out
+  main, pulls the latest changes, and deletes the merged branch locally and remotely.
+  Use when the user says a PR has been merged, or asks to clean up after a merge.
 ---
 
 # Post-Merge Cleanup
 
 After a PR has been merged, clean up the local and remote branches.
 
-## Steps
+The guardrails live in [cleanup.sh](cleanup.sh) — the script refuses to delete
+`main`/`master`, refuses empty branch names, uses `git branch -d` (not `-D`),
+and exits non-zero on an unmerged-work refusal instead of escalating.
 
-1. Identify the current branch name (the one being cleaned up).
-2. Check out `main`.
-3. Pull the latest changes from the remote.
-4. Delete the merged branch locally.
-5. Delete the merged branch from the remote (if it still exists).
-6. Confirm cleanup is complete.
+## Procedure
 
-## Implementation
+1. **Determine the target branch.** Run:
 
-```bash
-# 1. Capture the current branch before switching
-BRANCH=$(git branch --show-current)
+   ```bash
+   git branch --show-current
+   ```
 
-# 2. If already on main, ask the user which branch to delete
-#    Otherwise, proceed with the current branch
+   - If output is `main` or `master` → ask the user which branch to clean up.
+     Do NOT pass `main`/`master` to the script (it would refuse anyway, but
+     don't rely on that).
+   - If output is empty → detached HEAD. Ask the user.
+   - Otherwise → that's your candidate. **Do not trust the session's initial
+     gitStatus context** — the checkout may have changed. Always re-check.
 
-# 3. Check out main
-git checkout main
+2. **State the target in chat and confirm before running.** Example:
+   "Cleaning up `feature/foo` — proceeding." This is the last human-visible
+   checkpoint before destructive ops.
 
-# 4. Pull latest
-git pull
+3. **Run the cleanup script** with the confirmed branch name:
 
-# 5. Delete local branch
-git branch -d "$BRANCH"
+   ```bash
+   .claude/skills/post-merge/cleanup.sh <branch-name>
+   ```
 
-# 6. Delete remote branch (if it exists)
-git push origin --delete "$BRANCH" 2>/dev/null || echo "Remote branch already deleted"
-```
+   The script will switch to `main`, pull, delete the local branch (`-d`), and
+   delete the remote branch. It prints a `git status` at the end.
+
+4. **On script failure with "not fully merged"**: stop. Do not run `git branch
+   -D` on your own. Ask the user whether the PR was actually merged (e.g., via
+   a different merge strategy locally) and get explicit approval before using
+   `-D`.
 
 ## Notes
 
-- Use `git branch -d` (not `-D`) so Git refuses to delete an unmerged branch — a safety net.
-- If the branch has already been deleted on the remote (e.g., GitHub auto-deletes), that's fine — just note it.
-- If the user is already on `main`, ask which branch to clean up.
+- Squash and rebase merges produce a warning like *"deleting branch X that has
+  been merged to refs/remotes/origin/X, but not yet merged to HEAD"* — that's
+  expected and `-d` succeeds. No action needed.
+- If the remote branch was already auto-deleted by GitHub, the remote-delete
+  step prints "remote branch already deleted" and continues.
