@@ -42,9 +42,14 @@ impl SessionContext {
         helpers::require_active_participant(db, &self.session.id, user_id).await
     }
 
-    /// Bump `last_activity_at` to now. Delegates to `helpers::touch_session`.
-    pub async fn touch<C: ConnectionTrait>(&self, db: &C) -> Result<(), AppError> {
-        helpers::touch_session(db, &self.session.id).await
+    /// Bump `last_activity_at` to now in both the DB and this struct.
+    /// Delegates the UPDATE to `helpers::touch_session`, then refreshes
+    /// the in-memory field so callers that read it post-touch see the
+    /// updated value.
+    pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), AppError> {
+        helpers::touch_session(db, &self.session.id).await?;
+        self.session.last_activity_at = chrono::Utc::now().naive_utc();
+        Ok(())
     }
 }
 
@@ -167,22 +172,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn touch_bumps_last_activity_at() {
+    async fn touch_bumps_last_activity_at_in_db_and_struct() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
         let session_id = insert_session(&db, &host, "active").await;
-        let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
+        let mut ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
         let before = ctx.session.last_activity_at;
         tokio::time::sleep(std::time::Duration::from_millis(2)).await;
         ctx.touch(&db).await.unwrap();
 
-        let after = sessions::Entity::find_by_id(&session_id)
+        // In-memory field is updated.
+        assert!(
+            ctx.session.last_activity_at > before,
+            "struct field should advance: before={before}, after={}",
+            ctx.session.last_activity_at
+        );
+
+        // DB is also updated.
+        let db_value = sessions::Entity::find_by_id(&session_id)
             .one(&db)
             .await
             .unwrap()
             .unwrap()
             .last_activity_at;
-        assert!(after > before, "before={before}, after={after}");
+        assert!(
+            db_value > before,
+            "DB should advance: before={before}, after={db_value}"
+        );
     }
 }

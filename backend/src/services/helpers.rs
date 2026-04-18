@@ -88,13 +88,19 @@ where
 }
 
 /// Pick a random track, excluding IDs in `exclude`. If every track is in the
-/// exclusion set (pool exhausted), reset by picking from the full set and
-/// log an info-level message.
+/// exclusion set (pool exhausted), reset the pool — but keep any IDs in
+/// `always_exclude` filtered out even after the reset.
+///
+/// Two-tier exclusion supports both callers:
+/// - `next_track`: `exclude = &used_ids, always_exclude = &[]` — full reset.
+/// - `skip_turn`:  `exclude = &used_ids, always_exclude = &[skipped_id]` —
+///   the skipped track stays excluded even through a reset.
 ///
 /// Returns `Internal` only if the `tracks` table is empty (seed error).
 pub async fn pick_random_track<C: ConnectionTrait>(
     db: &C,
     exclude: &[i32],
+    always_exclude: &[i32],
 ) -> Result<tracks::Model, AppError> {
     let all_tracks = tracks::Entity::find().all(db).await?;
     if all_tracks.is_empty() {
@@ -103,15 +109,19 @@ pub async fn pick_random_track<C: ConnectionTrait>(
 
     let available: Vec<&tracks::Model> = all_tracks
         .iter()
-        .filter(|t| !exclude.contains(&t.id))
+        .filter(|t| !exclude.contains(&t.id) && !always_exclude.contains(&t.id))
         .collect();
 
     let pool: Vec<&tracks::Model> = if available.is_empty() {
         tracing::info!(
             excluded = exclude.len(),
-            "Track pool exhausted — resetting exclusion",
+            always_excluded = always_exclude.len(),
+            "Track pool exhausted — resetting (always_exclude still applied)",
         );
-        all_tracks.iter().collect()
+        all_tracks
+            .iter()
+            .filter(|t| !always_exclude.contains(&t.id))
+            .collect()
     } else {
         available
     };
@@ -325,7 +335,7 @@ mod tests {
         seed_tracks_for_test(&db).await;
 
         // Exclude tracks 1,2,3 — only 4,5,6 are available.
-        let chosen = pick_random_track(&db, &[1, 2, 3]).await.unwrap();
+        let chosen = pick_random_track(&db, &[1, 2, 3], &[]).await.unwrap();
         assert!([4, 5, 6].contains(&chosen.id));
     }
 
@@ -335,15 +345,35 @@ mod tests {
         seed_tracks_for_test(&db).await;
 
         // Exclude everything — should still return one of the seeded tracks.
-        let chosen = pick_random_track(&db, &[1, 2, 3, 4, 5, 6]).await.unwrap();
+        let chosen = pick_random_track(&db, &[1, 2, 3, 4, 5, 6], &[])
+            .await
+            .unwrap();
         assert!([1, 2, 3, 4, 5, 6].contains(&chosen.id));
+    }
+
+    #[tokio::test]
+    async fn pick_random_track_always_exclude_survives_reset() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await; // 6 tracks: IDs 1-6
+
+        // Exhaust the pool (exclude all 6) but always_exclude track 3.
+        // On reset, track 3 stays excluded — result must not be 3.
+        for _ in 0..20 {
+            let chosen = pick_random_track(&db, &[1, 2, 3, 4, 5, 6], &[3])
+                .await
+                .unwrap();
+            assert_ne!(
+                chosen.id, 3,
+                "always_exclude track must stay excluded through pool reset"
+            );
+        }
     }
 
     #[tokio::test]
     async fn pick_random_track_empty_table_is_internal() {
         let db = setup_db().await;
         // No tracks seeded.
-        let err = pick_random_track(&db, &[]).await.unwrap_err();
+        let err = pick_random_track(&db, &[], &[]).await.unwrap_err();
         assert!(matches!(err, AppError::Internal(_)));
     }
 
@@ -370,7 +400,7 @@ mod tests {
         .await
         .unwrap();
 
-        let chosen = pick_random_track(&db, &[]).await.unwrap();
+        let chosen = pick_random_track(&db, &[], &[]).await.unwrap();
         assert_eq!(chosen.id, 42);
     }
 }
