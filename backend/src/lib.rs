@@ -1,4 +1,5 @@
 pub mod config;
+pub mod domain;
 pub mod drink_type_id;
 #[allow(unused_imports)]
 pub mod entities;
@@ -6,6 +7,9 @@ pub mod error;
 pub mod middleware;
 pub mod routes;
 pub mod services;
+
+#[cfg(test)]
+pub mod test_helpers;
 
 use std::sync::Arc;
 
