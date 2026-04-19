@@ -447,7 +447,12 @@ pub async fn join_session(
     session_id: &str,
     user_id: &str,
 ) -> Result<(), AppError> {
-    helpers::load_active_session(db, session_id).await?;
+    helpers::load_active_session(db, session_id)
+        .await
+        .map_err(|e| match e {
+            AppError::Conflict(_) => AppError::Conflict("Cannot join a closed session".to_string()),
+            other => other,
+        })?;
     check_not_in_any_session(db, user_id).await?;
 
     let now = Utc::now().naive_utc();
@@ -481,7 +486,11 @@ pub async fn leave_session(
         .await?
         .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
-    let participant = helpers::require_active_participant(db, session_id, user_id).await?;
+    // require_active_participant returns Forbidden (authorization guard), but
+    // leaving a session you're not in is bad input, not an auth failure.
+    let participant = helpers::require_active_participant(db, session_id, user_id)
+        .await
+        .map_err(|_| AppError::BadRequest("Not currently in this session".to_string()))?;
 
     let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
