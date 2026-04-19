@@ -1,8 +1,7 @@
 //! Small, reusable service-layer helpers.
 //!
-//! These are building blocks for the larger service functions. PR B lands
-//! them with tests; PR C migrates the existing `sessions` / `runs` service
-//! functions to use them.
+//! Building blocks for the larger service functions in `sessions` and `runs`.
+//! Each helper is independently tested.
 
 use chrono::Utc;
 use rand::seq::SliceRandom;

@@ -1,8 +1,8 @@
 //! Shared test setup for service-layer unit tests.
 //!
-//! PR B introduces this module side-by-side with the existing duplicated
-//! helpers in `services/sessions.rs` and `services/runs.rs`. PR C removes
-//! the duplicates and migrates call sites here.
+//! Provides common helpers (`setup_db`, `create_user`, `seed_tracks_for_test`,
+//! `seed_game_data`, etc.) used by `services/sessions`, `services/runs`,
+//! `services/helpers`, and `services/session_context` test modules.
 //!
 //! Future: if tests move to an integration-test layout (`backend/tests/` with
 //! a shared `common/mod.rs`), relocate these helpers there instead.

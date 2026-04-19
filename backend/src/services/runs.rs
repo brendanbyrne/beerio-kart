@@ -154,7 +154,14 @@ pub async fn create_run(
         .await?
         .ok_or_else(|| AppError::NotFound("Session race not found".to_string()))?;
 
-    helpers::load_active_session(db, &session_race.session_id).await?;
+    helpers::load_active_session(db, &session_race.session_id)
+        .await
+        .map_err(|e| match e {
+            AppError::Conflict(_) => {
+                AppError::Conflict("Cannot submit run for a closed session".to_string())
+            }
+            other => other,
+        })?;
     helpers::require_active_participant(db, &session_race.session_id, user_id).await?;
 
     // Check for duplicate submission
@@ -319,7 +326,16 @@ pub async fn delete_run(
         .await?
         .ok_or_else(|| AppError::Internal("Session race not found for run".to_string()))?;
 
-    helpers::load_active_session(db, &session_race.session_id).await?;
+    // FK guarantees the session exists; NotFound here signals data corruption.
+    helpers::load_active_session(db, &session_race.session_id)
+        .await
+        .map_err(|e| match e {
+            AppError::NotFound(_) => AppError::Internal("Session not found for run".to_string()),
+            AppError::Conflict(_) => {
+                AppError::Conflict("Cannot delete run from a closed session".to_string())
+            }
+            other => other,
+        })?;
 
     let txn = db.begin().await?;
 
