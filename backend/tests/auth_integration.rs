@@ -495,6 +495,33 @@ async fn test_register_unicode_username_within_30_chars() {
 }
 
 #[tokio::test]
+async fn test_double_logout_is_idempotent() {
+    let server = setup_test_app().await;
+
+    let reg_response = server
+        .post("/api/v1/auth/register")
+        .json(&json!({ "username": "repeat", "password": "password123" }))
+        .await;
+    let reg_body: Value = reg_response.json();
+    let access_token = reg_body["access_token"].as_str().unwrap();
+
+    // First logout
+    server
+        .post("/api/v1/auth/logout")
+        .add_header("Authorization", format!("Bearer {access_token}"))
+        .await
+        .assert_status(StatusCode::OK);
+
+    // Second logout with the same (still-valid, short-lived) access token
+    // should succeed without 500 — version was bumped once, bumping again is fine.
+    server
+        .post("/api/v1/auth/logout")
+        .add_header("Authorization", format!("Bearer {access_token}"))
+        .await
+        .assert_status(StatusCode::OK);
+}
+
+#[tokio::test]
 async fn test_login_trims_whitespace_like_register() {
     let server = setup_test_app().await;
 

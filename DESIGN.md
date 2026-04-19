@@ -49,6 +49,10 @@ Consideration of these principles should go into every design decision made. If 
 | Containers  | Dockerfile + compose.yaml    | Works with Docker or Podman                                  |
 | Serving     | Axum (single container)       | Axum serves both the API and the frontend static files via `tower-http::ServeDir`. No separate nginx or frontend container. |
 
+### ORM Usage
+
+Use SeaORM's builder API for single-table reads and writes (`Entity::find()`, `Entity::find_by_id`, `ActiveModel::insert` / `update`). Drop to raw SQL via `find_by_statement` only for multi-table JOINs where the builder's JOIN ergonomics become clumsy (most of `get_session_detail`'s helper queries, `list_runs`'s dynamic filters). Avoid hand-rolling SQL for single-table ops — the builder gives you type safety and refactor-proofness for free.
+
 ## Observability
 
 ### Crates
