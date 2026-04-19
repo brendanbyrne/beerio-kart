@@ -8,7 +8,6 @@
 //! a shared `common/mod.rs`), relocate these helpers there instead.
 
 #![cfg(test)]
-#![allow(dead_code)] // Nothing consumes these until PR C.
 
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, Set};
