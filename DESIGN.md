@@ -710,17 +710,19 @@ beerio-kart/
 │       ├── routes/
 │       │   ├── mod.rs
 │       │   ├── auth.rs
-│       │   ├── sessions.rs
+│       │   ├── drink_types.rs
+│       │   ├── game_data.rs
 │       │   ├── runs.rs
-│       │   ├── tracks.rs
-│       │   ├── stats.rs
-│       │   ├── users.rs
-│       │   └── admin.rs
+│       │   ├── sessions.rs
+│       │   └── users.rs
 │       ├── services/            # Business logic layer
 │       │   ├── mod.rs
 │       │   ├── auth.rs
+│       │   ├── helpers.rs       # Reusable service-layer primitives
+│       │   ├── runs.rs
+│       │   ├── session_context.rs
 │       │   ├── sessions.rs      # Session lifecycle, rulesets, track selection
-│       │   └── stats.rs
+│       │   └── users.rs
 │       └── middleware/
 │           ├── mod.rs
 │           └── auth.rs          # JWT/session validation + admin check

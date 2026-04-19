@@ -495,7 +495,7 @@ async fn test_register_unicode_username_within_30_chars() {
 }
 
 #[tokio::test]
-async fn test_double_logout_is_idempotent() {
+async fn test_second_logout_with_valid_access_token_returns_200() {
     let server = setup_test_app().await;
 
     let reg_response = server
@@ -505,15 +505,16 @@ async fn test_double_logout_is_idempotent() {
     let reg_body: Value = reg_response.json();
     let access_token = reg_body["access_token"].as_str().unwrap();
 
-    // First logout
+    // First logout — bumps refresh_token_version from 0 to 1
     server
         .post("/api/v1/auth/logout")
         .add_header("Authorization", format!("Bearer {access_token}"))
         .await
         .assert_status(StatusCode::OK);
 
-    // Second logout with the same (still-valid, short-lived) access token
-    // should succeed without 500 — version was bumped once, bumping again is fine.
+    // Second logout — bumps version again (1 to 2). Not idempotent: each
+    // call increments the version, invalidating any refresh tokens issued
+    // between the two calls. But the endpoint itself doesn't error.
     server
         .post("/api/v1/auth/logout")
         .add_header("Authorization", format!("Bearer {access_token}"))
