@@ -113,13 +113,9 @@ pub struct RunFilters {
     pub track_id: Option<i32>,
 }
 
-/// Create a run for a session race. Validates all inputs before inserting.
-pub async fn create_run(
-    db: &DatabaseConnection,
-    user_id: &str,
-    body: CreateRunRequest,
-) -> Result<RunDetail, AppError> {
-    // Validate time fields
+/// Validate time fields on a run submission: track_time range, lap times
+/// positive and within range, and lap sum equals track_time.
+fn validate_time_fields(body: &CreateRunRequest) -> Result<(), AppError> {
     if body.track_time <= 0 || body.track_time > MAX_TRACK_TIME_MS {
         return Err(AppError::BadRequest(format!(
             "track_time must be between 1 and {MAX_TRACK_TIME_MS} ms"
@@ -138,8 +134,6 @@ pub async fn create_run(
             "Each lap time must be at most {MAX_TRACK_TIME_MS} ms"
         )));
     }
-
-    // Lap times must sum exactly to track_time
     let lap_sum = body.lap1_time + body.lap2_time + body.lap3_time;
     if lap_sum != body.track_time {
         let diff = (lap_sum - body.track_time).abs();
@@ -147,6 +141,16 @@ pub async fn create_run(
             "Lap times must add up to total time (off by {diff}ms)"
         )));
     }
+    Ok(())
+}
+
+/// Create a run for a session race. Validates all inputs before inserting.
+pub async fn create_run(
+    db: &DatabaseConnection,
+    user_id: &str,
+    body: CreateRunRequest,
+) -> Result<RunDetail, AppError> {
+    validate_time_fields(&body)?;
 
     // Validate session_race exists and belongs to an active session
     let session_race = session_races::Entity::find_by_id(&body.session_race_id)
