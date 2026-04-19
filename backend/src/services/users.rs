@@ -111,6 +111,8 @@ pub async fn update_profile(
 }
 
 /// Load drink type details and assemble the full profile response.
+/// TODO: if profile fetching becomes a hot path, collapse the separate
+/// drink_type lookup into a JOIN query to avoid the extra round trip.
 pub async fn build_detail_profile(
     db: &DatabaseConnection,
     user: users::Model,
