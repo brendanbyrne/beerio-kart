@@ -56,48 +56,9 @@ impl SessionContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
-    use uuid::Uuid;
+    use sea_orm::EntityTrait;
 
-    use crate::test_helpers::{create_user, setup_db};
-
-    async fn insert_session(
-        db: &sea_orm::DatabaseConnection,
-        host_id: &str,
-        status: &str,
-    ) -> String {
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().naive_utc();
-        sessions::ActiveModel {
-            id: Set(id.clone()),
-            created_by: Set(host_id.to_string()),
-            host_id: Set(host_id.to_string()),
-            ruleset: Set("random".to_string()),
-            least_played_drink_category: Set(None),
-            status: Set(status.to_string()),
-            created_at: Set(now),
-            last_activity_at: Set(now),
-        }
-        .insert(db)
-        .await
-        .expect("insert session");
-        id
-    }
-
-    async fn insert_participant(db: &sea_orm::DatabaseConnection, session_id: &str, user_id: &str) {
-        let now = Utc::now().naive_utc();
-        session_participants::ActiveModel {
-            id: Set(Uuid::new_v4().to_string()),
-            session_id: Set(session_id.to_string()),
-            user_id: Set(user_id.to_string()),
-            joined_at: Set(now),
-            left_at: Set(None),
-        }
-        .insert(db)
-        .await
-        .expect("insert participant");
-    }
+    use crate::test_helpers::{create_user, insert_participant, insert_session, setup_db};
 
     #[tokio::test]
     async fn load_active_populates_session() {
@@ -158,7 +119,7 @@ mod tests {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
         let session_id = insert_session(&db, &host, "active").await;
-        insert_participant(&db, &session_id, &host).await;
+        insert_participant(&db, &session_id, &host, None).await;
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
         // Happy path: host is a participant.

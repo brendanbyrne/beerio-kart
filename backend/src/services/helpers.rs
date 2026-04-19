@@ -140,35 +140,13 @@ pub async fn pick_random_track<C: ConnectionTrait>(
 mod tests {
     use super::*;
     use sea_orm::{ActiveModelTrait, Set};
-    use uuid::Uuid;
 
     use crate::entities::{characters, cups, tracks};
-    use crate::test_helpers::{create_user, seed_tracks_for_test, setup_db};
+    use crate::test_helpers::{
+        create_user, insert_participant, insert_session, seed_tracks_for_test, setup_db,
+    };
 
     // --- load_active_session ---
-
-    async fn insert_session(
-        db: &sea_orm::DatabaseConnection,
-        host_id: &str,
-        status: &str,
-    ) -> String {
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().naive_utc();
-        sessions::ActiveModel {
-            id: Set(id.clone()),
-            created_by: Set(host_id.to_string()),
-            host_id: Set(host_id.to_string()),
-            ruleset: Set("random".to_string()),
-            least_played_drink_category: Set(None),
-            status: Set(status.to_string()),
-            created_at: Set(now),
-            last_activity_at: Set(now),
-        }
-        .insert(db)
-        .await
-        .expect("insert session");
-        id
-    }
 
     #[tokio::test]
     async fn load_active_session_returns_active() {
@@ -201,25 +179,6 @@ mod tests {
     }
 
     // --- require_active_participant ---
-
-    async fn insert_participant(
-        db: &sea_orm::DatabaseConnection,
-        session_id: &str,
-        user_id: &str,
-        left_at: Option<chrono::NaiveDateTime>,
-    ) {
-        let now = Utc::now().naive_utc();
-        session_participants::ActiveModel {
-            id: Set(Uuid::new_v4().to_string()),
-            session_id: Set(session_id.to_string()),
-            user_id: Set(user_id.to_string()),
-            joined_at: Set(now),
-            left_at: Set(left_at),
-        }
-        .insert(db)
-        .await
-        .expect("insert participant");
-    }
 
     #[tokio::test]
     async fn require_active_participant_returns_row_when_active() {
