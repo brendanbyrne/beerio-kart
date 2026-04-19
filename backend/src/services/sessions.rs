@@ -285,40 +285,38 @@ pub struct SessionDetail {
     pub races: Vec<RaceInfo>,
 }
 
-/// Get full session detail — the polling endpoint.
-/// Uses JOINs to fetch participants with usernames in a single query.
-pub async fn get_session_detail(
-    db: &DatabaseConnection,
-    session_id: &str,
-) -> Result<SessionDetail, AppError> {
-    let session = sessions::Entity::find_by_id(session_id)
-        .one(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+// ── get_session_detail sub-queries ────────────────────────────────────
 
-    let host_username = users::Entity::find_by_id(&session.host_id)
+/// Look up the host's username. Returns `Internal` if the FK-referenced
+/// user row is missing (data corruption — FKs should prevent this).
+async fn load_host_username(db: &impl ConnectionTrait, host_id: &str) -> Result<String, AppError> {
+    users::Entity::find_by_id(host_id)
         .one(db)
         .await?
         .map(|u| u.username)
-        .unwrap_or_else(|| "Unknown".to_string());
+        .ok_or_else(|| AppError::Internal(format!("Host user not found for host_id {host_id}")))
+}
 
-    // Fetch all participants with usernames in a single JOIN query
-    let participant_rows =
-        ParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-            db.get_database_backend(),
-            r#"
+/// Fetch all participants with usernames in a single JOIN query.
+async fn load_participants(
+    db: &impl ConnectionTrait,
+    session_id: &str,
+) -> Result<Vec<ParticipantInfo>, AppError> {
+    let rows = ParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
         SELECT sp.user_id, u.username, sp.joined_at, sp.left_at
         FROM session_participants sp
         JOIN users u ON sp.user_id = u.id
         WHERE sp.session_id = $1
         ORDER BY sp.joined_at ASC
         "#,
-            [session_id.into()],
-        ))
-        .all(db)
-        .await?;
+        [session_id.into()],
+    ))
+    .all(db)
+    .await?;
 
-    let participants: Vec<ParticipantInfo> = participant_rows
+    Ok(rows
         .into_iter()
         .map(|r| ParticipantInfo {
             user_id: r.user_id,
@@ -326,93 +324,96 @@ pub async fn get_session_detail(
             joined_at: r.joined_at.and_utc(),
             left_at: r.left_at.map(|t| t.and_utc()),
         })
-        .collect();
+        .collect())
+}
 
-    let races_created = session_races::Entity::find()
-        .filter(session_races::Column::SessionId.eq(session_id))
-        .count(db)
-        .await? as usize;
-    let race_number = races_created.max(1);
-
-    // Fetch the most recent race with track + cup info in a single JOIN
-    let current_race_row =
-        CurrentRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-            db.get_database_backend(),
-            r#"
-            SELECT sr.id, sr.race_number, sr.track_id,
-                   t.name AS track_name, c.name AS cup_name,
-                   t.image_path, sr.created_at
-            FROM session_races sr
-            JOIN tracks t ON sr.track_id = t.id
-            JOIN cups c ON t.cup_id = c.id
-            WHERE sr.session_id = $1
-            ORDER BY sr.race_number DESC
-            LIMIT 1
-            "#,
-            [session_id.into()],
-        ))
-        .one(db)
-        .await?;
-
-    // Fetch submissions for the current race (if any)
-    let submissions = if let Some(ref race_row) = current_race_row {
-        SubmissionRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-            db.get_database_backend(),
-            r#"
-            SELECT r.user_id, u.username, r.track_time, r.disqualified
-            FROM runs r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.session_race_id = $1
-            ORDER BY r.track_time ASC
-            "#,
-            [race_row.id.clone().into()],
-        ))
-        .all(db)
-        .await?
-        .into_iter()
-        .map(|s| RaceSubmission {
-            user_id: s.user_id,
-            username: s.username,
-            track_time: s.track_time,
-            disqualified: s.disqualified,
-        })
-        .collect()
-    } else {
-        Vec::new()
-    };
-
-    let current_race = current_race_row.map(|r| SessionRaceInfo {
-        id: r.id,
-        race_number: r.race_number,
-        track_id: r.track_id,
-        track_name: r.track_name,
-        cup_name: r.cup_name,
-        image_path: r.image_path,
-        created_at: r.created_at.and_utc(),
-        submissions,
-    });
-
-    // Fetch all races for history (reuses the same query shape as list_races)
-    let race_rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+/// Fetch the most recent race with its submissions. Returns `None` if
+/// no races have been created yet.
+async fn load_current_race_with_submissions(
+    db: &impl ConnectionTrait,
+    session_id: &str,
+) -> Result<Option<SessionRaceInfo>, AppError> {
+    let race_row = CurrentRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
-            SELECT sr.id, sr.race_number, sr.track_id,
-                   t.name AS track_name, c.name AS cup_name,
-                   COUNT(r.id) AS run_count, sr.created_at
-            FROM session_races sr
-            JOIN tracks t ON sr.track_id = t.id
-            JOIN cups c ON t.cup_id = c.id
-            LEFT JOIN runs r ON r.session_race_id = sr.id
-            WHERE sr.session_id = $1
-            GROUP BY sr.id
-            ORDER BY sr.race_number ASC
-            "#,
+        SELECT sr.id, sr.race_number, sr.track_id,
+               t.name AS track_name, c.name AS cup_name,
+               t.image_path, sr.created_at
+        FROM session_races sr
+        JOIN tracks t ON sr.track_id = t.id
+        JOIN cups c ON t.cup_id = c.id
+        WHERE sr.session_id = $1
+        ORDER BY sr.race_number DESC
+        LIMIT 1
+        "#,
+        [session_id.into()],
+    ))
+    .one(db)
+    .await?;
+
+    let Some(row) = race_row else {
+        return Ok(None);
+    };
+
+    let submissions = SubmissionRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+        SELECT r.user_id, u.username, r.track_time, r.disqualified
+        FROM runs r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.session_race_id = $1
+        ORDER BY r.track_time ASC
+        "#,
+        [row.id.clone().into()],
+    ))
+    .all(db)
+    .await?
+    .into_iter()
+    .map(|s| RaceSubmission {
+        user_id: s.user_id,
+        username: s.username,
+        track_time: s.track_time,
+        disqualified: s.disqualified,
+    })
+    .collect();
+
+    Ok(Some(SessionRaceInfo {
+        id: row.id,
+        race_number: row.race_number,
+        track_id: row.track_id,
+        track_name: row.track_name,
+        cup_name: row.cup_name,
+        image_path: row.image_path,
+        created_at: row.created_at.and_utc(),
+        submissions,
+    }))
+}
+
+/// Fetch all races in a session with run counts, ordered by race_number ASC.
+async fn load_race_history(
+    db: &impl ConnectionTrait,
+    session_id: &str,
+) -> Result<Vec<RaceInfo>, AppError> {
+    let rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+        SELECT sr.id, sr.race_number, sr.track_id,
+               t.name AS track_name, c.name AS cup_name,
+               COUNT(r.id) AS run_count, sr.created_at
+        FROM session_races sr
+        JOIN tracks t ON sr.track_id = t.id
+        JOIN cups c ON t.cup_id = c.id
+        LEFT JOIN runs r ON r.session_race_id = sr.id
+        WHERE sr.session_id = $1
+        GROUP BY sr.id
+        ORDER BY sr.race_number ASC
+        "#,
         [session_id.into()],
     ))
     .all(db)
     .await?;
 
-    let races: Vec<RaceInfo> = race_rows
+    Ok(rows
         .into_iter()
         .map(|r| RaceInfo {
             id: r.id,
@@ -423,7 +424,27 @@ pub async fn get_session_detail(
             run_count: r.run_count,
             created_at: r.created_at.and_utc(),
         })
-        .collect();
+        .collect())
+}
+
+/// Get full session detail — the polling endpoint.
+pub async fn get_session_detail(
+    db: &DatabaseConnection,
+    session_id: &str,
+) -> Result<SessionDetail, AppError> {
+    let session = sessions::Entity::find_by_id(session_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    let host_username = load_host_username(db, &session.host_id).await?;
+    let participants = load_participants(db, session_id).await?;
+    let current_race = load_current_race_with_submissions(db, session_id).await?;
+    let races = load_race_history(db, session_id).await?;
+
+    // Derive race_number from history instead of a separate COUNT query.
+    // Race numbers are 1-indexed and monotonic (gapless within a session).
+    let race_number = races.last().map(|r| r.race_number as usize).unwrap_or(1);
 
     Ok(SessionDetail {
         id: session.id,
@@ -475,6 +496,62 @@ pub async fn join_session(
     Ok(())
 }
 
+/// What should happen to the session after a participant leaves.
+#[derive(Debug, PartialEq, Eq)]
+enum HostDisposition {
+    /// Host role transferred to the given user ID.
+    TransferredTo(String),
+    /// No active participants remain — session should close.
+    SessionClosed,
+    /// The leaver wasn't the host and participants remain — no change needed.
+    NoChange,
+}
+
+/// Decide what happens to the host role when a participant leaves.
+///
+/// If the host is leaving, pick the earliest-joined remaining participant.
+/// If no one remains, close the session. If a non-host leaves but no active
+/// participants remain, also close.
+async fn transfer_host_or_close(
+    txn: &impl ConnectionTrait,
+    session_id: &str,
+    leaving_user_id: &str,
+    is_host_leaving: bool,
+) -> Result<HostDisposition, AppError> {
+    if is_host_leaving {
+        let next_host = session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(session_id))
+                    .add(session_participants::Column::UserId.ne(leaving_user_id))
+                    .add(session_participants::Column::LeftAt.is_null()),
+            )
+            .order_by_asc(session_participants::Column::JoinedAt)
+            .one(txn)
+            .await?;
+
+        match next_host {
+            Some(new_host) => Ok(HostDisposition::TransferredTo(new_host.user_id)),
+            None => Ok(HostDisposition::SessionClosed),
+        }
+    } else {
+        let remaining = session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(session_id))
+                    .add(session_participants::Column::LeftAt.is_null()),
+            )
+            .count(txn)
+            .await?;
+
+        if remaining == 0 {
+            Ok(HostDisposition::SessionClosed)
+        } else {
+            Ok(HostDisposition::NoChange)
+        }
+    }
+}
+
 /// Leave a session. Sets left_at and handles host transfer.
 pub async fn leave_session(
     db: &DatabaseConnection,
@@ -495,49 +572,22 @@ pub async fn leave_session(
     let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
 
-    // Set left_at
     let mut active_participant: session_participants::ActiveModel = participant.into();
     active_participant.left_at = Set(Some(now));
     active_participant.update(&txn).await?;
 
-    // Check if host is leaving
     let mut active_session: sessions::ActiveModel = session.clone().into();
+    let disposition =
+        transfer_host_or_close(&txn, session_id, user_id, session.host_id == user_id).await?;
 
-    if session.host_id == user_id {
-        // Find earliest-joined remaining participant
-        let next_host = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session_id))
-                    .add(session_participants::Column::UserId.ne(user_id))
-                    .add(session_participants::Column::LeftAt.is_null()),
-            )
-            .order_by_asc(session_participants::Column::JoinedAt)
-            .one(&txn)
-            .await?;
-
-        match next_host {
-            Some(new_host) => {
-                active_session.host_id = Set(new_host.user_id);
-            }
-            None => {
-                active_session.status = Set(SessionStatus::Closed.to_string());
-            }
+    match disposition {
+        HostDisposition::TransferredTo(new_host_id) => {
+            active_session.host_id = Set(new_host_id);
         }
-    } else {
-        // Check if any active participants remain at all
-        let remaining = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session_id))
-                    .add(session_participants::Column::LeftAt.is_null()),
-            )
-            .count(&txn)
-            .await?;
-
-        if remaining == 0 {
+        HostDisposition::SessionClosed => {
             active_session.status = Set(SessionStatus::Closed.to_string());
         }
+        HostDisposition::NoChange => {}
     }
 
     active_session.last_activity_at = Set(now);
@@ -592,12 +642,12 @@ pub async fn next_track(
 
     txn.commit().await?;
 
-    // Look up cup name for the response
+    // Look up cup name for the response (FK-protected — missing is corruption)
     let cup = cups::Entity::find_by_id(chosen.cup_id)
         .one(db)
         .await?
-        .map(|c| c.name)
-        .unwrap_or_else(|| "Unknown Cup".to_string());
+        .ok_or_else(|| AppError::Internal(format!("Cup not found for cup_id {}", chosen.cup_id)))?
+        .name;
 
     Ok(SessionRaceInfo {
         id: race_id,
@@ -682,8 +732,8 @@ pub async fn skip_turn(
     let cup = cups::Entity::find_by_id(chosen.cup_id)
         .one(db)
         .await?
-        .map(|c| c.name)
-        .unwrap_or_else(|| "Unknown Cup".to_string());
+        .ok_or_else(|| AppError::Internal(format!("Cup not found for cup_id {}", chosen.cup_id)))?
+        .name;
 
     Ok(SessionRaceInfo {
         id: race_id,
@@ -787,7 +837,92 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{create_user, seed_tracks_for_test, setup_db};
+    use crate::test_helpers::{
+        create_user, insert_participant, insert_session, seed_tracks_for_test, setup_db,
+    };
+
+    // ── load_host_username ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_load_host_username_returns_username() {
+        let db = setup_db().await;
+        let user_id = create_user(&db, "alice").await;
+        let username = load_host_username(&db, &user_id).await.unwrap();
+        assert_eq!(username, "alice");
+    }
+
+    #[tokio::test]
+    async fn test_load_host_username_missing_user_returns_internal() {
+        let db = setup_db().await;
+        let err = load_host_username(&db, "nonexistent-id").await.unwrap_err();
+        assert!(matches!(err, AppError::Internal(_)));
+    }
+
+    // ── transfer_host_or_close ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_transfer_host_leaves_with_successor() {
+        let db = setup_db().await;
+        let host = create_user(&db, "host").await;
+        let user2 = create_user(&db, "user2").await;
+        let session_id = insert_session(&db, &host, "active").await;
+        // host has already left (left_at set in the real flow before this call)
+        insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
+        insert_participant(&db, &session_id, &user2, None).await;
+
+        let result = transfer_host_or_close(&db, &session_id, &host, true)
+            .await
+            .unwrap();
+        assert_eq!(result, HostDisposition::TransferredTo(user2));
+    }
+
+    #[tokio::test]
+    async fn test_transfer_host_leaves_alone_closes_session() {
+        let db = setup_db().await;
+        let host = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host, "active").await;
+        // host's participant row has left_at set
+        insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
+
+        let result = transfer_host_or_close(&db, &session_id, &host, true)
+            .await
+            .unwrap();
+        assert_eq!(result, HostDisposition::SessionClosed);
+    }
+
+    #[tokio::test]
+    async fn test_transfer_non_host_leaves_with_others_remaining() {
+        let db = setup_db().await;
+        let host = create_user(&db, "host").await;
+        let user2 = create_user(&db, "user2").await;
+        let session_id = insert_session(&db, &host, "active").await;
+        insert_participant(&db, &session_id, &host, None).await;
+        // user2 has already left (left_at set in the real flow)
+        insert_participant(&db, &session_id, &user2, Some(Utc::now().naive_utc())).await;
+
+        let result = transfer_host_or_close(&db, &session_id, &user2, false)
+            .await
+            .unwrap();
+        assert_eq!(result, HostDisposition::NoChange);
+    }
+
+    #[tokio::test]
+    async fn test_transfer_non_host_leaves_as_last_closes_session() {
+        let db = setup_db().await;
+        let host = create_user(&db, "host").await;
+        let user2 = create_user(&db, "user2").await;
+        let session_id = insert_session(&db, &host, "active").await;
+        // Both have left_at set (host left first, then user2)
+        insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
+        insert_participant(&db, &session_id, &user2, Some(Utc::now().naive_utc())).await;
+
+        let result = transfer_host_or_close(&db, &session_id, &user2, false)
+            .await
+            .unwrap();
+        assert_eq!(result, HostDisposition::SessionClosed);
+    }
+
+    // ── existing tests ───────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_host_transfer_goes_to_earliest_joined_participant() {
