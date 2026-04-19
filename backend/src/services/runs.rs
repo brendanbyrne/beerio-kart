@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::entities::{
-    bodies, characters, drink_types, gliders, runs, session_participants, session_races, sessions,
-    users, wheels,
+    bodies, characters, drink_types, gliders, runs, session_races, users, wheels,
 };
 use crate::error::AppError;
+use crate::services::helpers;
 
 /// Maximum allowed track time: 10 minutes in milliseconds.
 const MAX_TRACK_TIME_MS: i32 = 600_000;
@@ -154,33 +154,8 @@ pub async fn create_run(
         .await?
         .ok_or_else(|| AppError::NotFound("Session race not found".to_string()))?;
 
-    let session = sessions::Entity::find_by_id(&session_race.session_id)
-        .one(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
-
-    if session.status != "active" {
-        return Err(AppError::Conflict(
-            "Cannot submit run for a closed session".to_string(),
-        ));
-    }
-
-    // User must be an active participant
-    let participant = session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::SessionId.eq(&session_race.session_id))
-                .add(session_participants::Column::UserId.eq(user_id))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
-        .one(db)
-        .await?;
-
-    if participant.is_none() {
-        return Err(AppError::Forbidden(
-            "Must be an active participant to submit a run".to_string(),
-        ));
-    }
+    helpers::load_active_session(db, &session_race.session_id).await?;
+    helpers::require_active_participant(db, &session_race.session_id, user_id).await?;
 
     // Check for duplicate submission
     let existing = runs::Entity::find()
@@ -199,41 +174,12 @@ pub async fn create_run(
     }
 
     // Validate FK references exist
-    if characters::Entity::find_by_id(body.character_id)
-        .one(db)
-        .await?
-        .is_none()
-    {
-        return Err(AppError::BadRequest("Invalid character_id".to_string()));
-    }
-    if bodies::Entity::find_by_id(body.body_id)
-        .one(db)
-        .await?
-        .is_none()
-    {
-        return Err(AppError::BadRequest("Invalid body_id".to_string()));
-    }
-    if wheels::Entity::find_by_id(body.wheel_id)
-        .one(db)
-        .await?
-        .is_none()
-    {
-        return Err(AppError::BadRequest("Invalid wheel_id".to_string()));
-    }
-    if gliders::Entity::find_by_id(body.glider_id)
-        .one(db)
-        .await?
-        .is_none()
-    {
-        return Err(AppError::BadRequest("Invalid glider_id".to_string()));
-    }
-    if drink_types::Entity::find_by_id(&body.drink_type_id)
-        .one(db)
-        .await?
-        .is_none()
-    {
-        return Err(AppError::BadRequest("Invalid drink_type_id".to_string()));
-    }
+    helpers::require_exists::<characters::Entity, _>(db, body.character_id, "character").await?;
+    helpers::require_exists::<bodies::Entity, _>(db, body.body_id, "body").await?;
+    helpers::require_exists::<wheels::Entity, _>(db, body.wheel_id, "wheel").await?;
+    helpers::require_exists::<gliders::Entity, _>(db, body.glider_id, "glider").await?;
+    helpers::require_exists::<drink_types::Entity, _>(db, body.drink_type_id.clone(), "drink_type")
+        .await?;
 
     let now = Utc::now().naive_utc();
     let run_id = Uuid::new_v4().to_string();
@@ -262,10 +208,7 @@ pub async fn create_run(
     .insert(&txn)
     .await?;
 
-    // Update session last_activity_at
-    let mut active_session: sessions::ActiveModel = session.into();
-    active_session.last_activity_at = Set(now);
-    active_session.update(&txn).await?;
+    helpers::touch_session(&txn, &session_race.session_id).await?;
 
     txn.commit().await?;
 
@@ -376,26 +319,13 @@ pub async fn delete_run(
         .await?
         .ok_or_else(|| AppError::Internal("Session race not found for run".to_string()))?;
 
-    let session = sessions::Entity::find_by_id(&session_race.session_id)
-        .one(db)
-        .await?
-        .ok_or_else(|| AppError::Internal("Session not found for run".to_string()))?;
+    helpers::load_active_session(db, &session_race.session_id).await?;
 
-    if session.status != "active" {
-        return Err(AppError::Conflict(
-            "Cannot delete run from a closed session".to_string(),
-        ));
-    }
-
-    let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
 
     run.delete(&txn).await?;
 
-    // Update session last_activity_at
-    let mut active_session: sessions::ActiveModel = session.into();
-    active_session.last_activity_at = Set(now);
-    active_session.update(&txn).await?;
+    helpers::touch_session(&txn, &session_race.session_id).await?;
 
     txn.commit().await?;
 
@@ -456,121 +386,8 @@ pub async fn get_run_defaults(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entities::{cups, tracks};
     use crate::services::sessions;
-    use migration::{Migrator, MigratorTrait};
-    use sea_orm::Database;
-
-    async fn setup_db() -> DatabaseConnection {
-        let db = Database::connect("sqlite::memory:").await.expect("connect");
-        db.execute_unprepared("PRAGMA foreign_keys = ON")
-            .await
-            .expect("pragma");
-        Migrator::up(&db, None).await.expect("migrate");
-        db
-    }
-
-    async fn create_user(db: &DatabaseConnection, username: &str) -> String {
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().naive_utc();
-        let hash = "$argon2id$v=19$m=19456,t=2,p=1$dGVzdHNhbHQ$abc123";
-        users::ActiveModel {
-            id: Set(id.clone()),
-            username: Set(username.to_string()),
-            email: Set(None),
-            password_hash: Set(hash.to_string()),
-            preferred_character_id: Set(None),
-            preferred_body_id: Set(None),
-            preferred_wheel_id: Set(None),
-            preferred_glider_id: Set(None),
-            preferred_drink_type_id: Set(None),
-            refresh_token_version: Set(0),
-            created_at: Set(now),
-            updated_at: Set(now),
-        }
-        .insert(db)
-        .await
-        .expect("insert user");
-        id
-    }
-
-    /// Seed minimal game data required for run creation.
-    async fn seed_game_data(db: &DatabaseConnection) {
-        // Cup
-        cups::ActiveModel {
-            id: Set(1),
-            name: Set("Test Cup".to_string()),
-            image_path: Set("images/cups/test.webp".to_string()),
-        }
-        .insert(db)
-        .await
-        .expect("insert cup");
-
-        // Track
-        tracks::ActiveModel {
-            id: Set(1),
-            name: Set("Test Track".to_string()),
-            cup_id: Set(1),
-            position: Set(1),
-            image_path: Set("images/tracks/test.webp".to_string()),
-        }
-        .insert(db)
-        .await
-        .expect("insert track");
-
-        // Character
-        characters::ActiveModel {
-            id: Set(1),
-            name: Set("Mario".to_string()),
-            image_path: Set("images/characters/mario.webp".to_string()),
-        }
-        .insert(db)
-        .await
-        .expect("insert character");
-
-        // Body
-        bodies::ActiveModel {
-            id: Set(1),
-            name: Set("Standard Kart".to_string()),
-            image_path: Set("images/bodies/standard.webp".to_string()),
-        }
-        .insert(db)
-        .await
-        .expect("insert body");
-
-        // Wheels
-        wheels::ActiveModel {
-            id: Set(1),
-            name: Set("Standard".to_string()),
-            image_path: Set("images/wheels/standard.webp".to_string()),
-        }
-        .insert(db)
-        .await
-        .expect("insert wheels");
-
-        // Glider
-        gliders::ActiveModel {
-            id: Set(1),
-            name: Set("Super Glider".to_string()),
-            image_path: Set("images/gliders/super.webp".to_string()),
-        }
-        .insert(db)
-        .await
-        .expect("insert glider");
-
-        // Drink type
-        let drink_id = crate::drink_type_id::drink_type_uuid("Test Beer");
-        drink_types::ActiveModel {
-            id: Set(drink_id),
-            name: Set("Test Beer".to_string()),
-            alcoholic: Set(true),
-            created_at: Set(Utc::now().naive_utc()),
-            created_by: Set(None),
-        }
-        .insert(db)
-        .await
-        .expect("insert drink type");
-    }
+    use crate::test_helpers::{create_user, seed_game_data, setup_db};
 
     fn test_drink_id() -> String {
         crate::drink_type_id::drink_type_uuid("Test Beer")

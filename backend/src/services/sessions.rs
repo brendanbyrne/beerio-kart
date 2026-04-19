@@ -1,5 +1,4 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
-use rand::seq::SliceRandom;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     FromQueryResult, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
@@ -7,11 +6,10 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use crate::entities::{cups, runs, session_participants, session_races, sessions, tracks, users};
+use crate::domain::enums::{Ruleset, SessionStatus};
+use crate::entities::{cups, runs, session_participants, session_races, sessions, users};
 use crate::error::AppError;
-
-/// Allowed rulesets for this PR. Only "random" is supported.
-const VALID_RULESETS: &[&str] = &["random"];
+use crate::services::helpers;
 
 /// Row shape for the active-participant-in-active-session query.
 #[derive(Debug, FromQueryResult)]
@@ -85,12 +83,7 @@ pub async fn create_session(
     user_id: &str,
     ruleset: &str,
 ) -> Result<SessionDetail, AppError> {
-    if !VALID_RULESETS.contains(&ruleset) {
-        return Err(AppError::BadRequest(format!(
-            "Invalid ruleset: '{ruleset}'. Valid options: {}",
-            VALID_RULESETS.join(", ")
-        )));
-    }
+    let parsed: Ruleset = ruleset.parse()?;
 
     check_not_in_any_session(db, user_id).await?;
 
@@ -103,9 +96,9 @@ pub async fn create_session(
         id: Set(session_id.clone()),
         created_by: Set(user_id.to_string()),
         host_id: Set(user_id.to_string()),
-        ruleset: Set(ruleset.to_string()),
+        ruleset: Set(parsed.to_string()),
         least_played_drink_category: Set(None),
-        status: Set("active".to_string()),
+        status: Set(SessionStatus::Active.to_string()),
         created_at: Set(now),
         last_activity_at: Set(now),
     }
@@ -454,19 +447,7 @@ pub async fn join_session(
     session_id: &str,
     user_id: &str,
 ) -> Result<(), AppError> {
-    // Check session exists and is active
-    let session = sessions::Entity::find_by_id(session_id)
-        .one(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
-
-    if session.status != "active" {
-        return Err(AppError::Conflict(
-            "Cannot join a closed session".to_string(),
-        ));
-    }
-
-    // Check user isn't already active in any session (including this one)
+    helpers::load_active_session(db, session_id).await?;
     check_not_in_any_session(db, user_id).await?;
 
     let now = Utc::now().naive_utc();
@@ -482,9 +463,7 @@ pub async fn join_session(
     .insert(&txn)
     .await?;
 
-    let mut active_session: sessions::ActiveModel = session.into();
-    active_session.last_activity_at = Set(now);
-    active_session.update(&txn).await?;
+    helpers::touch_session(&txn, session_id).await?;
 
     txn.commit().await?;
 
@@ -502,17 +481,7 @@ pub async fn leave_session(
         .await?
         .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
-    // Find user's active participant row
-    let participant = session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::SessionId.eq(session_id))
-                .add(session_participants::Column::UserId.eq(user_id))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
-        .one(db)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("Not currently in this session".to_string()))?;
+    let participant = helpers::require_active_participant(db, session_id, user_id).await?;
 
     let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
@@ -543,7 +512,7 @@ pub async fn leave_session(
                 active_session.host_id = Set(new_host.user_id);
             }
             None => {
-                active_session.status = Set("closed".to_string());
+                active_session.status = Set(SessionStatus::Closed.to_string());
             }
         }
     } else {
@@ -558,7 +527,7 @@ pub async fn leave_session(
             .await?;
 
         if remaining == 0 {
-            active_session.status = Set("closed".to_string());
+            active_session.status = Set(SessionStatus::Closed.to_string());
         }
     }
 
@@ -578,20 +547,10 @@ pub async fn next_track(
     session_id: &str,
     user_id: &str,
 ) -> Result<SessionRaceInfo, AppError> {
-    let session = sessions::Entity::find_by_id(session_id)
-        .one(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+    use crate::services::session_context::SessionContext;
 
-    if session.status != "active" {
-        return Err(AppError::Conflict("Session is not active".to_string()));
-    }
-
-    if session.host_id != user_id {
-        return Err(AppError::Forbidden(
-            "Only the host can pick tracks".to_string(),
-        ));
-    }
+    let ctx = SessionContext::load_active(db, session_id).await?;
+    ctx.require_host(user_id)?;
 
     // Get already-used track IDs
     let used_races = session_races::Entity::find()
@@ -601,38 +560,7 @@ pub async fn next_track(
     let race_count = used_races.len() as i32;
     let used_track_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
 
-    // Get all tracks
-    let all_tracks = tracks::Entity::find().all(db).await?;
-
-    // Filter to available tracks
-    let mut available: Vec<&tracks::Model> = all_tracks
-        .iter()
-        .filter(|t| !used_track_ids.contains(&t.id))
-        .collect();
-
-    // If pool is empty, reset — all tracks become available again
-    if available.is_empty() {
-        tracing::info!(
-            session_id = session_id,
-            "All {} tracks used — resetting pool",
-            all_tracks.len()
-        );
-        available = all_tracks.iter().collect();
-    }
-
-    // Pick a random track. Scope the rng so ThreadRng (which is !Send)
-    // doesn't live across the subsequent .await points.
-    let chosen_idx = {
-        let mut rng = rand::thread_rng();
-        available
-            .choose(&mut rng)
-            .map(|t| t.id)
-            .ok_or_else(|| AppError::Internal("No tracks available".to_string()))?
-    };
-    let chosen = all_tracks
-        .iter()
-        .find(|t| t.id == chosen_idx)
-        .ok_or_else(|| AppError::Internal("Track disappeared".to_string()))?;
+    let chosen = helpers::pick_random_track(db, &used_track_ids, &[]).await?;
 
     let now = Utc::now().naive_utc();
     let race_id = Uuid::new_v4().to_string();
@@ -651,10 +579,7 @@ pub async fn next_track(
     .insert(&txn)
     .await?;
 
-    // Update last_activity_at
-    let mut active_session: sessions::ActiveModel = session.into();
-    active_session.last_activity_at = Set(now);
-    active_session.update(&txn).await?;
+    helpers::touch_session(&txn, session_id).await?;
 
     txn.commit().await?;
 
@@ -687,14 +612,7 @@ pub async fn skip_turn(
     session_id: &str,
     _user_id: &str,
 ) -> Result<SessionRaceInfo, AppError> {
-    let session = sessions::Entity::find_by_id(session_id)
-        .one(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
-
-    if session.status != "active" {
-        return Err(AppError::Conflict("Session is not active".to_string()));
-    }
+    helpers::load_active_session(db, session_id).await?;
 
     // Find the most recent race
     let current_race = session_races::Entity::find()
@@ -725,43 +643,9 @@ pub async fn skip_turn(
         .filter(session_races::Column::SessionId.eq(session_id))
         .all(db)
         .await?;
-    let mut exclude_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
-    // Ensure the skipped track stays excluded even though its row is about to be deleted
-    if !exclude_ids.contains(&skipped_track_id) {
-        exclude_ids.push(skipped_track_id);
-    }
+    let exclude_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
 
-    // Get all tracks and filter
-    let all_tracks = tracks::Entity::find().all(db).await?;
-    let mut available: Vec<&tracks::Model> = all_tracks
-        .iter()
-        .filter(|t| !exclude_ids.contains(&t.id))
-        .collect();
-
-    // If pool is empty (all tracks used + skipped), reset but still exclude the skipped track
-    if available.is_empty() {
-        tracing::info!(
-            session_id = session_id,
-            "All tracks used during skip — resetting pool (excluding skipped track {})",
-            skipped_track_id
-        );
-        available = all_tracks
-            .iter()
-            .filter(|t| t.id != skipped_track_id)
-            .collect();
-    }
-
-    let chosen_idx = {
-        let mut rng = rand::thread_rng();
-        available
-            .choose(&mut rng)
-            .map(|t| t.id)
-            .ok_or_else(|| AppError::Internal("No tracks available for skip".to_string()))?
-    };
-    let chosen = all_tracks
-        .iter()
-        .find(|t| t.id == chosen_idx)
-        .ok_or_else(|| AppError::Internal("Track disappeared".to_string()))?;
+    let chosen = helpers::pick_random_track(db, &exclude_ids, &[skipped_track_id]).await?;
 
     let now = Utc::now().naive_utc();
     let race_id = Uuid::new_v4().to_string();
@@ -782,9 +666,7 @@ pub async fn skip_turn(
     .insert(&txn)
     .await?;
 
-    let mut active_session: sessions::ActiveModel = session.into();
-    active_session.last_activity_at = Set(now);
-    active_session.update(&txn).await?;
+    helpers::touch_session(&txn, session_id).await?;
 
     txn.commit().await?;
 
@@ -860,7 +742,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
     let stale = sessions::Entity::find()
         .filter(
             Condition::all()
-                .add(sessions::Column::Status.eq("active"))
+                .add(sessions::Column::Status.eq(SessionStatus::Active.as_str()))
                 .add(sessions::Column::LastActivityAt.lt(one_hour_ago)),
         )
         .all(db)
@@ -885,7 +767,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
             .await?;
 
         let mut active: sessions::ActiveModel = session.into();
-        active.status = Set("closed".to_string());
+        active.status = Set(SessionStatus::Closed.to_string());
         active.update(&txn).await?;
     }
     txn.commit().await?;
@@ -896,78 +778,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use migration::{Migrator, MigratorTrait};
-    use sea_orm::Database;
-
-    async fn setup_db() -> DatabaseConnection {
-        let db = Database::connect("sqlite::memory:").await.expect("connect");
-        db.execute_unprepared("PRAGMA foreign_keys = ON")
-            .await
-            .expect("pragma");
-        Migrator::up(&db, None).await.expect("migrate");
-        db
-    }
-
-    /// Seed a small set of cups and tracks for testing track selection.
-    /// Creates 3 cups with 2 tracks each (6 tracks total).
-    async fn seed_tracks_for_test(db: &DatabaseConnection) {
-        let cup_names = ["Test Cup A", "Test Cup B", "Test Cup C"];
-        for (i, name) in cup_names.iter().enumerate() {
-            cups::ActiveModel {
-                id: Set((i + 1) as i32),
-                name: Set(name.to_string()),
-                image_path: Set(format!("images/cups/test-cup-{}.webp", i + 1)),
-            }
-            .insert(db)
-            .await
-            .expect("insert cup");
-        }
-
-        let track_data = [
-            (1, "Track Alpha", 1, 1),
-            (2, "Track Beta", 1, 2),
-            (3, "Track Gamma", 2, 1),
-            (4, "Track Delta", 2, 2),
-            (5, "Track Epsilon", 3, 1),
-            (6, "Track Zeta", 3, 2),
-        ];
-        for (id, name, cup_id, position) in track_data {
-            tracks::ActiveModel {
-                id: Set(id),
-                name: Set(name.to_string()),
-                cup_id: Set(cup_id),
-                position: Set(position),
-                image_path: Set(format!("images/tracks/track-{id}.webp")),
-            }
-            .insert(db)
-            .await
-            .expect("insert track");
-        }
-    }
-
-    async fn create_user(db: &DatabaseConnection, username: &str) -> String {
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().naive_utc();
-        let hash = "$argon2id$v=19$m=19456,t=2,p=1$dGVzdHNhbHQ$abc123";
-        users::ActiveModel {
-            id: Set(id.clone()),
-            username: Set(username.to_string()),
-            email: Set(None),
-            password_hash: Set(hash.to_string()),
-            preferred_character_id: Set(None),
-            preferred_body_id: Set(None),
-            preferred_wheel_id: Set(None),
-            preferred_glider_id: Set(None),
-            preferred_drink_type_id: Set(None),
-            refresh_token_version: Set(0),
-            created_at: Set(now),
-            updated_at: Set(now),
-        }
-        .insert(db)
-        .await
-        .expect("insert user");
-        id
-    }
+    use crate::test_helpers::{create_user, seed_tracks_for_test, setup_db};
 
     #[tokio::test]
     async fn test_host_transfer_goes_to_earliest_joined_participant() {
