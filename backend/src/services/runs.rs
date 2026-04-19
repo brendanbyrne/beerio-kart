@@ -413,6 +413,84 @@ mod tests {
         crate::drink_type_id::drink_type_uuid("Test Beer")
     }
 
+    // ── validate_time_fields (pure, no DB needed) ────────────────────
+
+    fn valid_time_request() -> CreateRunRequest {
+        CreateRunRequest {
+            session_race_id: String::new(),
+            track_time: 120_000,
+            lap1_time: 40_000,
+            lap2_time: 39_000,
+            lap3_time: 41_000,
+            character_id: 1,
+            body_id: 1,
+            wheel_id: 1,
+            glider_id: 1,
+            drink_type_id: String::new(),
+            disqualified: false,
+        }
+    }
+
+    #[test]
+    fn test_validate_time_fields_accepts_valid_times() {
+        assert!(validate_time_fields(&valid_time_request()).is_ok());
+    }
+
+    #[test]
+    fn test_validate_time_fields_rejects_zero_track_time() {
+        let mut req = valid_time_request();
+        req.track_time = 0;
+        assert!(validate_time_fields(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_time_fields_rejects_negative_track_time() {
+        let mut req = valid_time_request();
+        req.track_time = -1;
+        assert!(validate_time_fields(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_time_fields_rejects_track_time_over_max() {
+        let mut req = valid_time_request();
+        req.track_time = MAX_TRACK_TIME_MS + 1;
+        req.lap1_time = 200_001;
+        req.lap2_time = 200_000;
+        req.lap3_time = 200_000;
+        assert!(validate_time_fields(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_time_fields_rejects_zero_lap_time() {
+        let mut req = valid_time_request();
+        req.lap2_time = 0;
+        assert!(validate_time_fields(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_time_fields_rejects_negative_lap_time() {
+        let mut req = valid_time_request();
+        req.lap3_time = -5;
+        assert!(validate_time_fields(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_time_fields_rejects_lap_time_over_max() {
+        let mut req = valid_time_request();
+        req.lap1_time = MAX_TRACK_TIME_MS + 1;
+        assert!(validate_time_fields(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_time_fields_rejects_lap_sum_mismatch() {
+        let mut req = valid_time_request();
+        req.lap1_time = 20_000;
+        req.lap2_time = 20_000;
+        req.lap3_time = 20_000;
+        // laps sum to 60_000 but track_time is 120_000
+        assert!(validate_time_fields(&req).is_err());
+    }
+
     fn valid_run_request(session_race_id: &str) -> CreateRunRequest {
         CreateRunRequest {
             session_race_id: session_race_id.to_string(),

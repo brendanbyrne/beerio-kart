@@ -442,8 +442,11 @@ pub async fn get_session_detail(
     let current_race = load_current_race_with_submissions(db, session_id).await?;
     let races = load_race_history(db, session_id).await?;
 
-    // Derive race_number from history instead of a separate COUNT query.
-    // Race numbers are 1-indexed and monotonic (gapless within a session).
+    // Derive race_number from history instead of a separate COUNT query —
+    // saves one DB round trip on every poll. Safe because race numbers are
+    // 1-indexed and gapless: `next_track` appends monotonically, and
+    // `skip_turn` replaces in-place (preserves race_number). No deletion
+    // path exists. Under this invariant, last().race_number == COUNT(*).
     let race_number = races.last().map(|r| r.race_number as usize).unwrap_or(1);
 
     Ok(SessionDetail {
@@ -512,6 +515,11 @@ enum HostDisposition {
 /// If the host is leaving, pick the earliest-joined remaining participant.
 /// If no one remains, close the session. If a non-host leaves but no active
 /// participants remain, also close.
+///
+/// **Precondition:** the leaving user's `left_at` must already be set within
+/// the same transaction before calling this function. The non-host branch
+/// counts active participants via `left_at IS NULL`, and relies on the
+/// leaver's row being excluded by the prior update.
 async fn transfer_host_or_close(
     txn: &impl ConnectionTrait,
     session_id: &str,
