@@ -26,7 +26,7 @@ pub enum AppError {
     Forbidden(String),
     /// 404 — resource not found
     NotFound(String),
-    /// 409 — duplicate username, etc.
+    /// 409 — state conflict (e.g. closed session) or uniqueness violation (e.g. duplicate username)
     Conflict(String),
     /// 500 — unexpected internal failures (DB, crypto, etc.)
     /// The String is a log-only message; the user sees "Internal server error".

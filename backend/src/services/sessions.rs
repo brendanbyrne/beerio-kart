@@ -461,7 +461,7 @@ pub async fn join_session(
         .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
     if session.status != "active" {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Conflict(
             "Cannot join a closed session".to_string(),
         ));
     }
@@ -584,7 +584,7 @@ pub async fn next_track(
         .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
     if session.status != "active" {
-        return Err(AppError::BadRequest("Session is not active".to_string()));
+        return Err(AppError::Conflict("Session is not active".to_string()));
     }
 
     if session.host_id != user_id {
@@ -693,7 +693,7 @@ pub async fn skip_turn(
         .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
     if session.status != "active" {
-        return Err(AppError::BadRequest("Session is not active".to_string()));
+        return Err(AppError::Conflict("Session is not active".to_string()));
     }
 
     // Find the most recent race

@@ -228,7 +228,7 @@ async fn test_get_session_returns_participants_and_race_number() {
 }
 
 #[tokio::test]
-async fn test_join_closed_session_returns_400() {
+async fn test_join_closed_session_returns_409() {
     let (server, _db) = setup_test_app().await;
     let (token_host, _) = register_and_get_token(&server, "host").await;
     let (token_user2, _) = register_and_get_token(&server, "user2").await;
@@ -252,7 +252,7 @@ async fn test_join_closed_session_returns_400() {
         .post(&format!("/api/v1/sessions/{session_id}/join"))
         .add_header(AUTH_HEADER, auth_value(&token_user2))
         .await;
-    res.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    res.assert_status(axum::http::StatusCode::CONFLICT);
 }
 
 #[tokio::test]
