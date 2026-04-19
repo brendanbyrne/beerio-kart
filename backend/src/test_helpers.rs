@@ -15,7 +15,10 @@ use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, S
 use uuid::Uuid;
 
 use crate::drink_type_id::drink_type_uuid;
-use crate::entities::{bodies, characters, cups, drink_types, gliders, tracks, users, wheels};
+use crate::entities::{
+    bodies, characters, cups, drink_types, gliders, session_participants, sessions, tracks, users,
+    wheels,
+};
 
 /// Spin up an in-memory SQLite database with foreign keys enabled and all
 /// migrations applied. Each call returns a fresh, isolated DB.
@@ -94,6 +97,48 @@ pub async fn seed_tracks_for_test(db: &DatabaseConnection) {
         .await
         .expect("insert track");
     }
+}
+
+/// Insert a session with the given host and status. Returns the generated
+/// session ID.
+pub async fn insert_session(db: &DatabaseConnection, host_id: &str, status: &str) -> String {
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().naive_utc();
+    sessions::ActiveModel {
+        id: Set(id.clone()),
+        created_by: Set(host_id.to_string()),
+        host_id: Set(host_id.to_string()),
+        ruleset: Set("random".to_string()),
+        least_played_drink_category: Set(None),
+        status: Set(status.to_string()),
+        created_at: Set(now),
+        last_activity_at: Set(now),
+    }
+    .insert(db)
+    .await
+    .expect("insert session");
+    id
+}
+
+/// Insert a participant into a session. Pass `None` for `left_at` to create
+/// an active (currently-in-session) participant.
+pub async fn insert_participant(
+    db: &DatabaseConnection,
+    session_id: &str,
+    user_id: &str,
+    left_at: Option<chrono::NaiveDateTime>,
+) {
+    let now = Utc::now().naive_utc();
+    session_participants::ActiveModel {
+        id: Set(Uuid::new_v4().to_string()),
+        session_id: Set(session_id.to_string()),
+        user_id: Set(user_id.to_string()),
+        joined_at: Set(now),
+        left_at: Set(left_at),
+    }
+    .insert(db)
+    .await
+    .expect("insert participant");
 }
 
 /// Seed the minimum game data required for run-creation tests: one each of
