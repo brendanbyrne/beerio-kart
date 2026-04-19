@@ -160,7 +160,7 @@ pub async fn create_run(
         .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
     if session.status != "active" {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Conflict(
             "Cannot submit run for a closed session".to_string(),
         ));
     }
@@ -382,7 +382,7 @@ pub async fn delete_run(
         .ok_or_else(|| AppError::Internal("Session not found for run".to_string()))?;
 
     if session.status != "active" {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Conflict(
             "Cannot delete run from a closed session".to_string(),
         ));
     }

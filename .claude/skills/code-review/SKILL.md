@@ -62,6 +62,7 @@ Provide a concise summary in chat covering:
   - **Critical** (blocks merge): Security vulnerabilities, data loss risks, broken functionality
   - **Important** (should fix before merge): Logic errors, missing validation, convention violations
   - **Suggestions** (nice to have): Style improvements, performance optimizations, readability
+- **DESIGN.md accuracy**: State explicitly whether DESIGN.md needed updates, whether they were made, and whether they match the code. (See the "DESIGN.md Accuracy" section below.)
 - **What's good**: Call out things done well. Positive reinforcement matters.
 
 ### Tier 2: PR Comments (when issues found)
@@ -96,6 +97,24 @@ reviews/pr-<number>-review.md
 This file should include the full analysis with code snippets, links to relevant documentation, and detailed fix suggestions. Link to it from the chat summary.
 
 ## What to Look For
+
+### DESIGN.md Accuracy
+
+DESIGN.md is the single source of truth for the project's architecture and conventions. Part of every review is verifying that it still accurately reflects what the code does after the PR lands.
+
+For every PR, check whether the changes touch anything described in DESIGN.md:
+
+- **Data model changes** (new tables, columns, relationships, index choices, UUID vs INTEGER decisions)
+- **API surface changes** (new/changed endpoints, request/response shapes, auth requirements)
+- **Architecture changes** (new services, new layers, changes to how components talk to each other)
+- **Convention changes** (naming, error handling patterns, testing approach)
+- **Design decisions** (anything that would answer "why did we do it this way?" for a future reader)
+
+If the PR changes any of these, DESIGN.md should be updated in the same PR. Flag missing updates as an **Important** finding — merging code that drifts from the design doc silently erodes its value.
+
+If DESIGN.md *was* updated, verify the updates actually match what the code does. A stale or inaccurate update is worse than no update. Quote specific passages and compare them to the diff.
+
+If the PR doesn't touch anything DESIGN.md covers, say so explicitly in the review ("DESIGN.md accuracy: no changes required") so it's clear the check was performed.
 
 ### Code Quality
 
