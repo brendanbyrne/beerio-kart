@@ -6,12 +6,12 @@
 use chrono::Utc;
 use rand::seq::SliceRandom;
 use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, EntityTrait, PrimaryKeyTrait, QueryFilter,
-    sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, EntityTrait, PrimaryKeyTrait,
+    QueryFilter, Set, sea_query::Expr,
 };
 
 use crate::domain::enums::SessionStatus;
-use crate::entities::{session_participants, sessions, tracks};
+use crate::entities::{session_participants, session_race_participations, sessions, tracks};
 use crate::error::AppError;
 
 /// Load a session by ID and require that it is in the `Active` state.
@@ -51,6 +51,47 @@ pub async fn require_active_participant<C: ConnectionTrait>(
         .one(db)
         .await?
         .ok_or_else(|| AppError::Forbidden("Not a participant in this session".into()))
+}
+
+/// Snapshot per-race presence at race-creation time.
+///
+/// Inserts one `session_race_participations` row for every user currently
+/// present in the session (`session_participants.left_at IS NULL`). The
+/// existence of each row is the proof that the user was present when the
+/// race was created — pending-state derivation reads from here, not from
+/// a participation history walk.
+///
+/// **Caller contract:** must run inside the same transaction as the
+/// `session_races` INSERT. If any participation insert fails the whole
+/// transaction rolls back, leaving no orphan race or partial snapshot.
+pub async fn insert_race_participations<C: ConnectionTrait>(
+    txn: &C,
+    session_id: &str,
+    session_race_id: &str,
+) -> Result<(), AppError> {
+    let now = Utc::now().naive_utc();
+
+    let present = session_participants::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_participants::Column::SessionId.eq(session_id))
+                .add(session_participants::Column::LeftAt.is_null()),
+        )
+        .all(txn)
+        .await?;
+
+    for participant in present {
+        session_race_participations::ActiveModel {
+            session_race_id: Set(session_race_id.to_string()),
+            user_id: Set(participant.user_id),
+            created_at: Set(now),
+            skipped_at: Set(None),
+        }
+        .insert(txn)
+        .await?;
+    }
+
+    Ok(())
 }
 
 /// Bump the session's `last_activity_at` column to now. Single `UPDATE`,

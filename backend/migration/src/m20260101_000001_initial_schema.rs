@@ -269,6 +269,12 @@ impl MigrationTrait for Migration {
         .await?;
 
         // ---- Session participants ----
+        //
+        // One row per (session, user). Leave/rejoin mutates this row rather
+        // than appending a new one — `joined_at` is the start of the current
+        // presence segment, `left_at` is null while present. Per-race presence
+        // is captured by `session_race_participations` (below) at race-creation
+        // time, not derived from this table.
 
         conn.execute_unprepared(
             "CREATE TABLE IF NOT EXISTS session_participants (
@@ -276,7 +282,8 @@ impl MigrationTrait for Migration {
                     session_id TEXT NOT NULL REFERENCES sessions(id),
                     user_id TEXT NOT NULL REFERENCES users(id),
                     joined_at datetime_text NOT NULL,
-                    left_at datetime_text
+                    left_at datetime_text,
+                    UNIQUE(session_id, user_id)
                 )",
         )
         .await?;
@@ -308,6 +315,35 @@ impl MigrationTrait for Migration {
                     created_at datetime_text NOT NULL,
                     UNIQUE(session_id, race_number)
                 )",
+        )
+        .await?;
+
+        // ---- Session race participations ----
+        //
+        // One row per (race, user) for every user present at race-creation
+        // time. The row is the proof of "this user was present when this race
+        // was created" — pending-state derivation reads from here, not from a
+        // walk of `session_participants` history. `skipped_at` flips when the
+        // user explicitly forfeits the race.
+        //
+        // ON DELETE CASCADE on session_race_id matters for `skip_turn`, which
+        // deletes-and-replaces the current race; cascading drops the old
+        // participations atomically.
+
+        conn.execute_unprepared(
+            "CREATE TABLE IF NOT EXISTS session_race_participations (
+                    session_race_id TEXT NOT NULL REFERENCES session_races(id) ON DELETE CASCADE,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    created_at datetime_text NOT NULL,
+                    skipped_at datetime_text,
+                    PRIMARY KEY (session_race_id, user_id)
+                )",
+        )
+        .await?;
+
+        conn.execute_unprepared(
+            "CREATE INDEX idx_session_race_participations_user
+                 ON session_race_participations(user_id)",
         )
         .await?;
 
@@ -375,6 +411,8 @@ impl MigrationTrait for Migration {
         conn.execute_unprepared("DROP TABLE IF EXISTS run_flags")
             .await?;
         conn.execute_unprepared("DROP TABLE IF EXISTS runs").await?;
+        conn.execute_unprepared("DROP TABLE IF EXISTS session_race_participations")
+            .await?;
         conn.execute_unprepared("DROP TABLE IF EXISTS session_races")
             .await?;
         conn.execute_unprepared("DROP TABLE IF EXISTS session_participants")

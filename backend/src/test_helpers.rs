@@ -15,8 +15,8 @@ use uuid::Uuid;
 
 use crate::drink_type_id::drink_type_uuid;
 use crate::entities::{
-    bodies, characters, cups, drink_types, gliders, session_participants, sessions, tracks, users,
-    wheels,
+    bodies, characters, cups, drink_types, gliders, session_participants,
+    session_race_participations, session_races, sessions, tracks, users, wheels,
 };
 
 /// Spin up an in-memory SQLite database with foreign keys enabled and all
@@ -138,6 +138,80 @@ pub async fn insert_participant(
     .insert(db)
     .await
     .expect("insert participant");
+}
+
+/// Insert a `session_races` row directly. Returns the new race ID. Useful
+/// for pending-races tests that need to construct races at specific
+/// timestamps without going through `next_track`.
+pub async fn insert_session_race(
+    db: &DatabaseConnection,
+    session_id: &str,
+    race_number: i32,
+    track_id: i32,
+    created_at: chrono::NaiveDateTime,
+) -> String {
+    let id = Uuid::new_v4().to_string();
+    session_races::ActiveModel {
+        id: Set(id.clone()),
+        session_id: Set(session_id.to_string()),
+        race_number: Set(race_number),
+        track_id: Set(track_id),
+        chosen_by: Set(None),
+        created_at: Set(created_at),
+    }
+    .insert(db)
+    .await
+    .expect("insert session race");
+    id
+}
+
+/// Insert a `session_race_participations` row directly. Use this in tests
+/// that need fine-grained control over per-race presence and skip status.
+pub async fn insert_race_participation(
+    db: &DatabaseConnection,
+    session_race_id: &str,
+    user_id: &str,
+    skipped_at: Option<chrono::NaiveDateTime>,
+) {
+    session_race_participations::ActiveModel {
+        session_race_id: Set(session_race_id.to_string()),
+        user_id: Set(user_id.to_string()),
+        created_at: Set(Utc::now().naive_utc()),
+        skipped_at: Set(skipped_at),
+    }
+    .insert(db)
+    .await
+    .expect("insert race participation");
+}
+
+/// Backdate a participant's `left_at` and optionally `joined_at`. Tests use
+/// this to simulate "user left N minutes ago" without sleeping.
+pub async fn backdate_participant(
+    db: &DatabaseConnection,
+    session_id: &str,
+    user_id: &str,
+    joined_at: Option<chrono::NaiveDateTime>,
+    left_at: Option<chrono::NaiveDateTime>,
+) {
+    use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter};
+
+    let row = session_participants::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_participants::Column::SessionId.eq(session_id))
+                .add(session_participants::Column::UserId.eq(user_id)),
+        )
+        .one(db)
+        .await
+        .expect("query participant")
+        .expect("participant exists");
+
+    let mut active: session_participants::ActiveModel = row.into();
+    if let Some(j) = joined_at {
+        active.joined_at = Set(j);
+    }
+    active.left_at = Set(left_at);
+    active.update(db).await.expect("backdate participant");
 }
 
 /// Seed the minimum game data required for run-creation tests: one each of

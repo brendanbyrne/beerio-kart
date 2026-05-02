@@ -117,7 +117,7 @@ pub async fn create_session(
 
     txn.commit().await?;
 
-    get_session_detail(db, &session_id).await
+    get_session_detail(db, &session_id, Some(user_id)).await
 }
 
 /// Summary info for listing active sessions.
@@ -283,6 +283,11 @@ pub struct SessionDetail {
     pub race_number: usize,
     pub current_race: Option<SessionRaceInfo>,
     pub races: Vec<RaceInfo>,
+    /// Pending races for the requesting user, oldest first. Empty if the
+    /// user is not in this session, has no pending races, or is past the
+    /// 5-minute grace window after leaving. The API returns all matching
+    /// rows; the UI applies the "max 3 pending" cap.
+    pub your_pending: Vec<SessionRaceInfo>,
 }
 
 // ── get_session_detail sub-queries ────────────────────────────────────
@@ -427,10 +432,105 @@ async fn load_race_history(
         .collect())
 }
 
+/// Row shape for the pending-races query.
+#[derive(Debug, FromQueryResult)]
+struct PendingRaceRow {
+    id: String,
+    race_number: i32,
+    track_id: i32,
+    track_name: String,
+    cup_name: String,
+    image_path: String,
+    created_at: NaiveDateTime,
+}
+
+/// Return the requesting user's pending races within a session, oldest first.
+///
+/// A race is **pending** for user `U` iff all of the following hold (per
+/// DESIGN.md "Pending Race Tracking"):
+///
+/// 1. A `session_race_participations` row exists for `(SR.id, U.id)` —
+///    proves `U` was present when `SR` was created.
+/// 2. `skipped_at IS NULL` on that row — `U` hasn't explicitly forfeited.
+/// 3. No `runs` row exists for `(SR.id, U.id)` — `U` hasn't submitted.
+/// 4. `U` is currently within grace — `session_participants.left_at IS NULL`
+///    OR `NOW() - left_at <= REJOIN_GRACE_MINUTES`.
+/// 5. `SR.created_at >= session_participants.joined_at` — excludes pre-gap
+///    pending after a long-gap rejoin reset `joined_at`.
+///
+/// Returns empty if the user is not a participant, all races are submitted/
+/// skipped, or the user is past the grace window.
+///
+/// **Lazy check note:** The grace-period predicate is computed at query time
+/// from `NOW()` and stored timestamps. No background task touches
+/// `session_race_participations` rows — they remain in the DB for history
+/// regardless of accessibility.
+///
+/// **`submissions` is intentionally empty.** Pending races report only the
+/// race shell here; per-race submissions belong to the current/history views,
+/// not the pending list. This avoids an N+1 query and keeps the polling path
+/// fast.
+pub async fn get_pending_races(
+    db: &impl ConnectionTrait,
+    session_id: &str,
+    user_id: &str,
+) -> Result<Vec<SessionRaceInfo>, AppError> {
+    let now = Utc::now().naive_utc();
+    let grace_cutoff = now - chrono::Duration::minutes(REJOIN_GRACE_MINUTES);
+
+    let rows = PendingRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+        SELECT sr.id, sr.race_number, sr.track_id,
+               t.name AS track_name, c.name AS cup_name,
+               t.image_path, sr.created_at
+        FROM session_race_participations srp
+        JOIN session_races sr ON srp.session_race_id = sr.id
+        JOIN tracks t ON sr.track_id = t.id
+        JOIN cups c ON t.cup_id = c.id
+        JOIN session_participants sp
+          ON sp.session_id = sr.session_id AND sp.user_id = srp.user_id
+        WHERE sr.session_id = $1
+          AND srp.user_id = $2
+          AND srp.skipped_at IS NULL
+          AND sr.created_at >= sp.joined_at
+          AND (sp.left_at IS NULL OR sp.left_at >= $3)
+          AND NOT EXISTS (
+              SELECT 1 FROM runs r
+              WHERE r.session_race_id = sr.id AND r.user_id = srp.user_id
+          )
+        ORDER BY sr.race_number ASC
+        "#,
+        [session_id.into(), user_id.into(), grace_cutoff.into()],
+    ))
+    .all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| SessionRaceInfo {
+            id: r.id,
+            race_number: r.race_number,
+            track_id: r.track_id,
+            track_name: r.track_name,
+            cup_name: r.cup_name,
+            image_path: r.image_path,
+            created_at: r.created_at.and_utc(),
+            submissions: Vec::new(),
+        })
+        .collect())
+}
+
 /// Get full session detail — the polling endpoint.
+///
+/// `requesting_user_id` is the authenticated caller — used to compute the
+/// per-user `your_pending` list. Anonymous callers aren't supported by the
+/// route layer, so this is always `Some` in production; tests pass `None`
+/// when they don't care about pending state.
 pub async fn get_session_detail(
     db: &DatabaseConnection,
     session_id: &str,
+    requesting_user_id: Option<&str>,
 ) -> Result<SessionDetail, AppError> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
@@ -441,6 +541,10 @@ pub async fn get_session_detail(
     let participants = load_participants(db, session_id).await?;
     let current_race = load_current_race_with_submissions(db, session_id).await?;
     let races = load_race_history(db, session_id).await?;
+    let your_pending = match requesting_user_id {
+        Some(uid) => get_pending_races(db, session_id, uid).await?,
+        None => Vec::new(),
+    };
 
     // Derive race_number from history instead of a separate COUNT query —
     // saves one DB round trip on every poll. Safe because race numbers are
@@ -462,10 +566,28 @@ pub async fn get_session_detail(
         race_number,
         current_race,
         races,
+        your_pending,
     })
 }
 
-/// Join a session. Creates a new participant row.
+/// Grace window for "rejoin without losing pre-leave pending races." Within
+/// this window of `left_at`, rejoining preserves `joined_at` (and therefore
+/// preserves access to pre-leave pending races, per the §3 grace semantics).
+/// After this window, `joined_at` is reset to NOW(), forfeiting any pre-gap
+/// pending records.
+pub const REJOIN_GRACE_MINUTES: i64 = 5;
+
+/// Join (or rejoin) a session. **Single mutable row per (session, user)** —
+/// first join INSERTs, rejoin mutates the existing row.
+///
+/// Rejoin behavior:
+/// - **Within grace** (`NOW() - left_at <= 5 min`): clear `left_at`, leave
+///   `joined_at` untouched. The user is treated as continuously present, so
+///   any pending races created before the leave remain accessible.
+/// - **Outside grace** (`NOW() - left_at > 5 min`): clear `left_at` AND reset
+///   `joined_at = NOW()`. Pre-gap pending records remain in the DB for
+///   history but are filtered out by the pending-races query
+///   (`session_races.created_at >= session_participants.joined_at`).
 pub async fn join_session(
     db: &DatabaseConnection,
     session_id: &str,
@@ -479,18 +601,53 @@ pub async fn join_session(
         })?;
     check_not_in_any_session(db, user_id).await?;
 
+    let existing = session_participants::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_participants::Column::SessionId.eq(session_id))
+                .add(session_participants::Column::UserId.eq(user_id)),
+        )
+        .one(db)
+        .await?;
+
     let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
 
-    session_participants::ActiveModel {
-        id: Set(Uuid::new_v4().to_string()),
-        session_id: Set(session_id.to_string()),
-        user_id: Set(user_id.to_string()),
-        joined_at: Set(now),
-        left_at: Set(None),
+    match existing {
+        None => {
+            session_participants::ActiveModel {
+                id: Set(Uuid::new_v4().to_string()),
+                session_id: Set(session_id.to_string()),
+                user_id: Set(user_id.to_string()),
+                joined_at: Set(now),
+                left_at: Set(None),
+            }
+            .insert(&txn)
+            .await?;
+        }
+        Some(row) => {
+            let Some(left_at) = row.left_at else {
+                // Already present in this session. The partial unique index on
+                // user_id WHERE left_at IS NULL would catch a stray duplicate
+                // INSERT, but `check_not_in_any_session` should have already
+                // surfaced this as a 409 — reaching here implies a different
+                // active session, which is a user-level conflict.
+                return Err(AppError::Conflict("Already in this session".to_string()));
+            };
+
+            let mut active: session_participants::ActiveModel = row.into();
+            active.left_at = Set(None);
+
+            let gap = now.signed_duration_since(left_at);
+            if gap > chrono::Duration::minutes(REJOIN_GRACE_MINUTES) {
+                // Outside grace — reset joined_at so pre-gap pending records
+                // are filtered out of the user's pending list.
+                active.joined_at = Set(now);
+            }
+
+            active.update(&txn).await?;
+        }
     }
-    .insert(&txn)
-    .await?;
 
     helpers::touch_session(&txn, session_id).await?;
 
@@ -520,6 +677,13 @@ enum HostDisposition {
 /// the same transaction before calling this function. The non-host branch
 /// counts active participants via `left_at IS NULL`, and relies on the
 /// leaver's row being excluded by the prior update.
+///
+/// **Note on `joined_at` semantics:** `joined_at` is the start of the
+/// participant's *current* presence segment, which gets reset on a long-gap
+/// rejoin (see `join_session`). So "earliest-joined" effectively means
+/// "most-tenured in the current segment." That's the right host successor —
+/// someone who just rejoined after a long break shouldn't outrank a steadily
+/// present participant.
 async fn transfer_host_or_close(
     txn: &impl ConnectionTrait,
     session_id: &str,
@@ -646,6 +810,7 @@ pub async fn next_track(
     .insert(&txn)
     .await?;
 
+    helpers::insert_race_participations(&txn, session_id, &race_id).await?;
     helpers::touch_session(&txn, session_id).await?;
 
     txn.commit().await?;
@@ -717,7 +882,10 @@ pub async fn skip_turn(
     let now = Utc::now().naive_utc();
     let race_id = Uuid::new_v4().to_string();
 
-    // Delete old race + insert new one + update activity in a single transaction
+    // Delete old race + insert new one + snapshot present users in a single
+    // transaction. The old race's `session_race_participations` rows cascade
+    // away with the delete; the new race gets a fresh snapshot of who's
+    // currently present.
     let txn = db.begin().await?;
 
     current_race.delete(&txn).await?;
@@ -733,6 +901,7 @@ pub async fn skip_turn(
     .insert(&txn)
     .await?;
 
+    helpers::insert_race_participations(&txn, session_id, &race_id).await?;
     helpers::touch_session(&txn, session_id).await?;
 
     txn.commit().await?;
@@ -845,8 +1014,10 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entities::session_race_participations;
     use crate::test_helpers::{
-        create_user, insert_participant, insert_session, seed_tracks_for_test, setup_db,
+        backdate_participant, create_user, insert_participant, insert_race_participation,
+        insert_session, insert_session_race, seed_tracks_for_test, setup_db,
     };
 
     // ── load_host_username ───────────────────────────────────────────
@@ -1093,7 +1264,9 @@ mod tests {
         let session = create_session(&db, &host_id, "random").await.unwrap();
         join_session(&db, &session.id, &user2_id).await.unwrap();
 
-        let detail = get_session_detail(&db, &session.id).await.unwrap();
+        let detail = get_session_detail(&db, &session.id, Some(&host_id))
+            .await
+            .unwrap();
         assert_eq!(detail.participants.len(), 2);
         assert_eq!(detail.host_username, "host");
         assert_eq!(detail.race_number, 1);
@@ -1339,12 +1512,16 @@ mod tests {
         let session = create_session(&db, &host_id, "random").await.unwrap();
 
         // Before any track pick, current_race should be None
-        let detail = get_session_detail(&db, &session.id).await.unwrap();
+        let detail = get_session_detail(&db, &session.id, Some(&host_id))
+            .await
+            .unwrap();
         assert!(detail.current_race.is_none());
 
         // After picking a track, current_race should be populated
         let race = next_track(&db, &session.id, &host_id).await.unwrap();
-        let detail = get_session_detail(&db, &session.id).await.unwrap();
+        let detail = get_session_detail(&db, &session.id, Some(&host_id))
+            .await
+            .unwrap();
         let current = detail.current_race.expect("current_race should be Some");
         assert_eq!(current.track_id, race.track_id);
         assert_eq!(current.track_name, race.track_name);
@@ -1421,5 +1598,479 @@ mod tests {
             create_session(&db, &user_id, "random").await.is_ok(),
             "user should be freed from stale session"
         );
+    }
+
+    // ── Race-creation participation hook (PR 3D-1) ──────────────────────
+
+    #[tokio::test]
+    async fn test_create_session_race_inserts_participations_for_currently_present_users() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user2_id = create_user(&db, "user2").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user2_id).await.unwrap();
+
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let parts = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::SessionRaceId.eq(&race.id))
+            .all(&db)
+            .await
+            .unwrap();
+        assert_eq!(parts.len(), 2, "one row per currently-present user");
+        let user_ids: std::collections::HashSet<&str> =
+            parts.iter().map(|p| p.user_id.as_str()).collect();
+        assert!(user_ids.contains(host_id.as_str()));
+        assert!(user_ids.contains(user2_id.as_str()));
+        for p in &parts {
+            assert!(
+                p.skipped_at.is_none(),
+                "fresh participation rows are not skipped"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_session_race_does_not_insert_participations_for_left_users() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let leaver_id = create_user(&db, "leaver").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &leaver_id).await.unwrap();
+        leave_session(&db, &session.id, &leaver_id).await.unwrap();
+
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let parts = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::SessionRaceId.eq(&race.id))
+            .all(&db)
+            .await
+            .unwrap();
+        assert_eq!(
+            parts.len(),
+            1,
+            "only the still-present host should be snapshotted"
+        );
+        assert_eq!(parts[0].user_id, host_id);
+    }
+
+    #[tokio::test]
+    async fn test_create_session_race_atomic_with_race_insert() {
+        // If a participation insert fails inside the same transaction as the
+        // session_races insert, the entire transaction must roll back —
+        // the race row must not be visible afterwards. We force the failure
+        // by trying to INSERT a participation row with a non-existent
+        // user_id (FK violation) inside the same txn.
+        use sea_orm::TransactionTrait;
+
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host_id, "active").await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+
+        let txn = db.begin().await.unwrap();
+        let race_id = Uuid::new_v4().to_string();
+        let now = Utc::now().naive_utc();
+
+        session_races::ActiveModel {
+            id: Set(race_id.clone()),
+            session_id: Set(session_id.clone()),
+            race_number: Set(1),
+            track_id: Set(1),
+            chosen_by: Set(None),
+            created_at: Set(now),
+        }
+        .insert(&txn)
+        .await
+        .expect("race insert succeeds");
+
+        // FK violation: user_id "ghost" doesn't exist in users.
+        let bad = session_race_participations::ActiveModel {
+            session_race_id: Set(race_id.clone()),
+            user_id: Set("ghost".to_string()),
+            created_at: Set(now),
+            skipped_at: Set(None),
+        }
+        .insert(&txn)
+        .await;
+        assert!(bad.is_err(), "FK violation must surface as Err");
+
+        txn.rollback().await.unwrap();
+
+        let race = session_races::Entity::find_by_id(&race_id)
+            .one(&db)
+            .await
+            .unwrap();
+        assert!(
+            race.is_none(),
+            "session_races row must be rolled back when a participation insert fails"
+        );
+    }
+
+    // ── Pending race query (PR 3D-1) ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_pending_includes_unresolved_present_races() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, race.id);
+        assert_eq!(pending[0].race_number, race.race_number);
+        assert_eq!(pending[0].track_id, race.track_id);
+    }
+
+    #[tokio::test]
+    async fn test_pending_excludes_submitted_races() {
+        // Insert a runs row directly to avoid pulling all of run-creation's
+        // validation surface into a query test.
+        use crate::drink_type_id::drink_type_uuid;
+        use crate::entities::{drink_types, runs};
+        use crate::test_helpers::seed_game_data;
+
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host_id, "active").await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        let race_id = insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
+        insert_race_participation(&db, &race_id, &host_id, None).await;
+
+        // Verify pending before the run
+        let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 1);
+
+        // Insert a run row for this (race, user)
+        let drink_id = drink_type_uuid("Test Beer");
+        let _drink = drink_types::Entity::find_by_id(&drink_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("seed_game_data inserts Test Beer");
+        runs::ActiveModel {
+            id: Set(Uuid::new_v4().to_string()),
+            user_id: Set(host_id.clone()),
+            session_race_id: Set(race_id.clone()),
+            track_id: Set(1),
+            character_id: Set(1),
+            body_id: Set(1),
+            wheel_id: Set(1),
+            glider_id: Set(1),
+            track_time: Set(120_000),
+            lap1_time: Set(40_000),
+            lap2_time: Set(40_000),
+            lap3_time: Set(40_000),
+            drink_type_id: Set(drink_id),
+            disqualified: Set(false),
+            photo_path: Set(None),
+            created_at: Set(Utc::now().naive_utc()),
+            notes: Set(None),
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
+        assert!(pending.is_empty(), "submitted races drop from pending");
+    }
+
+    #[tokio::test]
+    async fn test_pending_excludes_skipped_races() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host_id, "active").await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        let race_id = insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
+
+        // skipped_at IS NOT NULL → not pending
+        insert_race_participation(&db, &race_id, &host_id, Some(Utc::now().naive_utc())).await;
+
+        let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
+        assert!(pending.is_empty(), "skipped races drop from pending");
+    }
+
+    #[tokio::test]
+    async fn test_pending_excludes_races_user_was_absent_for() {
+        // User B leaves before the race is created — so next_track only
+        // snapshots A. After B rejoins, B has no participation row for that
+        // race and therefore no pending entry for it.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
+        leave_session(&db, &session.id, &user_b).await.unwrap();
+
+        next_track(&db, &session.id, &host_id).await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
+
+        let pending_b = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert!(
+            pending_b.is_empty(),
+            "user absent at race creation has no pending row"
+        );
+
+        let pending_a = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(
+            pending_a.len(),
+            1,
+            "host who was present has a pending entry"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pending_returned_ordered_by_race_number_asc() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        let r1 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r2 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r3 = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        let race_numbers: Vec<i32> = pending.iter().map(|r| r.race_number).collect();
+        assert_eq!(race_numbers, vec![1, 2, 3]);
+        assert_eq!(pending[0].id, r1.id);
+        assert_eq!(pending[1].id, r2.id);
+        assert_eq!(pending[2].id, r3.id);
+    }
+
+    #[tokio::test]
+    async fn test_pending_returns_all_records_ui_caps() {
+        // Schema/API has no cap; the 3-cap is a UI concern. Verify the
+        // backend returns more than 3 when more than 3 are pending.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        for _ in 0..5 {
+            next_track(&db, &session.id, &host_id).await.unwrap();
+        }
+
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 5, "API returns all; UI applies the cap");
+    }
+
+    // ── Grace period (PR 3D-1) ──────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_pending_accessible_when_currently_in_session() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 1, "left_at IS NULL → pending accessible");
+    }
+
+    #[tokio::test]
+    async fn test_pending_accessible_when_within_grace() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        // Backdate left_at to 3 minutes ago — well inside the 5-minute window.
+        let three_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(3);
+        backdate_participant(&db, &session.id, &host_id, None, Some(three_min_ago)).await;
+
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 1, "within grace, pending stays accessible");
+    }
+
+    #[tokio::test]
+    async fn test_pending_inaccessible_when_grace_expired() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        // Backdate left_at to 6 minutes ago — past the 5-minute window.
+        let six_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(6);
+        backdate_participant(&db, &session.id, &host_id, None, Some(six_min_ago)).await;
+
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert!(pending.is_empty(), "grace expired → no accessible pending");
+
+        // The row still exists in the DB (lazy check, no cleanup).
+        let count = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::UserId.eq(&host_id))
+            .count(&db)
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "participation row remains for history");
+    }
+
+    #[tokio::test]
+    async fn test_rejoin_within_grace_preserves_pending() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // Capture B's joined_at, then leave + backdate left_at to 3 min ago.
+        let original_joined = session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(&session.id))
+                    .add(session_participants::Column::UserId.eq(&user_b)),
+            )
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .joined_at;
+        leave_session(&db, &session.id, &user_b).await.unwrap();
+        let three_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(3);
+        backdate_participant(&db, &session.id, &user_b, None, Some(three_min_ago)).await;
+
+        join_session(&db, &session.id, &user_b).await.unwrap();
+
+        let row = session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(&session.id))
+                    .add(session_participants::Column::UserId.eq(&user_b)),
+            )
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(row.left_at.is_none(), "left_at cleared on rejoin");
+        assert_eq!(
+            row.joined_at, original_joined,
+            "within-grace rejoin must NOT advance joined_at"
+        );
+
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "pre-leave pending preserved on within-grace rejoin"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rejoin_after_grace_resets_joined_at_and_forfeits_pending() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        let original_joined = session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(&session.id))
+                    .add(session_participants::Column::UserId.eq(&user_b)),
+            )
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .joined_at;
+
+        leave_session(&db, &session.id, &user_b).await.unwrap();
+        // Backdate left_at to 20 min ago — well past the 5-minute window.
+        let twenty_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(20);
+        backdate_participant(&db, &session.id, &user_b, None, Some(twenty_min_ago)).await;
+
+        join_session(&db, &session.id, &user_b).await.unwrap();
+
+        let row = session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(&session.id))
+                    .add(session_participants::Column::UserId.eq(&user_b)),
+            )
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(row.left_at.is_none(), "left_at cleared on rejoin");
+        assert!(
+            row.joined_at > original_joined,
+            "outside-grace rejoin must advance joined_at: was {}, now {}",
+            original_joined,
+            row.joined_at,
+        );
+
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert!(
+            pending.is_empty(),
+            "pre-gap pending is forfeited (filtered by created_at >= joined_at)"
+        );
+
+        // The participation row itself stays for history.
+        let count = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::UserId.eq(&user_b))
+            .count(&db)
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "forfeited participation row remains in DB");
+    }
+
+    #[tokio::test]
+    async fn test_multiple_short_flaps_within_grace_preserve_pending() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // Flap 1: leave, backdate left_at to 2 min ago, rejoin.
+        leave_session(&db, &session.id, &user_b).await.unwrap();
+        let two_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(2);
+        backdate_participant(&db, &session.id, &user_b, None, Some(two_min_ago)).await;
+        join_session(&db, &session.id, &user_b).await.unwrap();
+
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert_eq!(pending.len(), 1, "after first short flap, pending intact");
+
+        // Flap 2: leave again, backdate left_at to 1 min ago, rejoin.
+        leave_session(&db, &session.id, &user_b).await.unwrap();
+        let one_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(1);
+        backdate_participant(&db, &session.id, &user_b, None, Some(one_min_ago)).await;
+        join_session(&db, &session.id, &user_b).await.unwrap();
+
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert_eq!(pending.len(), 1, "multiple short flaps preserve pending");
+    }
+
+    /// Documents intent: no background timer or sweeper task touches
+    /// `session_race_participations`. Pending accessibility is a pure read-time
+    /// derivation from `(session_race_participations, session_participants,
+    /// runs)` — see `get_pending_races`. Forfeited rows remain in the DB
+    /// indefinitely as historical state. If a future PR adds a sweeper, this
+    /// assertion (and the design rationale in DESIGN.md "Pending Race
+    /// Tracking") needs to be revisited.
+    #[tokio::test]
+    async fn test_lazy_check_assertion() {
+        // No-op test by design — this comment IS the assertion.
     }
 }

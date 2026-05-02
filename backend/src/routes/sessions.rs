@@ -51,11 +51,11 @@ pub async fn list_sessions(
 
 /// GET /sessions/:id — full session state for polling.
 pub async fn get_session(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<sessions::SessionDetail>, AppError> {
-    let detail = sessions::get_session_detail(&state.db, &id).await?;
+    let detail = sessions::get_session_detail(&state.db, &id, Some(&user.user_id)).await?;
     Ok(Json(detail))
 }
 
