@@ -326,14 +326,20 @@ impl MigrationTrait for Migration {
         // walk of `session_participants` history. `skipped_at` flips when the
         // user explicitly forfeits the race.
         //
-        // ON DELETE CASCADE on session_race_id matters for `skip_turn`, which
-        // deletes-and-replaces the current race; cascading drops the old
-        // participations atomically.
+        // ON DELETE CASCADE on session_race_id is required: `skip_turn`
+        // deletes-and-replaces the current race, and the old participations
+        // need to evaporate atomically with the race delete.
+        //
+        // user_id intentionally does NOT cascade — DESIGN.md guarantees these
+        // rows are never deleted (they're the audit trail of "who was present
+        // when"). If a user-deletion path is ever added, it must explicitly
+        // decide what to do with these rows rather than letting them silently
+        // vanish.
 
         conn.execute_unprepared(
             "CREATE TABLE IF NOT EXISTS session_race_participations (
                     session_race_id TEXT NOT NULL REFERENCES session_races(id) ON DELETE CASCADE,
-                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    user_id TEXT NOT NULL REFERENCES users(id),
                     created_at datetime_text NOT NULL,
                     skipped_at datetime_text,
                     PRIMARY KEY (session_race_id, user_id)

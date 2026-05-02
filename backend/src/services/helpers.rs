@@ -6,8 +6,8 @@
 use chrono::Utc;
 use rand::seq::SliceRandom;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, EntityTrait, PrimaryKeyTrait,
-    QueryFilter, Set, sea_query::Expr,
+    ColumnTrait, Condition, ConnectionTrait, EntityTrait, PrimaryKeyTrait, QueryFilter, Set,
+    sea_query::Expr,
 };
 
 use crate::domain::enums::SessionStatus;
@@ -80,16 +80,26 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
         .all(txn)
         .await?;
 
-    for participant in present {
-        session_race_participations::ActiveModel {
+    if present.is_empty() {
+        // `insert_many` with an empty iterator panics in some SeaORM
+        // versions; bail before the call. Nothing to snapshot is a valid
+        // state — e.g. all participants left between race creation and the
+        // helper call (shouldn't happen in normal flow, but defended here).
+        return Ok(());
+    }
+
+    let rows = present
+        .into_iter()
+        .map(|p| session_race_participations::ActiveModel {
             session_race_id: Set(session_race_id.to_string()),
-            user_id: Set(participant.user_id),
+            user_id: Set(p.user_id),
             created_at: Set(now),
             skipped_at: Set(None),
-        }
-        .insert(txn)
+        });
+
+    session_race_participations::Entity::insert_many(rows)
+        .exec(txn)
         .await?;
-    }
 
     Ok(())
 }
@@ -181,9 +191,12 @@ mod tests {
     use super::*;
     use sea_orm::{ActiveModelTrait, Set};
 
-    use crate::entities::{characters, cups, tracks};
+    use sea_orm::PaginatorTrait;
+
+    use crate::entities::{characters, cups, session_race_participations, tracks};
     use crate::test_helpers::{
-        create_user, insert_participant, insert_session, seed_tracks_for_test, setup_db,
+        create_user, insert_participant, insert_session, insert_session_race, seed_tracks_for_test,
+        setup_db,
     };
 
     // --- load_active_session ---
@@ -401,5 +414,74 @@ mod tests {
 
         let chosen = pick_random_track(&db, &[], &[]).await.unwrap();
         assert_eq!(chosen.id, 42);
+    }
+
+    // --- insert_race_participations ---
+
+    #[tokio::test]
+    async fn insert_race_participations_snapshots_only_present_users() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host = create_user(&db, "host").await;
+        let active = create_user(&db, "active").await;
+        let left = create_user(&db, "left").await;
+
+        let session_id = insert_session(&db, &host, "active").await;
+        insert_participant(&db, &session_id, &host, None).await;
+        insert_participant(&db, &session_id, &active, None).await;
+        insert_participant(&db, &session_id, &left, Some(Utc::now().naive_utc())).await;
+
+        let race_id = insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
+
+        insert_race_participations(&db, &session_id, &race_id)
+            .await
+            .expect("snapshot succeeds");
+
+        let rows = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::SessionRaceId.eq(&race_id))
+            .all(&db)
+            .await
+            .unwrap();
+        assert_eq!(
+            rows.len(),
+            2,
+            "only the two left_at IS NULL users are snapshotted"
+        );
+        let users: std::collections::HashSet<&str> =
+            rows.iter().map(|r| r.user_id.as_str()).collect();
+        assert!(users.contains(host.as_str()));
+        assert!(users.contains(active.as_str()));
+        assert!(
+            !users.contains(left.as_str()),
+            "user with left_at set must not be snapshotted"
+        );
+    }
+
+    #[tokio::test]
+    async fn insert_race_participations_no_present_users_is_noop() {
+        // Edge case: a race exists but no participant is currently present
+        // (e.g. all left between race creation and the helper call). Helper
+        // should succeed and insert zero rows — no INSERT statement at all,
+        // since `insert_many` with an empty iterator panics in some
+        // SeaORM versions.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host, "active").await;
+        // host has already left
+        insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
+
+        let race_id = insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
+
+        insert_race_participations(&db, &session_id, &race_id)
+            .await
+            .expect("empty snapshot must not error");
+
+        let count = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::SessionRaceId.eq(&race_id))
+            .count(&db)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "no rows inserted when no users present");
     }
 }
