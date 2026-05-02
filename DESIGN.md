@@ -273,21 +273,26 @@ Notes:
 
 ### Session Participants
 
-Tracks who is in a session and when they joined/left. A user can rejoin a session (creating a new row).
+Tracks current participation state for each (session, user) pair. **One row per (session, user)** — leave/rejoin mutates this row rather than appending a new one.
 
 ```
 session_participants
 ├── id: UUID (primary key)
 ├── session_id: UUID (foreign key -> sessions, not null)
 ├── user_id: UUID (foreign key -> users, not null)
-├── joined_at: TIMESTAMP (not null)
+├── joined_at: TIMESTAMP (not null — start of current presence segment)
 └── left_at: TIMESTAMP (nullable — null means currently in session)
 ```
 
+Constraints:
+- Composite unique on `(session_id, user_id)` — at most one row per (session, user).
+
 Notes:
-- A user can have multiple rows for the same session (left and rejoined).
-- "Currently in session" = has a row where `left_at` is null.
-- On leave, pending races enter a 5-minute grace period. If the user rejoins within that window, their pending races are preserved. After the grace period, pending races expire. Grace period is checked lazily at submission time (compare `now` against `left_at`) — no background timer needed.
+- "Currently in session" = `left_at` is null.
+- On rejoin within 5 minutes of `left_at`: clear `left_at` (set to NULL). `joined_at` is **not** changed — the user is treated as having been continuously present.
+- On rejoin after 5+ minutes since `left_at`: clear `left_at` AND reset `joined_at` to NOW(). This forfeits any pre-gap pending races (they remain in the database for history but are excluded from the user's accessible pending list — see Pending Race Tracking).
+- Grace period is checked lazily at query time (compare `NOW()` against `left_at`) — no background timer needed.
+- Per-race presence (which races the user was actually present for at creation time) is NOT derived from this table — see `session_race_participations`.
 
 ### Session Races
 
@@ -309,6 +314,31 @@ Constraints:
 Notes:
 - `chosen_by` is null when the track was selected automatically (random ruleset, or everyone recused in default/round-robin).
 - Race numbers are sequential and gapless within a session.
+- On race creation, the server inserts one `session_race_participations` row per currently-present user in the same transaction — see below.
+
+### Session Race Participations
+
+Captures which users were present when each session race was created, plus per-(race, user) skip status. This table is what makes pending-race tracking possible without a participation history walk.
+
+```
+session_race_participations
+├── session_race_id: UUID (foreign key -> session_races, not null)
+├── user_id: UUID (foreign key -> users, not null)
+├── created_at: TIMESTAMP (not null)
+└── skipped_at: TIMESTAMP (nullable — set when the user explicitly skips this race)
+```
+
+Constraints:
+- Primary key: `(session_race_id, user_id)` — at most one row per (race, user). Idempotent skip via PK conflict handling.
+- Index: `(user_id)` for "what's pending for this user" queries.
+
+Notes:
+- Inserted at race-creation time, in the same transaction as the `session_races` INSERT, for every user with `session_participants.left_at IS NULL` in this session.
+- Existence of a row = "this user was present when this race was created" (the primary fact this table proves).
+- `skipped_at IS NULL` AND no corresponding `runs` row = pending state.
+- `skipped_at IS NOT NULL` = user explicitly forfeited this race.
+- A `runs` row for `(session_race_id, user_id)` = user submitted; pending state cleared by row presence in `runs`.
+- Rows are never deleted. After grace expires or after a session closes, rows remain in the DB for history; they just become inaccessible via normal API paths (filtered out by grace check or `session.status = 'active'` filter).
 
 ### Runs
 
@@ -407,9 +437,21 @@ This approach supports an unbounded number of rivals — no tracking table neede
 
 Within a session, a participant may have "pending" races — session races they were present for but haven't yet submitted a time. The UI caps pending races at 3 (oldest expire first), but the schema places no limit, allowing this cap to be adjusted later.
 
-When a participant has pending races, they submit in order (oldest first). For each pending race, they can submit a time or skip. Submitting out of order is not allowed — this prevents cherry-picking favorable tracks to game H2H records.
+**Derivation.** A `session_race_participations` row represents pending state for user `U` and race `SR` iff all of the following hold:
 
-If the session advances while a participant hasn't submitted, they get a choice: submit for the original track (default) or the current one. This ensures no one person holds up the group, consistent with "never feel rushed."
+1. The row exists (i.e. `U` was present when `SR` was created).
+2. `skipped_at IS NULL` on the row.
+3. No `runs` row exists for `(SR.id, U.id)`.
+4. `U` is currently within grace — `session_participants.left_at IS NULL` OR `NOW() - left_at <= 5min`.
+5. `SR.created_at >= session_participants.joined_at` for `U` (excludes pre-gap pending after a long-gap rejoin reset `joined_at`).
+
+Pending races are returned ordered by `session_races.race_number ASC`. The API returns all; the UI applies the 3-cap.
+
+**Submission rules.** When a participant has pending races, they submit in order (oldest first). For each pending race, they can submit a time or skip. Submitting out of order is not allowed — this prevents cherry-picking favorable tracks to game H2H records. Skipping is permitted in any order (skipping doesn't help cherry-pick because no time is recorded).
+
+**Session advancement.** If the session advances while a participant hasn't submitted, they see their pending list (oldest first) when they go to submit, and must resolve them in order before submitting for the current race. This ensures no one person holds up the group, consistent with "never feel rushed."
+
+**Forfeiture vs. deletion.** Forfeited pending records (those filtered out by grace expiration or `joined_at` reset) are **not deleted** from `session_race_participations`. They remain as historical state and become inaccessible via the derivation above. This preserves the audit trail of "what was pending at any moment" for debugging and future analytics.
 
 ### Session Rulesets
 
