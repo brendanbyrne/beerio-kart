@@ -213,10 +213,17 @@ pub async fn create_run(
     // Race Tracking" → "Submission rules"). Skipping the older race or
     // submitting it (which clears it via the `runs` row check in
     // `get_pending_races`) unblocks newer submissions.
+    //
+    // Use filter + min_by_key rather than a bare `find`: `find` would rely
+    // on `get_pending_races` returning ASC by race_number to make the first
+    // match the oldest. The contract holds today, but `min_by_key` removes
+    // the implicit dependency so the error message can't silently name a
+    // wrong race if the SQL ORDER BY is ever dropped or inverted.
     let pending = sessions::get_pending_races(db, &session_race.session_id, user_id).await?;
     if let Some(older) = pending
         .iter()
-        .find(|p| p.race_number < session_race.race_number)
+        .filter(|p| p.race_number < session_race.race_number)
+        .min_by_key(|p| p.race_number)
     {
         return Err(AppError::Conflict(format!(
             "Must submit or skip pending race #{} first",

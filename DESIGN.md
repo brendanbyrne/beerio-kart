@@ -266,7 +266,7 @@ Notes:
 - `host_id` starts as `created_by`. If the host leaves, host role transfers to the earliest-joined remaining participant.
 - `least_played_drink_category` stores values as `"alcoholic"` or `"non_alcoholic"` (snake_case, per database convention). The frontend maps these to display text with hyphens ("non-alcoholic").
 - Ruleset-specific config uses explicit nullable columns rather than a JSON blob. With four well-defined rulesets, explicit columns are safer (database can enforce CHECK constraints) and queryable. New config options require a migration, but that's the right tradeoff for known rulesets.
-- Session auto-closes after 1 hour of no activity. No further run submissions accepted after close. A lightweight Tokio background task checks for and closes stale sessions periodically (e.g., every 5 minutes) so they don't linger in the active sessions list. Actions that update `last_activity_at`: run submission, track selection (next-track, choose-track), join, leave, skip-turn.
+- Session auto-closes after 1 hour of no activity. No further run submissions accepted after close. A lightweight Tokio background task checks for and closes stale sessions periodically (e.g., every 5 minutes) so they don't linger in the active sessions list. Actions that update `last_activity_at`: run submission, track selection (next-track, choose-track), join, leave, skip-turn (chooser pass), skip-pending-race (forfeit a pending race).
 - Future consideration: `password_hash` column for session passwords. Deferred — the `POST /sessions/:id/join` endpoint is designed as a dedicated action so password checking can be added later without restructuring the join flow.
 - A user can only be active in one session at a time (enforced by a partial unique index on `session_participants(user_id) WHERE left_at IS NULL`).
 - **Session UI icons:** The host is indicated by a 🏠 (house) icon, not a crown. The 👑 (crown) is reserved for the player with the most fastest track times in the session — an earned distinction, not a role.
@@ -632,6 +632,7 @@ POST   /sessions/:id/next-track    Trigger next track selection (host or chooser
 POST   /sessions/:id/choose-track  Choose a specific track (for rulesets where a player picks)
 POST   /sessions/:id/skip-turn     Pass the chooser's turn to the next person (any participant can trigger)
 GET    /sessions/:id/races         List all races in a session (with submission status per participant)
+POST   /sessions/:id/races/:race_id/skip   Mark a pending race as skipped for the requesting user (idempotent)
 ```
 
 Note: Session state is consumed via polling — clients call `GET /sessions/:id` every 2-3 seconds to pick up joins, leaves, new races, and submissions. For a turn-based game where events happen every few minutes, polling latency is imperceptible. WebSockets can be added later as an optimization if polling ever feels sluggish.

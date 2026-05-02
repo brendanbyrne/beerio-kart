@@ -2411,6 +2411,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_skip_pending_race_fails_on_closed_session() {
+        // Mirrors test_next_track_fails_on_closed_session and
+        // test_create_run_fails_if_session_closed: every closed-session
+        // guard in the codebase has a corresponding test. Asserts the
+        // custom Conflict remap fires (Cannot skip in a closed session)
+        // rather than leaking the generic load_active_session message.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // Close by having the only participant (host) leave.
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        let err = skip_pending_race(&db, &session.id, &race.id, &host_id)
+            .await
+            .unwrap_err();
+        match err {
+            AppError::Conflict(msg) => {
+                assert!(
+                    msg.contains("closed"),
+                    "expected closed-session message, got: {msg}"
+                );
+            }
+            other => panic!("expected Conflict, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_skip_after_leaving_returns_forbidden() {
         // Symmetry with create_run: a user who has left the session cannot
         // act on their pending races (even though they may still see them
