@@ -635,12 +635,17 @@ pub async fn join_session(
         }
         Some(row) => {
             let Some(left_at) = row.left_at else {
-                // Already present in this session. The partial unique index on
-                // user_id WHERE left_at IS NULL would catch a stray duplicate
-                // INSERT, but `check_not_in_any_session` should have already
-                // surfaced this as a 409 — reaching here implies a different
-                // active session, which is a user-level conflict.
-                return Err(AppError::Conflict("Already in this session".to_string()));
+                // Defensive: should be unreachable in normal flow. `existing`
+                // is filtered to (session_id, user_id), so a row with
+                // `left_at IS NULL` here means the user is already active in
+                // *this* session — and `check_not_in_any_session` above would
+                // have surfaced that as a 409 before we got here. Landing in
+                // this branch implies a race between the two queries (very
+                // unlikely without external manipulation) or direct DB
+                // tampering. Return Conflict either way for safety.
+                return Err(AppError::Conflict(
+                    "Already an active participant in this session".to_string(),
+                ));
             };
 
             let mut active: session_participants::ActiveModel = row.into();
