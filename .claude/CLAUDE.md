@@ -49,6 +49,19 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 - Rust style: Follow standard `rustfmt` and `clippy` conventions.
 - Frontend style: TypeScript, functional React components, Tailwind for styling.
 
+### Schema changes (prelaunch)
+
+While the project is prelaunch, **all schema lives in a single consolidated migration file**. New schema work edits that file rather than appending a new one. Rationale: pre-launch we don't preserve dev data, so the append-only history that migrations normally provide isn't earning its keep — it's just N files where 1 would do.
+
+Operating rules:
+
+- **Edit, don't append.** Adding a table, column, index, or constraint means modifying the consolidated migration file (currently `backend/migration/src/m20260101_000001_initial_schema.rs` or whatever name we settle on after the squash). Do not create a new migration file.
+- **Reset the dev DB after schema edits.** Delete the local SQLite file (or run the project's `dev-reset` task if/when one exists) before booting. SeaORM will recreate the schema from the consolidated migration on next startup.
+- **No data preservation between schema versions.** If you have meaningful local test data, recreate it via seed or test fixtures after the reset, not by hand.
+- **Code that depends on schema must change in the same PR as the migration edit.** Entities, services, tests — all in one atomic commit.
+
+When we exit prelaunch (decided when we have real user data we don't want to lose), this convention flips back to standard append-only migrations: every schema change becomes a new file, and the consolidated initial migration becomes the immutable starting point. CLAUDE.md will be updated at that time.
+
 ## Testing
 **Tests are a deliverable, not optional.** Every PR that adds business logic must include tests. PRs should not be opened without them.
 
@@ -63,8 +76,8 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 
 This project uses two AI environments:
 
-- **Cowork (Claude Desktop):** Design, architecture, documentation, research, review. Accesses the repo via a Windows mount (`C:\Users\obiva\beerio-kart`). Cannot access WSL2 filesystem. Cannot access GitHub directly.
-- **Claude Code (WSL2 CLI):** Coding, building, testing, git operations. Accesses the same checkout via `/mnt/c/Users/obiva/beerio-kart/`.
+- **Cowork (Claude Desktop):** Design, architecture, documentation, research, review. Accesses the repo via a Windows mount (`C:\Users\obiva\beerio-kart`). Cannot access WSL2 filesystem, cannot access GitHub directly, and **cannot run git commands** — the Cowork sandbox mounts the repo via virtiofs with `unlink()` blocked at the mount layer (every file delete returns `EPERM`, including files Cowork just created). Git relies on creating and removing `.git/index.lock` and temp objects, so any git invocation from Cowork either fails outright or leaves a stale lock that breaks the next attempt. Cowork edits files only.
+- **Claude Code (WSL2 CLI):** Coding, building, testing, git operations. Accesses the same checkout via `/mnt/c/Users/obiva/beerio-kart/`. WSL2's `/mnt/c` (9P/DrvFs) supports unlink, so git works fine there.
 
 ### Git workflow
 
@@ -83,12 +96,12 @@ This project uses two AI environments:
 - **Never push directly to `main`.** All code changes require a PR.
 - **Never merge your own PR.** Only Brendan merges.
 - PR descriptions should summarize the changes, call out anything non-obvious, and list any open questions.
-- Documentation-only changes (CLAUDE.md, DESIGN.md) can be committed to `main` directly since Cowork can't push and these don't need code review.
+- Documentation-only changes (CLAUDE.md, DESIGN.md) can be committed to `main` directly — they don't need code review.
 
 **Coordination between assistants:**
 
 - Both assistants work on the same checkout — no push/pull needed to see each other's changes.
-- **Cowork** can commit locally but cannot push to GitHub (no DNS access to github.com). After Cowork commits, Brendan or Claude Code must `git push`.
+- **Cowork** cannot run git at all (its sandbox mount blocks `unlink`). When Cowork wants a change committed, it edits the working tree and notes the intended commit in `.claude/cowork-handoff.md` or chat; Brendan or Claude Code then stages, commits, and pushes.
 - **Claude Code** must `git push` after making changes so the remote stays current.
 - Both should check `git status` before starting work to avoid conflicts.
 - If both need to edit the same file, coordinate through the user (Brendan).
@@ -100,7 +113,7 @@ This project uses two AI environments:
 | Architecture & design docs | Cowork |
 | Code implementation | Claude Code |
 | Building & testing | Claude Code |
-| Git commits (local) | Either (Cowork can commit but not push) |
+| Git commits | Claude Code or Brendan (Cowork cannot run git) |
 | Git pushes | Claude Code (or Brendan) |
 | Code review & research | Either |
 | Deployment config | Claude Code (with Cowork for planning) |
