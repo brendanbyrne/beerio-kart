@@ -457,9 +457,15 @@ struct PendingRaceRow {
 ///    OR `NOW() - left_at <= REJOIN_GRACE_MINUTES`.
 /// 5. `SR.created_at >= session_participants.joined_at` — excludes pre-gap
 ///    pending after a long-gap rejoin reset `joined_at`.
+/// 6. `sessions.status = 'active'` — closed sessions accept no further
+///    submissions, so any "pending" entries on them are phantom (the user
+///    has no API path to resolve them). Required in addition to the grace
+///    clause: a session can close while users are still inside their
+///    5-minute grace window (e.g. via `close_stale_sessions`, or as part of
+///    the host-leaves-last cascade).
 ///
 /// Returns empty if the user is not a participant, all races are submitted/
-/// skipped, or the user is past the grace window.
+/// skipped, the session is closed, or the user is past the grace window.
 ///
 /// **Lazy check note:** The grace-period predicate is computed at query time
 /// from `NOW()` and stored timestamps. No background task touches
@@ -486,12 +492,14 @@ pub async fn get_pending_races(
                t.image_path, sr.created_at
         FROM session_race_participations srp
         JOIN session_races sr ON srp.session_race_id = sr.id
+        JOIN sessions s ON s.id = sr.session_id
         JOIN tracks t ON sr.track_id = t.id
         JOIN cups c ON t.cup_id = c.id
         JOIN session_participants sp
           ON sp.session_id = sr.session_id AND sp.user_id = srp.user_id
         WHERE sr.session_id = $1
           AND srp.user_id = $2
+          AND s.status = 'active'
           AND srp.skipped_at IS NULL
           AND sr.created_at >= sp.joined_at
           AND (sp.left_at IS NULL OR sp.left_at >= $3)
@@ -1879,40 +1887,56 @@ mod tests {
 
     #[tokio::test]
     async fn test_pending_accessible_when_within_grace() {
+        // Two participants so the session stays active after user_b leaves
+        // (host transfer keeps it open). This isolates the grace check from
+        // the session-status filter — we want to assert grace alone keeps
+        // pending accessible.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
         let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
         next_track(&db, &session.id, &host_id).await.unwrap();
-        leave_session(&db, &session.id, &host_id).await.unwrap();
+        leave_session(&db, &session.id, &user_b).await.unwrap();
 
-        // Backdate left_at to 3 minutes ago — well inside the 5-minute window.
+        // Backdate user_b's left_at to 3 minutes ago — well inside the
+        // 5-minute window. Session is still active (host remained).
         let three_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(3);
-        backdate_participant(&db, &session.id, &host_id, None, Some(three_min_ago)).await;
+        backdate_participant(&db, &session.id, &user_b, None, Some(three_min_ago)).await;
 
-        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
-        assert_eq!(pending.len(), 1, "within grace, pending stays accessible");
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "within grace + active session → pending accessible"
+        );
     }
 
     #[tokio::test]
     async fn test_pending_inaccessible_when_grace_expired() {
+        // Two participants so the session stays active — this isolates the
+        // grace check from the status filter, proving exclusion is from
+        // grace expiration alone.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
         let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
         next_track(&db, &session.id, &host_id).await.unwrap();
-        leave_session(&db, &session.id, &host_id).await.unwrap();
+        leave_session(&db, &session.id, &user_b).await.unwrap();
 
-        // Backdate left_at to 6 minutes ago — past the 5-minute window.
+        // Backdate user_b's left_at to 6 minutes ago — past the 5-minute window.
         let six_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(6);
-        backdate_participant(&db, &session.id, &host_id, None, Some(six_min_ago)).await;
+        backdate_participant(&db, &session.id, &user_b, None, Some(six_min_ago)).await;
 
-        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
         assert!(pending.is_empty(), "grace expired → no accessible pending");
 
         // The row still exists in the DB (lazy check, no cleanup).
         let count = session_race_participations::Entity::find()
-            .filter(session_race_participations::Column::UserId.eq(&host_id))
+            .filter(session_race_participations::Column::UserId.eq(&user_b))
             .count(&db)
             .await
             .unwrap();
@@ -2072,5 +2096,55 @@ mod tests {
     #[tokio::test]
     async fn test_lazy_check_assertion() {
         // No-op test by design — this comment IS the assertion.
+    }
+
+    #[tokio::test]
+    async fn test_pending_excludes_closed_session_even_within_grace() {
+        // Regression: `close_stale_sessions` (and the host-leaves-last
+        // cascade in leave_session) sets `left_at = NOW()` for still-active
+        // participants and flips `status` to closed in the same transaction.
+        // Within the next 5 minutes, those users are inside the grace window
+        // — but the session can no longer accept submissions or skips, so
+        // the pending entries are phantom. `get_pending_races` must filter
+        // them out via `sessions.status = 'active'`.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // Sanity: pending exists while session is active.
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 1);
+
+        // Backdate last_activity_at past the stale threshold so
+        // close_stale_sessions catches it; this mirrors the production path
+        // (sets left_at = NOW() and status = 'closed' atomically).
+        let two_hours_ago = Utc::now().naive_utc() - chrono::Duration::hours(2);
+        let s = sessions::Entity::find_by_id(&session.id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut active: sessions::ActiveModel = s.into();
+        active.last_activity_at = Set(two_hours_ago);
+        active.update(&db).await.unwrap();
+        close_stale_sessions(&db).await.unwrap();
+
+        // Host's left_at is now ~now (well within the 5-min grace), but the
+        // session is closed — pending must be empty.
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert!(
+            pending.is_empty(),
+            "closed session must not return pending even within grace window"
+        );
+
+        // The participation row itself stays in the DB for history.
+        let count = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::UserId.eq(&host_id))
+            .count(&db)
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "participation row remains for history");
     }
 }
