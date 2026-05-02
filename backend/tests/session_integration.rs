@@ -8,12 +8,16 @@ use axum::{
     routing::{get, post},
 };
 use axum_test::TestServer;
+use chrono::Utc;
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 use beerio_kart::AppState;
 use beerio_kart::config::AppConfig;
+use beerio_kart::drink_type_id::drink_type_uuid;
+use beerio_kart::entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels};
 use beerio_kart::routes;
 
 const TEST_SECRET: &str = "test-secret-for-session-tests";
@@ -65,9 +69,110 @@ async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
             "/api/v1/sessions/{id}/leave",
             post(routes::sessions::leave_session),
         )
+        .route(
+            "/api/v1/sessions/{id}/next-track",
+            post(routes::sessions::next_track),
+        )
+        .route(
+            "/api/v1/sessions/{id}/races/{race_id}/skip",
+            post(routes::sessions::skip_pending_race),
+        )
+        // Runs
+        .route("/api/v1/runs", post(routes::runs::create_run))
         .with_state(state);
 
     (TestServer::new(app), db)
+}
+
+/// Seed minimal game data needed by skip + create_run integration tests.
+/// Production seed (`seed::run`) lives in main.rs and isn't reachable from
+/// integration tests; this is a stripped-down equivalent — one each of
+/// cup, track, character, body, wheels, glider, drink type.
+async fn seed_minimal_game_data(db: &sea_orm::DatabaseConnection) {
+    cups::ActiveModel {
+        id: Set(1),
+        name: Set("Test Cup".to_string()),
+        image_path: Set("images/cups/test.webp".to_string()),
+    }
+    .insert(db)
+    .await
+    .expect("insert cup");
+
+    tracks::ActiveModel {
+        id: Set(1),
+        name: Set("Test Track".to_string()),
+        cup_id: Set(1),
+        position: Set(1),
+        image_path: Set("images/tracks/test.webp".to_string()),
+    }
+    .insert(db)
+    .await
+    .expect("insert track");
+
+    characters::ActiveModel {
+        id: Set(1),
+        name: Set("Mario".to_string()),
+        image_path: Set("images/characters/mario.webp".to_string()),
+    }
+    .insert(db)
+    .await
+    .expect("insert character");
+
+    bodies::ActiveModel {
+        id: Set(1),
+        name: Set("Standard Kart".to_string()),
+        image_path: Set("images/bodies/standard.webp".to_string()),
+    }
+    .insert(db)
+    .await
+    .expect("insert body");
+
+    wheels::ActiveModel {
+        id: Set(1),
+        name: Set("Standard".to_string()),
+        image_path: Set("images/wheels/standard.webp".to_string()),
+    }
+    .insert(db)
+    .await
+    .expect("insert wheels");
+
+    gliders::ActiveModel {
+        id: Set(1),
+        name: Set("Super Glider".to_string()),
+        image_path: Set("images/gliders/super.webp".to_string()),
+    }
+    .insert(db)
+    .await
+    .expect("insert glider");
+
+    drink_types::ActiveModel {
+        id: Set(drink_type_uuid("Test Beer")),
+        name: Set("Test Beer".to_string()),
+        alcoholic: Set(true),
+        created_at: Set(Utc::now().naive_utc()),
+        created_by: Set(None),
+    }
+    .insert(db)
+    .await
+    .expect("insert drink type");
+}
+
+/// Build a valid CreateRunRequest body for the given race ID.
+fn run_request_json(session_race_id: &str) -> Value {
+    let drink_id = drink_type_uuid("Test Beer");
+    json!({
+        "session_race_id": session_race_id,
+        "track_time": 120_000,
+        "lap1_time": 40_000,
+        "lap2_time": 39_000,
+        "lap3_time": 41_000,
+        "character_id": 1,
+        "body_id": 1,
+        "wheel_id": 1,
+        "glider_id": 1,
+        "drink_type_id": drink_id,
+        "disqualified": false,
+    })
 }
 
 const AUTH_HEADER: HeaderName = HeaderName::from_static("authorization");
@@ -393,4 +498,245 @@ async fn test_stale_session_cleanup() {
         .await;
     let detail: Value = res.json();
     assert_eq!(detail["status"], "closed");
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Pending Races: skip endpoint + ordered-submit (PR 3D-2)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Helper: register a host, seed minimal game data, create a session, pick a
+/// track. Returns (server, db, token, user_id, session_id, race_id).
+async fn setup_with_one_race() -> (
+    TestServer,
+    sea_orm::DatabaseConnection,
+    String,
+    String,
+    String,
+    String,
+) {
+    let (server, db) = setup_test_app().await;
+    seed_minimal_game_data(&db).await;
+    let (token, user_id) = register_and_get_token(&server, "host").await;
+    let session_res = server
+        .post("/api/v1/sessions")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&json!({ "ruleset": "random" }))
+        .await;
+    let session_id = session_res.json::<Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let race_res = server
+        .post(&format!("/api/v1/sessions/{session_id}/next-track"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    race_res.assert_status(axum::http::StatusCode::CREATED);
+    let race_id = race_res.json::<Value>()["id"].as_str().unwrap().to_string();
+    (server, db, token, user_id, session_id, race_id)
+}
+
+#[tokio::test]
+async fn test_skip_endpoint_happy_path_returns_204_and_clears_pending() {
+    let (server, _db, token, _user_id, session_id, race_id) = setup_with_one_race().await;
+
+    // Pre-condition: pending list contains the race.
+    let detail: Value = server
+        .get(&format!("/api/v1/sessions/{session_id}"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .json();
+    assert_eq!(detail["your_pending"].as_array().unwrap().len(), 1);
+
+    let res = server
+        .post(&format!(
+            "/api/v1/sessions/{session_id}/races/{race_id}/skip"
+        ))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // Post-condition: pending list is empty (skipped race drops out).
+    let detail: Value = server
+        .get(&format!("/api/v1/sessions/{session_id}"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .json();
+    assert!(
+        detail["your_pending"].as_array().unwrap().is_empty(),
+        "skipped race must not appear in your_pending"
+    );
+}
+
+#[tokio::test]
+async fn test_skip_endpoint_idempotent() {
+    let (server, _db, token, _user_id, session_id, race_id) = setup_with_one_race().await;
+
+    let url = format!("/api/v1/sessions/{session_id}/races/{race_id}/skip");
+    server
+        .post(&url)
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .assert_status(axum::http::StatusCode::NO_CONTENT);
+    server
+        .post(&url)
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .assert_status(axum::http::StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn test_skip_endpoint_unknown_race_returns_404() {
+    let (server, _db, token, _user_id, session_id, _race_id) = setup_with_one_race().await;
+    let bogus = Uuid::new_v4().to_string();
+    let res = server
+        .post(&format!("/api/v1/sessions/{session_id}/races/{bogus}/skip"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_skip_endpoint_already_submitted_returns_409() {
+    let (server, _db, token, _user_id, session_id, race_id) = setup_with_one_race().await;
+
+    // Submit a run first.
+    server
+        .post("/api/v1/runs")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&run_request_json(&race_id))
+        .await
+        .assert_status(axum::http::StatusCode::CREATED);
+
+    // Now try to skip — must 409.
+    let res = server
+        .post(&format!(
+            "/api/v1/sessions/{session_id}/races/{race_id}/skip"
+        ))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_create_run_blocked_by_older_pending_returns_409_with_message() {
+    let (server, _db, token, _user_id, session_id, race1_id) = setup_with_one_race().await;
+    // Add a second race so race1 becomes "older pending" relative to race2.
+    let race2_res = server
+        .post(&format!("/api/v1/sessions/{session_id}/next-track"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    let race2_id = race2_res.json::<Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Try to submit race 2 while race 1 is pending → 409.
+    let res = server
+        .post("/api/v1/runs")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&run_request_json(&race2_id))
+        .await;
+    res.assert_status(axum::http::StatusCode::CONFLICT);
+
+    let body: Value = res.json();
+    let msg = body["error"].as_str().unwrap_or("");
+    assert!(
+        msg.contains("Must submit or skip pending race #1"),
+        "expected race-#1 conflict message, got: {msg}"
+    );
+    let _ = race1_id; // silence unused-binding warning
+}
+
+#[tokio::test]
+async fn test_create_run_succeeds_after_skipping_older_pending() {
+    let (server, _db, token, _user_id, session_id, race1_id) = setup_with_one_race().await;
+    let race2_res = server
+        .post(&format!("/api/v1/sessions/{session_id}/next-track"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    let race2_id = race2_res.json::<Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Skip race 1, then submit race 2 — should succeed.
+    server
+        .post(&format!(
+            "/api/v1/sessions/{session_id}/races/{race1_id}/skip"
+        ))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    server
+        .post("/api/v1/runs")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&run_request_json(&race2_id))
+        .await
+        .assert_status(axum::http::StatusCode::CREATED);
+
+    // your_pending should now be empty.
+    let detail: Value = server
+        .get(&format!("/api/v1/sessions/{session_id}"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .json();
+    assert!(
+        detail["your_pending"].as_array().unwrap().is_empty(),
+        "after skip + submit, your_pending should be empty"
+    );
+}
+
+#[tokio::test]
+async fn test_session_detail_your_pending_reflects_skip_and_submit() {
+    let (server, _db, token, _user_id, session_id, race1_id) = setup_with_one_race().await;
+    let race2_res = server
+        .post(&format!("/api/v1/sessions/{session_id}/next-track"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    let race2_id = race2_res.json::<Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Both races pending.
+    let detail: Value = server
+        .get(&format!("/api/v1/sessions/{session_id}"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .json();
+    assert_eq!(detail["your_pending"].as_array().unwrap().len(), 2);
+
+    // Skip race 1 → only race 2 left.
+    server
+        .post(&format!(
+            "/api/v1/sessions/{session_id}/races/{race1_id}/skip"
+        ))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    let detail: Value = server
+        .get(&format!("/api/v1/sessions/{session_id}"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .json();
+    let pending = detail["your_pending"].as_array().unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0]["id"].as_str().unwrap(), race2_id);
+
+    // Submit race 2 → no pending left.
+    server
+        .post("/api/v1/runs")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&run_request_json(&race2_id))
+        .await
+        .assert_status(axum::http::StatusCode::CREATED);
+
+    let detail: Value = server
+        .get(&format!("/api/v1/sessions/{session_id}"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .json();
+    assert!(detail["your_pending"].as_array().unwrap().is_empty());
 }

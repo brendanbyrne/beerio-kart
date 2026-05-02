@@ -139,6 +139,10 @@ async fn main() {
             "/api/v1/sessions/{id}/races",
             get(routes::sessions::list_races),
         )
+        .route(
+            "/api/v1/sessions/{id}/races/{race_id}/skip",
+            post(routes::sessions::skip_pending_race),
+        )
         // Runs — /defaults before /{id} so literal matches first
         .route(
             "/api/v1/runs",

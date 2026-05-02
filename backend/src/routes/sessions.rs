@@ -99,6 +99,17 @@ pub async fn skip_turn(
     Ok((StatusCode::CREATED, Json(race)))
 }
 
+/// POST /sessions/:id/races/:race_id/skip — mark a pending race as skipped
+/// for the requesting user. Idempotent.
+pub async fn skip_pending_race(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path((session_id, race_id)): Path<(String, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    sessions::skip_pending_race(&state.db, &session_id, &race_id, &user.user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// GET /sessions/:id/races — list all races in a session.
 pub async fn list_races(
     _user: AuthUser,
