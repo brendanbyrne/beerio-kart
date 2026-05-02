@@ -338,7 +338,7 @@ Notes:
 - `skipped_at IS NULL` AND no corresponding `runs` row = pending state.
 - `skipped_at IS NOT NULL` = user explicitly forfeited this race.
 - A `runs` row for `(session_race_id, user_id)` = user submitted; pending state cleared by row presence in `runs`.
-- Rows are never deleted. After grace expires or after a session closes, rows remain in the DB for history; they just become inaccessible via normal API paths (filtered out by grace check or `session.status = 'active'` filter).
+- Rows are never deleted. After grace expires or after a session closes, rows remain in the DB for history; they just become inaccessible via normal API paths. Both filters are required — the grace check **and** the `session.status = 'active'` check — because a session can close (via `close_stale_sessions` or the host-leaves-last cascade) while users are still inside their 5-minute grace window. See the Pending Race Tracking derivation below.
 
 ### Runs
 
@@ -437,13 +437,14 @@ This approach supports an unbounded number of rivals — no tracking table neede
 
 Within a session, a participant may have "pending" races — session races they were present for but haven't yet submitted a time. The UI caps pending races at 3 (oldest expire first), but the schema places no limit, allowing this cap to be adjusted later.
 
-**Derivation.** A `session_race_participations` row represents pending state for user `U` and race `SR` iff all of the following hold:
+**Derivation.** A `session_race_participations` row represents pending state for user `U` and race `SR` iff **all** of the following hold:
 
 1. The row exists (i.e. `U` was present when `SR` was created).
 2. `skipped_at IS NULL` on the row.
 3. No `runs` row exists for `(SR.id, U.id)`.
 4. `U` is currently within grace — `session_participants.left_at IS NULL` OR `NOW() - left_at <= 5min`.
 5. `SR.created_at >= session_participants.joined_at` for `U` (excludes pre-gap pending after a long-gap rejoin reset `joined_at`).
+6. `sessions.status = 'active'` for `SR.session_id`. Closed sessions accept no further submissions or skips, so any pending entries on them would be phantom (no API path to resolve them). This is a separate filter from the grace check, not a substitute for it: a session can close while users are still inside their grace window (via `close_stale_sessions`, or as part of the host-leaves-last cascade in `leave_session`).
 
 Pending races are returned ordered by `session_races.race_number ASC`. The API returns all; the UI applies the 3-cap.
 
@@ -451,7 +452,7 @@ Pending races are returned ordered by `session_races.race_number ASC`. The API r
 
 **Session advancement.** If the session advances while a participant hasn't submitted, they see their pending list (oldest first) when they go to submit, and must resolve them in order before submitting for the current race. This ensures no one person holds up the group, consistent with "never feel rushed."
 
-**Forfeiture vs. deletion.** Forfeited pending records (those filtered out by grace expiration or `joined_at` reset) are **not deleted** from `session_race_participations`. They remain as historical state and become inaccessible via the derivation above. This preserves the audit trail of "what was pending at any moment" for debugging and future analytics.
+**Forfeiture vs. deletion.** Forfeited pending records (those filtered out by grace expiration, `joined_at` reset, or session close) are **not deleted** from `session_race_participations`. They remain as historical state and become inaccessible via the derivation above. This preserves the audit trail of "what was pending at any moment" for debugging and future analytics.
 
 ### Session Rulesets
 
