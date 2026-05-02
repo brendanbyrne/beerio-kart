@@ -740,3 +740,81 @@ async fn test_session_detail_your_pending_reflects_skip_and_submit() {
         .json();
     assert!(detail["your_pending"].as_array().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn test_create_run_after_skip_returns_409() {
+    // Regression for the submit-after-skip bypass — at the HTTP layer.
+    let (server, _db, token, _user_id, session_id, race_id) = setup_with_one_race().await;
+
+    server
+        .post(&format!(
+            "/api/v1/sessions/{session_id}/races/{race_id}/skip"
+        ))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await
+        .assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    let res = server
+        .post("/api/v1/runs")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&run_request_json(&race_id))
+        .await;
+    res.assert_status(axum::http::StatusCode::CONFLICT);
+
+    let body: Value = res.json();
+    let msg = body["error"].as_str().unwrap_or("");
+    assert!(
+        msg.contains("skipped"),
+        "expected message about skipped race, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_skip_after_leaving_returns_403() {
+    // Regression for the symmetry gap with create_run — a user who has
+    // left the session must not be able to skip races in it. Two-user
+    // session so the session stays active when user2 leaves.
+    let (server, _db, token_host, _host_id) = {
+        let (server, db) = setup_test_app().await;
+        seed_minimal_game_data(&db).await;
+        let (token, user_id) = register_and_get_token(&server, "host").await;
+        (server, db, token, user_id)
+    };
+    let (token_user2, _user2_id) = register_and_get_token(&server, "user2").await;
+
+    let session_res = server
+        .post("/api/v1/sessions")
+        .add_header(AUTH_HEADER, auth_value(&token_host))
+        .json(&json!({ "ruleset": "random" }))
+        .await;
+    let session_id = session_res.json::<Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    server
+        .post(&format!("/api/v1/sessions/{session_id}/join"))
+        .add_header(AUTH_HEADER, auth_value(&token_user2))
+        .await
+        .assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    let race_res = server
+        .post(&format!("/api/v1/sessions/{session_id}/next-track"))
+        .add_header(AUTH_HEADER, auth_value(&token_host))
+        .await;
+    let race_id = race_res.json::<Value>()["id"].as_str().unwrap().to_string();
+
+    server
+        .post(&format!("/api/v1/sessions/{session_id}/leave"))
+        .add_header(AUTH_HEADER, auth_value(&token_user2))
+        .await
+        .assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // user2 has left — skipping should now be Forbidden, not allowed.
+    let res = server
+        .post(&format!(
+            "/api/v1/sessions/{session_id}/races/{race_id}/skip"
+        ))
+        .add_header(AUTH_HEADER, auth_value(&token_user2))
+        .await;
+    res.assert_status(axum::http::StatusCode::FORBIDDEN);
+}

@@ -554,7 +554,13 @@ pub async fn get_pending_races(
 ///   for "not pending for you," not exposing whether the row exists for
 ///   another user.
 /// - `Conflict("Already submitted")` if the user has a `runs` row for this
-///   race — submitting and skipping are mutually exclusive.
+///   race — submitting and skipping are mutually exclusive (in both
+///   directions; see also the matching skip-then-submit guard in
+///   `services::runs::create_run`).
+/// - `Forbidden` if the user is not currently an active participant of the
+///   session. A user who left (even within their grace window) must rejoin
+///   before they can act on pending races; otherwise the symmetry with
+///   `create_run` breaks (which also requires an active participant).
 pub async fn skip_pending_race(
     db: &DatabaseConnection,
     session_id: &str,
@@ -569,6 +575,11 @@ pub async fn skip_pending_race(
             }
             other => other,
         })?;
+    // Symmetry with `create_run`: the user must currently be in the session
+    // to act on pending races. Within-grace users (`left_at IS NOT NULL`)
+    // still see their pending races via `get_pending_races` clause 4, but
+    // they need to rejoin before they can submit or skip.
+    helpers::require_active_participant(db, session_id, user_id).await?;
 
     // Verify the race belongs to this session. Looking up by ID first and
     // then matching session_id keeps the error message consistent — both
@@ -2397,6 +2408,36 @@ mod tests {
             AppError::Conflict(msg) => assert_eq!(msg, "Already submitted"),
             other => panic!("expected Conflict, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_skip_after_leaving_returns_forbidden() {
+        // Symmetry with create_run: a user who has left the session cannot
+        // act on their pending races (even though they may still see them
+        // via get_pending_races during the grace window). They must rejoin
+        // first. Two-participant session so the session stays active when
+        // the leaver leaves.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // Sanity: user_b has the race pending while still active.
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert_eq!(pending.len(), 1);
+
+        leave_session(&db, &session.id, &user_b).await.unwrap();
+
+        let err = skip_pending_race(&db, &session.id, &race.id, &user_b)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AppError::Forbidden(_)),
+            "expected Forbidden for left user, got {err:?}"
+        );
     }
 
     #[tokio::test]
