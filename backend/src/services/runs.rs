@@ -863,7 +863,7 @@ mod tests {
         let (session_id, race_id) = setup_session_with_race(&db, &host_id).await;
 
         // Before submitting
-        let detail = sessions::get_session_detail(&db, &session_id)
+        let detail = sessions::get_session_detail(&db, &session_id, Some(&host_id))
             .await
             .unwrap();
         let current = detail.current_race.unwrap();
@@ -875,7 +875,7 @@ mod tests {
             .unwrap();
 
         // After submitting
-        let detail = sessions::get_session_detail(&db, &session_id)
+        let detail = sessions::get_session_detail(&db, &session_id, Some(&host_id))
             .await
             .unwrap();
         let current = detail.current_race.unwrap();

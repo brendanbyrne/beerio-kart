@@ -8,6 +8,7 @@ pub use super::gliders::Entity as Gliders;
 pub use super::run_flags::Entity as RunFlags;
 pub use super::runs::Entity as Runs;
 pub use super::session_participants::Entity as SessionParticipants;
+pub use super::session_race_participations::Entity as SessionRaceParticipations;
 pub use super::session_races::Entity as SessionRaces;
 pub use super::sessions::Entity as Sessions;
 pub use super::tracks::Entity as Tracks;
