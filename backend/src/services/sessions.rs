@@ -7,7 +7,9 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::domain::enums::{Ruleset, SessionStatus};
-use crate::entities::{cups, runs, session_participants, session_races, sessions, users};
+use crate::entities::{
+    cups, runs, session_participants, session_race_participations, session_races, sessions, users,
+};
 use crate::error::AppError;
 use crate::services::helpers;
 
@@ -527,6 +529,101 @@ pub async fn get_pending_races(
             submissions: Vec::new(),
         })
         .collect())
+}
+
+/// Mark a pending race as skipped for the requesting user.
+///
+/// "Skip" means the user explicitly forfeits this race — they're not
+/// submitting a time and want to be unblocked from submitting newer races.
+/// The pending derivation in `get_pending_races` excludes rows where
+/// `skipped_at IS NOT NULL`, so the race drops out of the user's pending
+/// list immediately on success.
+///
+/// **Idempotent.** Calling skip twice on the same `(race, user)` returns
+/// success both times; the timestamp is set on the first call only and
+/// not updated on subsequent calls.
+///
+/// **Errors:**
+/// - `Conflict` if the session is closed (via `load_active_session`).
+/// - `NotFound("Race not found in this session")` if the race ID doesn't
+///   belong to this session — covers both unknown race IDs and race IDs
+///   from other sessions.
+/// - `NotFound("Pending race not found")` if the user has no
+///   `session_race_participations` row for this race (they were absent at
+///   creation time, or the race is bogus). This is a single error class
+///   for "not pending for you," not exposing whether the row exists for
+///   another user.
+/// - `Conflict("Already submitted")` if the user has a `runs` row for this
+///   race — submitting and skipping are mutually exclusive.
+pub async fn skip_pending_race(
+    db: &DatabaseConnection,
+    session_id: &str,
+    session_race_id: &str,
+    user_id: &str,
+) -> Result<(), AppError> {
+    helpers::load_active_session(db, session_id)
+        .await
+        .map_err(|e| match e {
+            AppError::Conflict(_) => {
+                AppError::Conflict("Cannot skip in a closed session".to_string())
+            }
+            other => other,
+        })?;
+
+    // Verify the race belongs to this session. Looking up by ID first and
+    // then matching session_id keeps the error message consistent — both
+    // "unknown race" and "race in another session" surface the same 404.
+    let race = session_races::Entity::find_by_id(session_race_id)
+        .one(db)
+        .await?;
+    let Some(race) = race.filter(|r| r.session_id == session_id) else {
+        return Err(AppError::NotFound(
+            "Race not found in this session".to_string(),
+        ));
+    };
+
+    let participation = session_race_participations::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_race_participations::Column::SessionRaceId.eq(&race.id))
+                .add(session_race_participations::Column::UserId.eq(user_id)),
+        )
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Pending race not found".to_string()))?;
+
+    // Reject if user already submitted a run for this race.
+    let existing_run = runs::Entity::find()
+        .filter(
+            Condition::all()
+                .add(runs::Column::SessionRaceId.eq(&race.id))
+                .add(runs::Column::UserId.eq(user_id)),
+        )
+        .one(db)
+        .await?;
+    if existing_run.is_some() {
+        return Err(AppError::Conflict("Already submitted".to_string()));
+    }
+
+    // Idempotent: already skipped → return success without changing
+    // skipped_at. This avoids both spurious updates and visible change in
+    // the timestamp for repeated skip calls.
+    if participation.skipped_at.is_some() {
+        return Ok(());
+    }
+
+    let now = Utc::now().naive_utc();
+    let txn = db.begin().await?;
+
+    let mut active: session_race_participations::ActiveModel = participation.into();
+    active.skipped_at = Set(Some(now));
+    active.update(&txn).await?;
+
+    helpers::touch_session(&txn, session_id).await?;
+
+    txn.commit().await?;
+
+    Ok(())
 }
 
 /// Get full session detail — the polling endpoint.
@@ -2151,5 +2248,184 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 1, "participation row remains for history");
+    }
+
+    // ── Skip pending race (PR 3D-2) ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_skip_pending_race_sets_skipped_at() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        skip_pending_race(&db, &session.id, &race.id, &host_id)
+            .await
+            .expect("skip succeeds");
+
+        let row = session_race_participations::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_race_participations::Column::SessionRaceId.eq(&race.id))
+                    .add(session_race_participations::Column::UserId.eq(&host_id)),
+            )
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(row.skipped_at.is_some(), "skipped_at must be set");
+
+        // And the race drops out of the pending list.
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert!(pending.is_empty(), "skipped race must not be pending");
+    }
+
+    #[tokio::test]
+    async fn test_skip_pending_race_idempotent() {
+        // Second skip on the same (race, user) returns success without
+        // changing skipped_at — the timestamp from the first call is
+        // preserved.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        skip_pending_race(&db, &session.id, &race.id, &host_id)
+            .await
+            .expect("first skip");
+        let first_skipped_at = session_race_participations::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_race_participations::Column::SessionRaceId.eq(&race.id))
+                    .add(session_race_participations::Column::UserId.eq(&host_id)),
+            )
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .skipped_at;
+
+        // Sleep a hair so any update would produce a strictly later timestamp.
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+
+        skip_pending_race(&db, &session.id, &race.id, &host_id)
+            .await
+            .expect("second skip is idempotent");
+        let second_skipped_at = session_race_participations::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_race_participations::Column::SessionRaceId.eq(&race.id))
+                    .add(session_race_participations::Column::UserId.eq(&host_id)),
+            )
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .skipped_at;
+
+        assert_eq!(
+            first_skipped_at, second_skipped_at,
+            "skipped_at must not change on idempotent re-skip"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_skip_unknown_race_returns_404() {
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        // No race exists for this session.
+        let bogus_race_id = Uuid::new_v4().to_string();
+        let err = skip_pending_race(&db, &session.id, &bogus_race_id, &host_id)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn test_skip_already_submitted_returns_conflict() {
+        // Insert a runs row for (race, user) directly to avoid pulling
+        // create_run's full validation surface into a skip test.
+        use crate::drink_type_id::drink_type_uuid;
+        use crate::entities::{drink_types, runs};
+        use crate::test_helpers::seed_game_data;
+
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // Insert a run row to satisfy the "already submitted" precondition.
+        let drink_id = drink_type_uuid("Test Beer");
+        drink_types::Entity::find_by_id(&drink_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("seed_game_data inserts Test Beer");
+        runs::ActiveModel {
+            id: Set(Uuid::new_v4().to_string()),
+            user_id: Set(host_id.clone()),
+            session_race_id: Set(race.id.clone()),
+            track_id: Set(race.track_id),
+            character_id: Set(1),
+            body_id: Set(1),
+            wheel_id: Set(1),
+            glider_id: Set(1),
+            track_time: Set(120_000),
+            lap1_time: Set(40_000),
+            lap2_time: Set(40_000),
+            lap3_time: Set(40_000),
+            drink_type_id: Set(drink_id),
+            disqualified: Set(false),
+            photo_path: Set(None),
+            created_at: Set(Utc::now().naive_utc()),
+            notes: Set(None),
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        let err = skip_pending_race(&db, &session.id, &race.id, &host_id)
+            .await
+            .unwrap_err();
+        match err {
+            AppError::Conflict(msg) => assert_eq!(msg, "Already submitted"),
+            other => panic!("expected Conflict, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_skip_advances_pending_list() {
+        // After skipping the oldest pending, the next-oldest becomes the
+        // "must-submit-first" target for ordered-submit purposes. This is
+        // a behavioral test, not just a state test — confirms the pending
+        // list updates correctly so newer races become submittable in
+        // order.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let r1 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r2 = next_track(&db, &session.id, &host_id).await.unwrap();
+        let r3 = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // All three are pending; oldest is r1.
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(pending[0].id, r1.id);
+
+        skip_pending_race(&db, &session.id, &r1.id, &host_id)
+            .await
+            .unwrap();
+
+        // After skipping r1, oldest pending should now be r2.
+        let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].id, r2.id);
+        assert_eq!(pending[1].id, r3.id);
     }
 }

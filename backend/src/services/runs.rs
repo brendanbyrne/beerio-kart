@@ -10,7 +10,7 @@ use crate::entities::{
     bodies, characters, drink_types, gliders, runs, session_races, users, wheels,
 };
 use crate::error::AppError;
-use crate::services::helpers;
+use crate::services::{helpers, sessions};
 
 /// Maximum allowed track time: 10 minutes in milliseconds.
 const MAX_TRACK_TIME_MS: i32 = 600_000;
@@ -182,6 +182,23 @@ pub async fn create_run(
         return Err(AppError::Conflict(
             "Already submitted a run for this race".to_string(),
         ));
+    }
+
+    // Ordered-submit guard: if the user has any pending race with a smaller
+    // race_number, they must submit or skip those first. Prevents
+    // cherry-picking favorable tracks for H2H purposes (DESIGN.md "Pending
+    // Race Tracking" → "Submission rules"). Skipping the older race or
+    // submitting it (which clears it via the `runs` row check in
+    // `get_pending_races`) unblocks newer submissions.
+    let pending = sessions::get_pending_races(db, &session_race.session_id, user_id).await?;
+    if let Some(older) = pending
+        .iter()
+        .find(|p| p.race_number < session_race.race_number)
+    {
+        return Err(AppError::Conflict(format!(
+            "Must submit or skip pending race #{} first",
+            older.race_number
+        )));
     }
 
     // Validate FK references exist
@@ -883,5 +900,109 @@ mod tests {
         assert_eq!(current.submissions[0].username, "host");
         assert_eq!(current.submissions[0].track_time, 120_000);
         assert!(!current.submissions[0].disqualified);
+    }
+
+    // ── Ordered-submit guard (PR 3D-2) ────────────────────────────────────
+
+    /// Helper: create a session, pick N tracks, return (session_id, race_ids).
+    async fn setup_session_with_n_races(
+        db: &DatabaseConnection,
+        host_id: &str,
+        n: usize,
+    ) -> (String, Vec<String>) {
+        let session = sessions::create_session(db, host_id, "random")
+            .await
+            .expect("create session");
+        let mut race_ids = Vec::with_capacity(n);
+        for _ in 0..n {
+            let race = sessions::next_track(db, &session.id, host_id)
+                .await
+                .expect("next track");
+            race_ids.push(race.id);
+        }
+        (session.id, race_ids)
+    }
+
+    #[tokio::test]
+    async fn test_submit_oldest_pending_first_succeeds() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 3).await;
+
+        // Submit race 1 (the oldest pending) — should succeed.
+        create_run(&db, &host_id, valid_run_request(&race_ids[0]))
+            .await
+            .expect("submitting oldest pending should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_submit_newer_pending_while_older_exists_returns_conflict() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 3).await;
+
+        // Try to submit race 3 while races 1 and 2 are still pending.
+        match create_run(&db, &host_id, valid_run_request(&race_ids[2])).await {
+            Err(AppError::Conflict(msg)) => assert!(
+                msg.contains("Must submit or skip pending race #1"),
+                "expected message about race #1, got: {msg}"
+            ),
+            Err(other) => panic!("expected Conflict, got {other:?}"),
+            Ok(_) => panic!("expected Conflict, got Ok"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submit_current_race_with_no_pending_succeeds() {
+        // Control case: with only one race in the session and no prior pending,
+        // submitting the current race must succeed. Confirms the guard does
+        // not over-reject.
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 1).await;
+
+        create_run(&db, &host_id, valid_run_request(&race_ids[0]))
+            .await
+            .expect("no pending → submit succeeds");
+    }
+
+    #[tokio::test]
+    async fn test_submit_current_race_with_older_pending_returns_conflict() {
+        // Same shape as the "newer while older exists" test but framed as
+        // "current race counts as newer." Two-race session, race 2 is current,
+        // race 1 is pending.
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (_session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 2).await;
+
+        match create_run(&db, &host_id, valid_run_request(&race_ids[1])).await {
+            Err(AppError::Conflict(_)) => {}
+            Err(other) => panic!("expected Conflict, got {other:?}"),
+            Ok(_) => panic!("expected Conflict, got Ok"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submit_current_race_after_skipping_all_pending_succeeds() {
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 3).await;
+
+        // Skip races 1 and 2; race 3 should now be submittable.
+        sessions::skip_pending_race(&db, &session_id, &race_ids[0], &host_id)
+            .await
+            .expect("skip race 1");
+        sessions::skip_pending_race(&db, &session_id, &race_ids[1], &host_id)
+            .await
+            .expect("skip race 2");
+
+        create_run(&db, &host_id, valid_run_request(&race_ids[2]))
+            .await
+            .expect("after skipping all older pending, submit succeeds");
     }
 }
