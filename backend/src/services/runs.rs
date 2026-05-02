@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::entities::{
-    bodies, characters, drink_types, gliders, runs, session_races, users, wheels,
+    bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
+    users, wheels,
 };
 use crate::error::AppError;
 use crate::services::{helpers, sessions};
@@ -181,6 +182,28 @@ pub async fn create_run(
     if existing.is_some() {
         return Err(AppError::Conflict(
             "Already submitted a run for this race".to_string(),
+        ));
+    }
+
+    // Mutual exclusion with skip: if the user already explicitly skipped
+    // this race, they can't submit a time for it. Skip is treated as a
+    // permanent forfeiture, matching the "submit OR skip" framing in
+    // DESIGN.md "Pending Race Tracking" → "Submission rules" and the
+    // mutual-exclusion guarantee in `skip_pending_race`'s docstring.
+    let participation = session_race_participations::Entity::find()
+        .filter(
+            Condition::all()
+                .add(session_race_participations::Column::SessionRaceId.eq(&body.session_race_id))
+                .add(session_race_participations::Column::UserId.eq(user_id)),
+        )
+        .one(db)
+        .await?;
+    if participation
+        .as_ref()
+        .is_some_and(|p| p.skipped_at.is_some())
+    {
+        return Err(AppError::Conflict(
+            "Cannot submit a run for a skipped race".to_string(),
         ));
     }
 
@@ -1004,5 +1027,31 @@ mod tests {
         create_run(&db, &host_id, valid_run_request(&race_ids[2]))
             .await
             .expect("after skipping all older pending, submit succeeds");
+    }
+
+    #[tokio::test]
+    async fn test_submit_after_skip_returns_conflict() {
+        // Regression for the submit-after-skip bypass: skip and submit are
+        // mutually exclusive in BOTH directions. After skipping race N, a
+        // later submit for race N must be rejected — otherwise the user
+        // could skip race N to clear the ordered-submit guard for race N+1
+        // and then come back and submit race N anyway.
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let (session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 1).await;
+
+        sessions::skip_pending_race(&db, &session_id, &race_ids[0], &host_id)
+            .await
+            .expect("skip succeeds");
+
+        match create_run(&db, &host_id, valid_run_request(&race_ids[0])).await {
+            Err(AppError::Conflict(msg)) => assert!(
+                msg.contains("skipped"),
+                "expected message about skipped race, got: {msg}"
+            ),
+            Err(other) => panic!("expected Conflict, got {other:?}"),
+            Ok(_) => panic!("submitting after skip must Conflict, got Ok"),
+        }
     }
 }
