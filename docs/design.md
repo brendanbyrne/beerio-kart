@@ -123,6 +123,7 @@ Log output is controlled via the `RUST_LOG` environment variable. Defaults to `i
 - **Nullability defaults to NOT NULL** unless there is a clear reason for the data to be optional. Nullable columns map to `Option<T>` in Rust, adding handling overhead.
 - **"Previous" setup is derived, not stored.** The user's last-used race setup and drink type are queried from their most recent run, not duplicated on the users table. Only "preferred" (explicitly set) values are stored on users.
 - **Database encryption** via SQLCipher is possible but deferred past v1.
+- **No separate `created_by` column on sessions.** `host_id` carries the original creator until host transfers on leave. No current product feature uses the original-creator information. If needed later, re-adding the column is one append-only migration.
 
 ### Users
 
@@ -253,8 +254,7 @@ The organizational unit for group play. A session is like a lobby — players jo
 ```
 sessions
 ├── id: UUID (primary key)
-├── created_by: UUID (foreign key -> users, not null)
-├── host_id: UUID (foreign key -> users, not null — current host, transfers on leave)
+├── host_id: UUID (foreign key -> users, not null — starts as the user who created the session; transfers on leave)
 ├── ruleset: TEXT (not null — "random", "default", "least_played", "round_robin")
 ├── least_played_drink_category: TEXT (nullable — "alcoholic" or "non_alcoholic"; only used when ruleset is "least_played")
 ├── status: TEXT (not null — "active", "closed")
@@ -263,7 +263,7 @@ sessions
 ```
 
 Notes:
-- `host_id` starts as `created_by`. If the host leaves, host role transfers to the earliest-joined remaining participant.
+- `host_id` is set to the creating user when the session is created. If the host leaves, host role transfers to the earliest-joined remaining participant.
 - `least_played_drink_category` stores values as `"alcoholic"` or `"non_alcoholic"` (snake_case, per database convention). The frontend maps these to display text with hyphens ("non-alcoholic").
 - Ruleset-specific config uses explicit nullable columns rather than a JSON blob. With four well-defined rulesets, explicit columns are safer (database can enforce CHECK constraints) and queryable. New config options require a migration, but that's the right tradeoff for known rulesets.
 - Session auto-closes after 1 hour of no activity. No further run submissions accepted after close. A lightweight Tokio background task checks for and closes stale sessions periodically (e.g., every 5 minutes) so they don't linger in the active sessions list. Actions that update `last_activity_at`: run submission, track selection (next-track, choose-track), join, leave, skip-turn (chooser pass), skip-pending-race (forfeit a pending race).

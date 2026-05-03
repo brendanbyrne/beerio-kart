@@ -8,8 +8,6 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
     pub id: String,
     #[sea_orm(column_type = "Text")]
-    pub created_by: String,
-    #[sea_orm(column_type = "Text")]
     pub host_id: String,
     #[sea_orm(column_type = "Text")]
     pub ruleset: String,
@@ -34,15 +32,7 @@ pub enum Relation {
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    HostUser,
-    #[sea_orm(
-        belongs_to = "super::users::Entity",
-        from = "Column::CreatedBy",
-        to = "super::users::Column::Id",
-        on_update = "NoAction",
-        on_delete = "NoAction"
-    )]
-    CreatedByUser,
+    Users,
 }
 
 impl Related<super::session_participants::Entity> for Entity {
@@ -54,6 +44,12 @@ impl Related<super::session_participants::Entity> for Entity {
 impl Related<super::session_races::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::SessionRaces.def()
+    }
+}
+
+impl Related<super::users::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Users.def()
     }
 }
 

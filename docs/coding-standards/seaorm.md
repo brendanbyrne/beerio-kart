@@ -368,7 +368,7 @@
 
 - **Rule:** When two FKs link the same pair of tables, give them distinct `Relation` variants and reference them by name.
   - **Why:** Codegen historically produces ambiguous relations when there are multiple FKs between the same two tables (#405). Without distinct names, "find related users" doesn't know which FK to follow.
-  - **Note:** A live instance of this case (`sessions.created_by` and `sessions.host_id` both → `users.id`) is being eliminated by dropping `created_by`. After that change lands, the multi-FK case is hypothetical for current schema but the rule still applies for any future table that reuses a target.
+  - **Note:** No current schema instances; the rule remains in force for any future table that reuses a target.
   - **Source:** <https://github.com/SeaQL/sea-orm/issues/405>
 
 ## 12. Pitfalls (consolidated)

@@ -151,7 +151,6 @@ export interface RaceInfo {
 
 export interface SessionDetail {
   id: string
-  created_by: string
   host_id: string
   host_username: string
   ruleset: string

@@ -251,7 +251,6 @@ impl MigrationTrait for Migration {
         conn.execute_unprepared(
             "CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT NOT NULL PRIMARY KEY,
-                    created_by TEXT NOT NULL REFERENCES users(id),
                     host_id TEXT NOT NULL REFERENCES users(id),
                     ruleset TEXT NOT NULL,
                     least_played_drink_category TEXT,
