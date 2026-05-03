@@ -105,7 +105,6 @@ pub async fn insert_session(db: &DatabaseConnection, host_id: &str, status: &str
     let now = Utc::now().naive_utc();
     sessions::ActiveModel {
         id: Set(id.clone()),
-        created_by: Set(host_id.to_string()),
         host_id: Set(host_id.to_string()),
         ruleset: Set("random".to_string()),
         least_played_drink_category: Set(None),

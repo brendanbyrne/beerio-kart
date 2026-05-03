@@ -96,7 +96,6 @@ pub async fn create_session(
 
     sessions::ActiveModel {
         id: Set(session_id.clone()),
-        created_by: Set(user_id.to_string()),
         host_id: Set(user_id.to_string()),
         ruleset: Set(parsed.to_string()),
         least_played_drink_category: Set(None),
@@ -274,7 +273,6 @@ struct CurrentRaceRow {
 #[derive(serde::Serialize)]
 pub struct SessionDetail {
     pub id: String,
-    pub created_by: String,
     pub host_id: String,
     pub host_username: String,
     pub ruleset: String,
@@ -671,7 +669,6 @@ pub async fn get_session_detail(
 
     Ok(SessionDetail {
         id: session.id,
-        created_by: session.created_by,
         host_id: session.host_id,
         host_username,
         ruleset: session.ruleset,
