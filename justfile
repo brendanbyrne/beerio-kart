@@ -17,7 +17,7 @@ test:
 
 # Regenerate SeaORM entities from the database
 entities:
-    cd backend && sea-orm-cli generate entity -o src/entities --lib
+    cd backend && sea-orm-cli generate entity -o src/entities
 
 # Production build (backend + frontend)
 build:
