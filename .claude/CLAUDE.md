@@ -62,6 +62,17 @@ Operating rules:
 
 When we exit prelaunch (decided when we have real user data we don't want to lose), this convention flips back to standard append-only migrations: every schema change becomes a new file, and the consolidated initial migration becomes the immutable starting point. CLAUDE.md will be updated at that time.
 
+### Documentation history
+
+**Scope:** files in `docs/` only (`design.md`, `api-contract.md`, `compliance-plan.md`, and every file in `coding-standards/`). Files under `.claude/` are *not* covered — those describe current behavior, not its history, and don't carry a history section.
+
+Each in-scope file keeps a `## Document history` section at the bottom. Any AI-authored PR (Cowork or Claude Code) that changes the body of one of these files **must append a dated bullet to that section in the same PR**. Brendan is not bound by this rule.
+
+- **Format:** `- YYYY-MM-DD — <one-line summary of the change, with PR # if applicable>`. Use absolute ISO dates, never "today" or "last week."
+- **What requires an entry:** Adding, removing, or rewording a rule; restructuring sections; marking a previously-deferred item as done; changing rationale or sources. Pure typo or formatting fixes do not.
+- **When the previous entry foreshadowed this change** (e.g., "Noted upcoming X removal"), the new entry must explicitly close the loop ("Removed X. PR #N.") so a future reader can see the upcoming/completed pair.
+- **Why:** The history is the durable record of why a `docs/` rule says what it says. Without an entry a reader can't tell whether a rule has stood for a year or was added yesterday, and a reviewer can't audit whether a referenced "upcoming" change was ever completed.
+
 ## Testing
 **Tests are a deliverable, not optional.** Every PR that adds business logic must include tests. PRs should not be opened without them.
 

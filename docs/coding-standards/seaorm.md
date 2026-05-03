@@ -392,3 +392,4 @@ A single-screen review checklist:
 
 - 2026-05-02 — Initial draft as part of `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into `docs/coding-standards/seaorm.md`. Added explicit "launch" definition to § 5. Updated § 9 to use `?cache=shared`. Added entity↔domain newtype boundary rule to § 6. Noted upcoming `sessions.created_by` removal in § 11.
+- 2026-05-02 — Removed the live-instance reference from § 11 after `sessions.created_by` was dropped (PR #23). Multi-FK rule retained for any future table that reuses a target.

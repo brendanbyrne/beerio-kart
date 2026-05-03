@@ -164,6 +164,7 @@ The list of stable `code` values returned in error responses. Add to this list w
 - **Why:** design.md already chose this; restating so it doesn't get lost. The cost of v2 alongside v1 is low for an internal app — the duplication is mostly a thin layer that translates to the v2-internal types.
 - **What counts as breaking:** removing a field, renaming a field, changing a field's type, changing an error `code`, changing default behavior of a query parameter.
 - **What does NOT count as breaking:** adding a new field (frontend tolerates extra fields), adding a new endpoint, loosening validation, fixing a bug where the response shape was wrong.
+- **Prelaunch carve-out.** "Launch" mirrors the definition in [`seaorm.md` § 5](./coding-standards/seaorm.md#5-migrations): the first deploy where we have clients we owe backwards compatibility to. While prelaunch, breaking changes ship directly in `/api/v1` — we don't spin up `/api/v2` to preserve compatibility we don't owe anyone. As of May 2026 the frontend is still being built and there are no deployed external clients, so the project is prelaunch by this definition. Once a real client ships (production frontend, third-party integration), this carve-out closes and breaking changes go through the v2 path. CLAUDE.md will be updated at that time.
 
 ---
 
@@ -181,3 +182,4 @@ The list of stable `code` values returned in error responses. Add to this list w
 ## 10. Document history
 
 - 2026-05-02 — Initial draft. Sets API client generation, error code contract, polling/ETag, refresh flow, idempotency, time format, error code registry, versioning, CORS. Items 1–6 are the "decide before the backend gets much further" set; 7–9 are clarifications of decisions that were already made or implied. To be revisited when the frontend work starts.
+- 2026-05-02 — Added prelaunch carve-out to § 8: while prelaunch, breaking changes ship in `/api/v1` directly rather than spinning up a v2 path. Mirrors the "launch" definition in `seaorm.md` § 5.
