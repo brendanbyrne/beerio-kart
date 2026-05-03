@@ -1,5 +1,7 @@
 # Beerio Kart development recipes
 
+set dotenv-load := true
+
 # Start backend and frontend in dev mode (run in separate terminals)
 dev:
     #!/usr/bin/env bash
