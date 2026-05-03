@@ -1,79 +1,95 @@
 ---
 name: code-review
 description: >
-  Review pull requests for code quality, security vulnerabilities, and database usage patterns.
-  Use this skill whenever the user wants a code review, PR review, diff review, or asks you to
-  look at changes on a GitHub pull request. Also use when the user says things like "review this PR",
-  "check this diff", "look at these changes", "what do you think of this code", or provides a
-  PR number or GitHub PR URL. This skill handles fetching the PR diff, analyzing it against
-  project conventions, and providing structured feedback both in chat and as GitHub PR comments.
+  Review pull requests for code quality, security vulnerabilities, and adherence
+  to the project's coding standards. Use this skill whenever the user wants a
+  code review, PR review, diff review, or asks you to look at changes on a
+  GitHub pull request. Also use when the user says things like "review this PR",
+  "check this diff", "look at these changes", "what do you think of this code",
+  or provides a PR number or GitHub PR URL. This skill identifies which
+  coding-standards files apply to the diff, reads only those, and provides
+  structured feedback both in chat and as GitHub PR comments — citing rules by
+  section number so findings are re-litigatable against documented evidence.
 ---
 
 # Code Review Skill
 
-You are a code reviewer for the Beerio Kart project. Your job is to review pull request diffs and provide actionable, structured feedback. You care about three things: code quality, security, and correct database usage.
+You are a code reviewer for the Beerio Kart project. You review PR diffs against documented standards and provide actionable, structured feedback. Findings cite rules by section number so disagreements stay grounded in the docs.
 
-## How to Get the PR Diff
+## Required reading
 
-The user will provide a PR number or URL. Use the `gh` CLI to fetch everything you need:
+Read these every time, in this order:
+
+1. **`docs/coding-standards/README.md`** — index of the per-area standards. Tells you which file covers which topic and how to use the docs.
+2. **`docs/design.md`** — architecture and data model. Anything in the diff that contradicts this is a finding.
+3. **`.claude/CLAUDE.md`** — workflow conventions (handoff files, branch naming, schema-change policy, two-assistant setup).
+
+Then identify which area files apply based on what the diff touches, and read only those:
+
+| Diff touches | Read |
+|--------------|------|
+| Backend Rust code, anywhere | `docs/coding-standards/rust.md` |
+| SeaORM / DB code (entities, migrations, services that query) | `docs/coding-standards/seaorm.md` |
+| Async / Tokio / spawning / channels / locks | `docs/coding-standards/tokio.md` |
+| API surface (request/response shape, status codes, headers) | `docs/api-contract.md` |
+| Frontend code | No frontend coding-standards doc exists yet — apply judgment; `api-contract.md` still applies |
+
+If a PR touches multiple areas, read multiple files. **When citing a finding, reference the rule by file and section number** — e.g., "violates `seaorm.md` § 7: blanket `From<DbErr>` collapses `RecordNotFound` into a 500." This keeps reviews evidence-based and lets the author re-litigate against the doc.
+
+If a finding doesn't map to any rule in the standards, that's a signal: either the standard has a gap (worth noting at the end of the review for a future docs update) or the finding is opinion (use "Suggestion:" prefix).
+
+## How to get the PR diff
 
 ```bash
-# Get PR metadata (title, description, author, base branch)
-gh pr view <number>
-
-# Get the full diff
-gh pr diff <number>
-
-# List changed files (useful for large PRs to plan your review)
-gh pr diff <number> --name-only
+gh pr view <number>                      # metadata
+gh pr diff <number>                      # full diff
+gh pr diff <number> --name-only          # changed files (useful for large PRs)
 ```
 
-For large diffs, also read the changed source files directly from the working tree so you have full context around the changes (not just the diff hunks).
+For large diffs, also read the changed source files directly so you have full context, not just the diff hunks.
 
-Before reviewing, read `docs/design.md` and `.claude/CLAUDE.md` to refresh your understanding of project conventions.
+## Automated checks
 
-## Automated Checks
-
-Before diving into the manual review, run the toolchain and report results. These catch low-hanging fruit so you can focus on higher-level issues:
+Run these before manual review and report results:
 
 ```bash
-# Rust checks (from backend/)
-cargo clippy --all-targets --all-features 2>&1
+# Rust (from backend/)
+cargo fmt --check 2>&1
+cargo clippy --all-targets --all-features -- -D warnings 2>&1
 cargo test 2>&1
 
-# Frontend checks (from frontend/)
+# Frontend (from frontend/)
 bun run lint 2>&1
 bun run typecheck 2>&1
 ```
 
-If any of these fail, include the failures in your review. If they all pass, note that briefly.
+If any fail, include the output. If all pass, note that briefly so it's clear the check was performed.
 
-## Review Structure
+## Review structure
 
-Organize your review into three tiers of output:
+Three tiers of output.
 
-### Tier 1: Chat Summary (always)
+### Tier 1: Chat summary (always)
 
-Provide a concise summary in chat covering:
+- **Verdict:** Approve / Request Changes / Needs Discussion.
+- **What this PR does:** 1–2 sentences.
+- **Areas covered:** which standards files you read for this review (e.g., "rust.md, seaorm.md, design.md").
+- **Findings, grouped by severity:**
+  - **Critical** (blocks merge): security vulnerabilities, data loss risks, broken functionality.
+  - **Important** (should fix before merge): logic errors, missing validation, standards violations.
+  - **Suggestions** (nice to have): style improvements, minor refactors, readability.
+  - Each finding cites the rule it violates, so the author can verify against the doc.
+- **Design-doc accuracy:** explicit verdict — see below.
+- **What's good:** call out things done well. Positive reinforcement matters; reviews shouldn't read as a list of complaints.
 
-- **Verdict**: One of: Approve, Request Changes, or Needs Discussion
-- **What this PR does**: 1-2 sentences summarizing the change
-- **Key findings**: The most important issues, grouped by severity:
-  - **Critical** (blocks merge): Security vulnerabilities, data loss risks, broken functionality
-  - **Important** (should fix before merge): Logic errors, missing validation, convention violations
-  - **Suggestions** (nice to have): Style improvements, performance optimizations, readability
-- **docs/design.md accuracy**: State explicitly whether docs/design.md needed updates, whether they were made, and whether they match the code. (See the "docs/design.md Accuracy" section below.)
-- **What's good**: Call out things done well. Positive reinforcement matters.
+### Tier 2: PR comments (when issues found)
 
-### Tier 2: PR Comments (when issues found)
-
-For specific issues tied to lines of code, post inline comments on the PR using `gh`:
+For specific issues tied to lines:
 
 ```bash
-# Post a review with inline comments
-gh pr review <number> --comment --body "Review summary here"
+gh pr review <number> --comment --body "Review summary"
 
-# For line-specific comments, use the GitHub API directly:
+# Line-specific:
 gh api repos/{owner}/{repo}/pulls/{number}/comments \
   -f body="Comment text" \
   -f path="path/to/file.rs" \
@@ -82,117 +98,91 @@ gh api repos/{owner}/{repo}/pulls/{number}/comments \
   -f side="RIGHT"
 ```
 
-Batch your comments into a single review when possible. Keep PR comments focused and actionable — save broader discussion for the chat summary.
+Batch into a single review when possible. Keep PR comments focused — broader discussion goes in the chat summary.
 
-Ask the user for confirmation before posting comments to the PR.
+**Ask the user before posting comments.**
 
-### Tier 3: Markdown File (for complex reviews)
+### Tier 3: Markdown file (for complex reviews)
 
-If the review has enough substance to warrant it (more than ~5 issues, or issues that need detailed explanation with code examples), save a detailed review document:
+If more than ~5 issues, or issues need detailed explanation with code examples, save to:
 
 ```
-reviews/pr-<number>-review.md
+reviews/pr/pr-<number>-review.md
 ```
 
-This file should include the full analysis with code snippets, links to relevant documentation, and detailed fix suggestions. Link to it from the chat summary.
+Include the full analysis with code snippets, rule citations, and detailed fix suggestions. Link to it from the chat summary.
 
-## What to Look For
+## What to look for
 
-### docs/design.md Accuracy
+The standards docs are the source of truth. Read them. This section names the *categories* you check, not the rules themselves.
 
-docs/design.md is the single source of truth for the project's architecture and conventions. Part of every review is verifying that it still accurately reflects what the code does after the PR lands.
+### Design-doc accuracy
 
-For every PR, check whether the changes touch anything described in docs/design.md:
+`docs/design.md` is the single source of truth for architecture and data model. Every PR that touches anything described there must update it in the same PR. Check for:
 
-- **Data model changes** (new tables, columns, relationships, index choices, UUID vs INTEGER decisions)
-- **API surface changes** (new/changed endpoints, request/response shapes, auth requirements)
-- **Architecture changes** (new services, new layers, changes to how components talk to each other)
-- **Convention changes** (naming, error handling patterns, testing approach)
-- **Design decisions** (anything that would answer "why did we do it this way?" for a future reader)
+- **Data model changes** (new tables, columns, FKs, index choices, UUID vs INTEGER decisions).
+- **API surface changes** (new/changed endpoints, request/response shapes, auth requirements).
+- **Architecture changes** (new services, new layers, changes to component boundaries).
+- **Convention changes** (naming, error handling patterns, testing approach).
+- **Design decisions** (anything that answers "why did we do it this way?" for a future reader).
 
-If the PR changes any of these, docs/design.md should be updated in the same PR. Flag missing updates as an **Important** finding — merging code that drifts from the design doc silently erodes its value.
+State the verdict explicitly:
 
-If docs/design.md *was* updated, verify the updates actually match what the code does. A stale or inaccurate update is worse than no update. Quote specific passages and compare them to the diff.
+- "design.md needed updates, they were made, verified accurate" — best case.
+- "design.md needed updates and they were made, but they don't match the code at line X" — Important finding.
+- "design.md needed updates but none were made" — Important finding.
+- "design.md accuracy: no changes required" — explicit when the diff is doc-doesn't-cover.
 
-If the PR doesn't touch anything docs/design.md covers, say so explicitly in the review ("docs/design.md accuracy: no changes required") so it's clear the check was performed.
+If you draft updates to design.md as part of the review, **write the actual text** — don't just say "update design.md."
 
-### Code Quality
+### Coding-standards adherence
 
-General quality checks — apply these regardless of language:
+For each standards file you loaded, walk its rules against the diff. Common high-leverage checks (this is not exhaustive — read the actual files):
 
-- **Readability**: Are names descriptive? Is the code self-documenting? Would a new contributor understand it?
-- **Error handling**: Are errors caught and handled meaningfully? Are there bare `unwrap()` calls in Rust that should be `?` or `.expect("reason")`?
-- **DRY violations**: Is there duplicated logic that should be extracted?
-- **Function size**: Functions doing too many things? Could they be decomposed?
-- **Type safety**: Are types being used to prevent bugs? (Rust is great at this — make sure the PR leverages it.)
-- **Test coverage**: Are there tests for new functionality? Do existing tests still pass?
-- **Documentation**: Are public APIs documented? Are complex algorithms explained?
+- **`rust.md`:** error handling shape (§ 1), type-driven design / newtypes (§ 2), `unwrap`/`expect` policy (§ 11), serde conventions on new DTOs (§ 14), doc comments on new public items (§ 6), file length (§ 13), Cargo deps (§ 15).
+- **`seaorm.md`:** N+1 queries (§ 2), transaction boundaries (§ 3), raw SQL parameterization (§ 10), `Option<Model>` not `unwrap`-ed (§ 7), `.all()` only when bounded (§ 2), set-based updates over fetch+save loops (§ 1), `before_save` for timestamps (§ 1), entity hand-edits (§ 6).
+- **`tokio.md`:** locks across `.await` (§ 3), `Send + 'static` requirements on spawned tasks (§ 9), blocking work on the runtime (§ 2), channel choice and bounding (§ 4), cancellation safety in `select!` (§ 6, § 7), timeouts on external calls (§ 12).
+- **`api-contract.md`:** wire format (snake_case JSON, ISO 8601 timestamps, error code field — § 2, § 6), idempotency keys on retry-vulnerable endpoints (§ 5), ETag on the polling endpoint (§ 3), versioning (§ 8).
 
-#### Rust-specific
-
-- **Ownership & borrowing**: Unnecessary clones? Could references be used instead?
-- **Error types**: Using `anyhow` for applications is fine, but library-style code within the project should use typed errors where it helps callers handle specific cases.
-- **Async correctness**: Are `.await` points in sensible places? Any risk of holding locks across await points?
-- **Clippy compliance**: Would `cargo clippy` flag anything in this diff?
-
-#### TypeScript/React-specific
-
-- **Component design**: Are components focused on a single responsibility? Is state lifted appropriately?
-- **Hook rules**: Are hooks called unconditionally and at the top level?
-- **Unnecessary re-renders**: Missing `useMemo`, `useCallback`, or `React.memo` where performance matters?
-- **Type annotations**: Are types explicit where inference isn't obvious? Any `any` types that should be narrower?
-- **Tailwind usage**: Following mobile-first convention? Using utility classes correctly?
+**Cite the rule when you flag a finding.** Bad: "this should use a transaction." Good: "Per `seaorm.md` § 3, multi-write handlers must wrap in `db.transaction(...)` — this handler inserts into both `runs` and `run_flags` without one."
 
 ### Security
 
-Look for these patterns with extra scrutiny:
+Always check, regardless of which standards apply:
 
-- **SQL injection**: Even with SeaORM, check for raw SQL queries or string interpolation in query building. SeaORM's query API is safe by default, but `.from_raw_sql()` or manual string formatting bypasses that.
-- **Authentication/authorization gaps**: Are endpoints properly gated? Does the JWT middleware cover all routes that need it? Can users access or modify resources they shouldn't?
-- **Input validation**: Are user inputs validated before reaching the database? Check for missing length limits, format validation, and type coercion.
-- **Path traversal**: File upload handling (photo_path) — is the path sanitized? Can a user craft a filename that writes outside the uploads directory?
-- **Secrets in code**: Hardcoded API keys, database passwords, JWT secrets. These should come from environment variables.
-- **CORS configuration**: Is it appropriately restrictive for the deployment model?
-- **Dependency concerns**: Any new dependencies added? Are they well-maintained and necessary?
+- **SQL injection:** any raw SQL? `Statement::from_string` with `format!`-ed input? See `seaorm.md` § 10.
+- **Auth gaps:** new endpoints — are they gated correctly? Admin paths checked at both middleware and service per `design.md` "defense in depth."
+- **Input validation:** validate before reaching the DB. See `rust.md` § 2 (parse, don't validate).
+- **Path traversal:** file uploads (`photo_path`) — filename derived from run id, not user input?
+- **Secrets in code:** hardcoded keys / passwords. Should be in env / secrets per `rust.md` § 17.
+- **CORS:** restrictive for the deployment model? See `api-contract.md` § 9.
+- **New dependencies:** well-maintained? Necessary? `cargo audit` clean?
 
-### Database Usage
+### Frontend (when applicable)
 
-The project uses SeaORM with SQLite (designed to migrate to PostgreSQL later). Review database code against these standards:
+No frontend standards doc yet, so apply judgment:
 
-#### Naming Conventions (from docs/design.md)
-- Tables: plural, snake_case (`drink_types`, `characters`)
-- Columns: snake_case (`track_time`, `created_at`)
-- Foreign keys: `{referenced_table_singular}_id` (`character_id`, `cup_id`)
-- Primary keys: `id`
+- **Component design:** single responsibility, state lifted appropriately.
+- **Hook rules:** called unconditionally, at the top level.
+- **Re-renders:** missing `useMemo`/`useCallback` where performance matters.
+- **Types:** explicit where inference isn't obvious; no stray `any`.
+- **Tailwind:** mobile-first, utility classes used correctly.
+- **API contract adherence:** request/response shapes match `api-contract.md` and the error code registry.
 
-Flag any deviations from these conventions.
+When `docs/coding-standards/frontend.md` lands, this section gets replaced with a pointer to it.
 
-#### Query Patterns
-- **N+1 queries**: Loading a list of items and then querying related data for each one individually. Should use eager loading or joins.
-- **Missing indexes**: Columns used in WHERE clauses or JOIN conditions should have indexes, especially for queries that will run at scale (leaderboard queries, run filtering).
-- **Transaction boundaries**: Operations that modify multiple tables should be wrapped in a transaction. A run creation that also creates a run_flag needs atomicity.
-- **Nullable vs NOT NULL**: The project defaults to NOT NULL unless there's a clear reason for nullable. Flag new nullable columns that don't have justification.
+## Review etiquette
 
-#### Migration Safety
-- **Backwards compatibility**: Will this migration break if applied to a database with existing data? Are there `NOT NULL` columns added without defaults?
-- **Reversibility**: Is there a down migration? Can this be rolled back safely?
-- **SQLite compatibility**: SQLite has limited ALTER TABLE support. Migrations that rename columns or change types need to use the create-new-table-and-copy pattern.
-- **PostgreSQL forward-compatibility**: Avoid SQLite-specific syntax that won't work when the project migrates to PostgreSQL.
+- **Be specific.** "This could be better" is useless. "Line 42's `unwrap()` panics if the user doesn't exist — use `ok_or(AppError::NotFound(...))` to return a 404 (`rust.md` § 1, § 11)" is actionable.
+- **Distinguish "wrong" from "different."** Use the "Suggestion:" prefix for stylistic preferences. If a finding doesn't map to a rule in the standards, that's a signal it might be opinion — own it as such.
+- **Acknowledge good patterns.** Clever idioms, good edge-case handling, well-named helpers — call them out.
+- **Scale to the PR.** A 5-line typo fix doesn't need a dissertation. A new API endpoint deserves thorough review.
+- **Show the fix.** Don't just describe — write the code.
+- **Audience:** Brendan has deep C++/Python experience but is newer to web dev, databases, Rust, and async. When database concepts come up (migrations, FKs, constraints, indexing, transactions, N+1 queries) or web concepts (CORS, JWT, middleware) or async concepts (`.await` semantics, `Send`/`Sync`, runtime blocking), don't just name-drop them — explain briefly what they are and why they matter. Think "explaining to a senior C++ engineer who's used neither a relational database nor an async runtime."
 
-#### Data Model Adherence
-- **UUID vs INTEGER**: User-generated data uses UUID; pre-seeded static data uses INTEGER. Flag mismatches.
-- **Inline vs normalized**: Race setup is stored inline (character_id, body_id, wheel_id, glider_id directly on runs/users). Don't suggest normalizing this — it's a deliberate design decision.
-- **Derived vs stored**: "Previous" setup is derived from the most recent run, not stored. Flag any attempt to cache derived values on the users table.
+## Project context
 
-## Review Etiquette
-
-- Be specific. "This could be better" is useless. "This `unwrap()` on line 42 will panic if the user doesn't exist — use `ok_or` to return a 404 instead" is actionable.
-- Distinguish between "this is wrong" and "I'd do it differently." Use "Suggestion:" prefix for stylistic preferences.
-- Acknowledge good patterns. If the code handles an edge case well or uses a clever Rust idiom, say so.
-- Scale feedback to the PR. A 5-line typo fix doesn't need a dissertation. A new API endpoint deserves thorough review.
-- When suggesting changes, show the code. Don't just describe what to do — write the fix.
-- Remember the audience. Brendan has deep C++/Python experience but is learning web dev, databases, and Rust. When database concepts come up (migrations, foreign keys, constraints, indexing, transactions, N+1 queries, etc.), don't just name-drop them — explain what they are, why they matter, and what the practical consequence is. Think "explaining to a senior C++ engineer who's never used a relational database." Same applies to web-specific concepts (CORS, JWT, middleware, etc.).
-
-## Project Context
-
-This skill has access to the project's docs/design.md and CLAUDE.md files. If you need to verify a convention or design decision, read those files. The project is in Phase 1 (foundation), so expect to see scaffolding, migrations, and basic API endpoints. Don't flag missing features that are planned for later phases.
+- **Current phase: 3** (Sessions & Run Recording) per CLAUDE.md. Don't flag missing features that are planned for later phases — check the build plan in `design.md`.
+- **Prelaunch in the data-preservation sense:** the consolidated migration file is edited in place; dev DB is reset on schema changes. See `seaorm.md` § 5 for the policy. Don't flag append-only-migration violations until we cross the launch threshold (first deployment where data persistence matters).
+- **Compliance plan exists:** `docs/compliance-plan.md` tracks 23 sequenced PRs that bring existing code to the standard. If a PR touches code that's already on the compliance plan as a known gap, note that — the existing non-compliance is acknowledged debt, not a fresh finding. New code is held to the standard regardless of whether legacy code in the same file conforms.
+- **Two-assistant setup:** Cowork (Claude Desktop) handles design and review work; Claude Code handles implementation. PR review (this skill) is a Claude Code-side task by default, but Cowork can review too. Output goes to `reviews/pr/`.
