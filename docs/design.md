@@ -737,9 +737,9 @@ beerio-kart/
 ├── .claude/
 │   └── CLAUDE.md                # AI assistant context (checked into repo)
 │
-├── DESIGN.md                    # Architecture design document (single source of truth)
 ├── compose.yaml                 # Docker compose
 ├── justfile                     # Developer workflow commands (just)
+├── README.md                    # Project entry point — points at docs/, backend/, frontend/
 │
 ├── backend/
 │   ├── Cargo.toml
@@ -805,6 +805,12 @@ beerio-kart/
 │       ├── gliders/
 │       ├── tracks/
 │       └── cups/
+│
+├── docs/                        # Project documentation
+│   ├── design.md                # This file — architecture design (single source of truth)
+│   ├── api-contract.md          # Wire-format conventions between backend and frontend
+│   ├── compliance-plan.md       # Sequenced PRs to bring code to the coding standard
+│   └── coding-standards/        # Backend coding standards (rust.md, seaorm.md, tokio.md)
 │
 ├── reviews/
 │   ├── pr/                      # Claude Code-generated PR review explanations
@@ -959,3 +965,15 @@ Random ideas that may or may not be pursued.
 - Ability to send emails.
    - Account recovery.
 - Handle concurrent `next_track` calls gracefully. Currently a double-tap can hit the `UNIQUE(session_id, race_number)` constraint and return a 500. Options: retry-on-conflict or optimistic locking. Low priority — single host makes this very unlikely.
+
+## Related documents
+
+- **`api-contract.md`** — Wire-format conventions between backend and frontend (error codes, ETag polling, idempotency keys, time format).
+- **`coding-standards/`** — Backend coding standards (general Rust, SeaORM, Tokio).
+- **`compliance-plan.md`** — Sequenced PRs to bring the existing code into compliance with the coding standards.
+- **`reviews/design/`** — Per-session design review records, signed off section by section.
+- **`reviews/pr/`** — Per-PR review notes from Claude Code.
+
+## Document history
+
+- 2026-05-02 — Moved from repo root (`DESIGN.md`) to `docs/design.md`. Project structure section updated to reflect the move and the new `docs/` layout. The root `DESIGN.md` is kept as a redirect (Cowork sandbox cannot delete files); a Claude Code PR will remove it from the working tree.

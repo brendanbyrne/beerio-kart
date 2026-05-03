@@ -4,6 +4,29 @@
 
 We're really doing this thing.
 
+A mobile-first web app for tracking times and stats for the Mario Kart 8 Deluxe drinking game. Players race time trials, optionally drink, and the app tracks personal bests, leaderboards, and run history.
+
+## Project layout
+
+| Path | What's there |
+|------|--------------|
+| [`backend/`](./backend) | Rust API server (Axum, SeaORM, SQLite). See [`backend/README.md`](./backend/README.md). |
+| [`frontend/`](./frontend) | React + TypeScript + Vite mobile-first web app. See [`frontend/README.md`](./frontend/README.md). |
+| [`docs/`](./docs) | Project documentation — see below. |
+| [`reviews/`](./reviews) | Design and PR review records (`reviews/design/`, `reviews/pr/`). |
+| [`data/`](./data) | Seed data (tracks, characters, etc.) and the gitignored SQLite DB / uploads. |
+| [`compose.yaml`](./compose.yaml), [`Dockerfile`](./Dockerfile) | Single-container deployment. |
+| [`justfile`](./justfile) | Developer workflow recipes. |
+
+## Documentation
+
+Everything lives in [`docs/`](./docs):
+
+- **[`docs/design.md`](./docs/design.md)** — Architecture design document. Single source of truth for the project's design decisions and data model. Read this first.
+- **[`docs/api-contract.md`](./docs/api-contract.md)** — Wire-format conventions between backend and frontend (error codes, ETag polling, idempotency keys, time format).
+- **[`docs/coding-standards/`](./docs/coding-standards)** — Backend coding standards split by area: general Rust (`rust.md`), SeaORM (`seaorm.md`), async/Tokio (`tokio.md`), plus a `README.md` index.
+- **[`docs/compliance-plan.md`](./docs/compliance-plan.md)** — Sequenced PRs to bring the existing code into compliance with the coding standards.
+
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (stable)

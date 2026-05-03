@@ -449,7 +449,7 @@ struct PendingRaceRow {
 /// Return the requesting user's pending races within a session, oldest first.
 ///
 /// A race is **pending** for user `U` iff all of the following hold (per
-/// DESIGN.md "Pending Race Tracking"):
+/// docs/design.md "Pending Race Tracking"):
 ///
 /// 1. A `session_race_participations` row exists for `(SR.id, U.id)` —
 ///    proves `U` was present when `SR` was created.
@@ -956,7 +956,7 @@ pub async fn next_track(
 }
 
 /// Re-roll the current track. Any participant can trigger this
-/// (per DESIGN.md — "any participant can pass the chooser's turn").
+/// (per docs/design.md — "any participant can pass the chooser's turn").
 /// Only valid if the most recent race has no runs submitted.
 /// Deletes the current race and picks a new one in a single transaction,
 /// excluding the skipped track from the pool so it can't come back.
@@ -2204,7 +2204,7 @@ mod tests {
     /// derivation from `(session_race_participations, session_participants,
     /// runs)` — see `get_pending_races`. Forfeited rows remain in the DB
     /// indefinitely as historical state. If a future PR adds a sweeper, this
-    /// assertion (and the design rationale in DESIGN.md "Pending Race
+    /// assertion (and the design rationale in docs/design.md "Pending Race
     /// Tracking") needs to be revisited.
     #[tokio::test]
     async fn test_lazy_check_assertion() {

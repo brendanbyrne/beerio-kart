@@ -1,7 +1,7 @@
 # Beerio Kart
 
 ## Start of Session
-Read `DESIGN.md` (repo root) at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
+Read `docs/design.md` at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
 
 ### Handoff files
 Two handoff files enable async task passing between assistants. The writer creates the file, the reader deletes it when done — the file's existence is the signal.
@@ -96,7 +96,7 @@ This project uses two AI environments:
 - **Never push directly to `main`.** All code changes require a PR.
 - **Never merge your own PR.** Only Brendan merges.
 - PR descriptions should summarize the changes, call out anything non-obvious, and list any open questions.
-- Documentation-only changes (CLAUDE.md, DESIGN.md) can be committed to `main` directly — they don't need code review.
+- Documentation-only changes (CLAUDE.md, docs/design.md) can be committed to `main` directly — they don't need code review.
 
 **Coordination between assistants:**
 
@@ -138,4 +138,4 @@ When Cowork conducts a design review or audit, the findings should be written as
 - [ ] Needs discussion
 ```
 
-Brendan signs off on sections. Approved decisions get integrated into DESIGN.md. Open items carry to the next session.
+Brendan signs off on sections. Approved decisions get integrated into docs/design.md. Open items carry to the next session.

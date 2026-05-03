@@ -330,7 +330,7 @@ impl MigrationTrait for Migration {
         // deletes-and-replaces the current race, and the old participations
         // need to evaporate atomically with the race delete.
         //
-        // user_id intentionally does NOT cascade — DESIGN.md guarantees these
+        // user_id intentionally does NOT cascade — docs/design.md guarantees these
         // rows are never deleted (they're the audit trail of "who was present
         // when"). If a user-deletion path is ever added, it must explicitly
         // decide what to do with these rows rather than letting them silently

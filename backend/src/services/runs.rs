@@ -188,7 +188,7 @@ pub async fn create_run(
     // Mutual exclusion with skip: if the user already explicitly skipped
     // this race, they can't submit a time for it. Skip is treated as a
     // permanent forfeiture, matching the "submit OR skip" framing in
-    // DESIGN.md "Pending Race Tracking" → "Submission rules" and the
+    // docs/design.md "Pending Race Tracking" → "Submission rules" and the
     // mutual-exclusion guarantee in `skip_pending_race`'s docstring.
     let participation = session_race_participations::Entity::find()
         .filter(
@@ -209,7 +209,7 @@ pub async fn create_run(
 
     // Ordered-submit guard: if the user has any pending race with a smaller
     // race_number, they must submit or skip those first. Prevents
-    // cherry-picking favorable tracks for H2H purposes (DESIGN.md "Pending
+    // cherry-picking favorable tracks for H2H purposes (docs/design.md "Pending
     // Race Tracking" → "Submission rules"). Skipping the older race or
     // submitting it (which clears it via the `runs` row check in
     // `get_pending_races`) unblocks newer submissions.
