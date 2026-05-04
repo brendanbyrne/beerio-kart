@@ -1,3 +1,11 @@
+// Startup code — panic-on-misconfiguration is intentional (CLAUDE.md "what
+// doesn't need tests" carve-out for one-time startup code).
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args
+)]
+
 mod seed;
 
 use std::time::Duration;

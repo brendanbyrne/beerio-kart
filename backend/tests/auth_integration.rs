@@ -1,3 +1,6 @@
+// Tests legitimately want to panic — per rust.md § 8.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::sync::Arc;
 
 use axum::{

@@ -25,6 +25,7 @@ impl AppConfig {
     ///
     /// Panics if `JWT_SECRET` is not set — this is intentional. Running without
     /// a signing key would silently produce unsigned or weak tokens.
+    #[allow(clippy::expect_used)] // Startup config; panic-on-missing is the right behavior.
     pub fn from_env() -> Arc<Self> {
         let jwt_secret = std::env::var("JWT_SECRET")
             .expect("JWT_SECRET must be set — it's the signing key for auth tokens");

@@ -1,3 +1,7 @@
+// PR-A1 scaffolding: rust-2018 idioms cleanup deferred to Phase H per
+// rust.md § 8 ("config and clearing land in separate PRs").
+#![allow(elided_lifetimes_in_paths)]
+
 use sea_orm_migration::prelude::*;
 
 /// Consolidated initial schema for the prelaunch period.
