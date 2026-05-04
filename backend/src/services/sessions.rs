@@ -6,12 +6,15 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use crate::domain::enums::{Ruleset, SessionStatus};
-use crate::entities::{
-    cups, runs, session_participants, session_race_participations, session_races, sessions, users,
+use crate::{
+    domain::enums::{Ruleset, SessionStatus},
+    entities::{
+        cups, runs, session_participants, session_race_participations, session_races, sessions,
+        users,
+    },
+    error::AppError,
+    services::helpers,
 };
-use crate::error::AppError;
-use crate::services::helpers;
 
 /// Row shape for the active-participant-in-active-session query.
 #[derive(Debug, FromQueryResult)]
@@ -1132,10 +1135,12 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entities::session_race_participations;
-    use crate::test_helpers::{
-        backdate_participant, create_user, insert_participant, insert_race_participation,
-        insert_session, insert_session_race, seed_tracks_for_test, setup_db,
+    use crate::{
+        entities::session_race_participations,
+        test_helpers::{
+            backdate_participant, create_user, insert_participant, insert_race_participation,
+            insert_session, insert_session_race, seed_tracks_for_test, setup_db,
+        },
     };
 
     // ── load_host_username ───────────────────────────────────────────
@@ -1849,9 +1854,11 @@ mod tests {
     async fn test_pending_excludes_submitted_races() {
         // Insert a runs row directly to avoid pulling all of run-creation's
         // validation surface into a query test.
-        use crate::drink_type_id::drink_type_uuid;
-        use crate::entities::{drink_types, runs};
-        use crate::test_helpers::seed_game_data;
+        use crate::{
+            drink_type_id::drink_type_uuid,
+            entities::{drink_types, runs},
+            test_helpers::seed_game_data,
+        };
 
         let db = setup_db().await;
         seed_game_data(&db).await;
@@ -2358,9 +2365,11 @@ mod tests {
     async fn test_skip_already_submitted_returns_conflict() {
         // Insert a runs row for (race, user) directly to avoid pulling
         // create_run's full validation surface into a skip test.
-        use crate::drink_type_id::drink_type_uuid;
-        use crate::entities::{drink_types, runs};
-        use crate::test_helpers::seed_game_data;
+        use crate::{
+            drink_type_id::drink_type_uuid,
+            entities::{drink_types, runs},
+            test_helpers::seed_game_data,
+        };
 
         let db = setup_db().await;
         seed_game_data(&db).await;

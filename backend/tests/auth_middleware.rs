@@ -5,13 +5,14 @@ use std::sync::Arc;
 
 use axum::{Router, http::StatusCode, routing::get};
 use axum_test::TestServer;
+use beerio_kart::{
+    AppState,
+    config::AppConfig,
+    middleware::auth::{AdminUser, AuthUser},
+};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde_json::Value;
-
-use beerio_kart::AppState;
-use beerio_kart::config::AppConfig;
-use beerio_kart::middleware::auth::{AdminUser, AuthUser};
 
 const TEST_SECRET: &str = "middleware-test-secret";
 

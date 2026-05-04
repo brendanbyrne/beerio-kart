@@ -17,6 +17,10 @@ dev:
 test:
     cd backend && cargo test
 
+# Format Rust code (requires nightly rustfmt — see README "Setup")
+fmt:
+    cd backend && cargo +nightly fmt
+
 # Regenerate SeaORM entities from the database
 entities:
     cd backend && sea-orm-cli generate entity -o src/entities

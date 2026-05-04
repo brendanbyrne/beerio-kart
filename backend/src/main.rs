@@ -14,17 +14,15 @@ use axum::{
     Json, Router,
     routing::{get, post, put},
 };
+use beerio_kart::{AppState, config::AppConfig, routes, services};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde::Serialize;
-use tower_http::services::{ServeDir, ServeFile};
-use tower_http::trace::TraceLayer;
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 use tracing_subscriber::EnvFilter;
-
-use beerio_kart::AppState;
-use beerio_kart::config::AppConfig;
-use beerio_kart::routes;
-use beerio_kart::services;
 
 #[derive(Serialize)]
 struct HelloResponse {

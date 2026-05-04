@@ -6,9 +6,11 @@
 
 use sea_orm::ConnectionTrait;
 
-use crate::entities::{session_participants, sessions};
-use crate::error::AppError;
-use crate::services::helpers;
+use crate::{
+    entities::{session_participants, sessions},
+    error::AppError,
+    services::helpers,
+};
 
 #[derive(Debug, Clone)]
 pub struct SessionContext {
@@ -55,9 +57,9 @@ impl SessionContext {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sea_orm::EntityTrait;
 
+    use super::*;
     use crate::test_helpers::{create_user, insert_participant, insert_session, setup_db};
 
     #[tokio::test]

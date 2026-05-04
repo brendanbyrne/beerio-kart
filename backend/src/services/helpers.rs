@@ -10,9 +10,11 @@ use sea_orm::{
     sea_query::Expr,
 };
 
-use crate::domain::enums::SessionStatus;
-use crate::entities::{session_participants, session_race_participations, sessions, tracks};
-use crate::error::AppError;
+use crate::{
+    domain::enums::SessionStatus,
+    entities::{session_participants, session_race_participations, sessions, tracks},
+    error::AppError,
+};
 
 /// Load a session by ID and require that it is in the `Active` state.
 ///
@@ -188,15 +190,15 @@ pub async fn pick_random_track<C: ConnectionTrait>(
 
 #[cfg(test)]
 mod tests {
+    use sea_orm::{ActiveModelTrait, PaginatorTrait, Set};
+
     use super::*;
-    use sea_orm::{ActiveModelTrait, Set};
-
-    use sea_orm::PaginatorTrait;
-
-    use crate::entities::{characters, cups, session_race_participations, tracks};
-    use crate::test_helpers::{
-        create_user, insert_participant, insert_session, insert_session_race, seed_tracks_for_test,
-        setup_db,
+    use crate::{
+        entities::{characters, cups, session_race_participations, tracks},
+        test_helpers::{
+            create_user, insert_participant, insert_session, insert_session_race,
+            seed_tracks_for_test, setup_db,
+        },
     };
 
     // --- load_active_session ---

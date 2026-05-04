@@ -9,13 +9,10 @@ use axum::{
     routing::{get, post, put},
 };
 use axum_test::TestServer;
+use beerio_kart::{AppState, config::AppConfig, routes};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde_json::{Value, json};
-
-use beerio_kart::AppState;
-use beerio_kart::config::AppConfig;
-use beerio_kart::routes;
 
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 

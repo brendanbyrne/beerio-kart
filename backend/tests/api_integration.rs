@@ -11,13 +11,10 @@ use axum::{
     routing::{get, post},
 };
 use axum_test::TestServer;
+use beerio_kart::{AppState, config::AppConfig, routes};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
 use serde_json::{Value, json};
-
-use beerio_kart::AppState;
-use beerio_kart::config::AppConfig;
-use beerio_kart::routes;
 
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 
@@ -95,8 +92,10 @@ async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
 /// Seed minimal static data for tests. Uses the same JSON files as production
 /// seed but loads them directly.
 async fn seed_test_data(db: &sea_orm::DatabaseConnection) {
-    use beerio_kart::drink_type_id::drink_type_uuid;
-    use beerio_kart::entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels};
+    use beerio_kart::{
+        drink_type_id::drink_type_uuid,
+        entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels},
+    };
     use sea_orm::TransactionTrait;
     use serde::Deserialize;
 

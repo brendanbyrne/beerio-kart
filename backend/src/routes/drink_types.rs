@@ -6,11 +6,10 @@ use chrono::{DateTime, Utc};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
-use crate::drink_type_id::drink_type_uuid;
-use crate::entities::drink_types;
-use crate::error::AppError;
-use crate::middleware::auth::AuthUser;
+use crate::{
+    AppState, drink_type_id::drink_type_uuid, entities::drink_types, error::AppError,
+    middleware::auth::AuthUser,
+};
 
 // ── Response types ───────────────────────────────────────────────────
 

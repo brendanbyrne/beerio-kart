@@ -6,10 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
-use crate::error::AppError;
-use crate::middleware::auth::AuthUser;
-use crate::services::sessions;
+use crate::{AppState, error::AppError, middleware::auth::AuthUser, services::sessions};
 
 #[derive(Deserialize)]
 pub struct CreateSessionRequest {

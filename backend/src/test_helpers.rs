@@ -13,10 +13,12 @@ use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, Set};
 use uuid::Uuid;
 
-use crate::drink_type_id::drink_type_uuid;
-use crate::entities::{
-    bodies, characters, cups, drink_types, gliders, session_participants,
-    session_race_participations, session_races, sessions, tracks, users, wheels,
+use crate::{
+    drink_type_id::drink_type_uuid,
+    entities::{
+        bodies, characters, cups, drink_types, gliders, session_participants,
+        session_race_participations, session_races, sessions, tracks, users, wheels,
+    },
 };
 
 /// Spin up an in-memory SQLite database with foreign keys enabled and all

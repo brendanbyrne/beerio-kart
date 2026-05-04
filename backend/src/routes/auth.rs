@@ -7,11 +7,10 @@ use axum::{
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
-use crate::entities::users;
-use crate::error::AppError;
-use crate::middleware::auth::AuthUser;
-use crate::services::auth as auth_service;
+use crate::{
+    AppState, entities::users, error::AppError, middleware::auth::AuthUser,
+    services::auth as auth_service,
+};
 
 // ── Request / Response types ────────────────────────────────────────
 
