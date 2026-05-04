@@ -29,7 +29,7 @@ PRs are grouped into *phases* by theme. Phases are loosely ordered by what unloc
 - **Dependencies:** None.
 - **Risk:** Low. The `#[allow]`s are temporary scaffolding; no behavioral change.
 - **Verification:** `cargo build --all-targets` succeeds; `cargo clippy --all-targets` produces zero warnings; `cargo fmt --check` passes.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #24 merged 2026-05-04.
 
 ### PR-A2: Codebase audit
 
@@ -402,3 +402,4 @@ Some PRs (B1, B3, E3) have no dependencies and can land in parallel with A1/A2.
 
 - 2026-05-02 — Initial draft. PRs identified by reading the standards docs against design.md and the repo file listing. Some PRs (D1, E2) presume audit findings (PR-A2) — concrete scopes will tighten once the audit lands.
 - 2026-05-04 — Marked PR-E3 sign-off complete (merged 2026-05-03 as PR #23).
+- 2026-05-04 — Marked PR-A1 sign-off complete (merged 2026-05-04 as PR #24).
