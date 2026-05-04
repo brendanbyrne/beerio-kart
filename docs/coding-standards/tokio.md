@@ -377,10 +377,16 @@ The 5-minute "close stale sessions" task is the canonical example for this proje
   - **Why:** Argon2 hashing on `spawn_blocking` is bounded only by the blocking pool size (default 512). Login storms can exhaust that for unrelated traffic. Front login with a semaphore (e.g., 16 concurrent hashes).
   - **Example:**
     ```rust
-    let permit = state.argon2_limit.acquire().await?;
+    // The named `_permit` binding (not bare `_`) holds the permit until
+    // end of scope — RAII releases it after the spawn_blocking completes
+    // or returns via `?`. Don't write `drop(permit)` manually; that's the
+    // anti-RAII form and only differs from scope-exit drop by microseconds.
+    // The leading underscore tells clippy/readers "intentionally unused
+    // name, the binding's job is to live."
+    let _permit = state.argon2_limit.acquire().await?;
     let hash = tokio::task::spawn_blocking(move || verify(pw, hash)).await??;
-    drop(permit);
     ```
+  - **Pitfall:** Writing `let _ = limiter.acquire().await?;` with a bare `_` instead of `_permit` drops the permit *immediately* — the limiter becomes a no-op. Always name the binding.
 
 - **Rule:** Use Tower middleware for request-level limits: `tower::timeout::TimeoutLayer`, `tower::limit::ConcurrencyLimitLayer`, `tower_http::limit::RequestBodyLimitLayer`.
 
@@ -473,3 +479,4 @@ Anyone modifying async code in this repo should have read at least the first thr
 
 - 2026-05-02 — Initial draft as part of `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into `docs/coding-standards/tokio.md`. Added `'static` discussion + scoped-task-trilemma reference in § 9. Held § 12 timeout rule strict (per project's "no corner cutting" stance). Took position on async traits in § 11 (native + trait-variant for spawn).
+- 2026-05-04 — § 12 semaphore example: switched from `let permit = …; drop(permit);` to the idiomatic `let _permit = …;` RAII binding, and added a pitfall callout for the bare-`_` foot-gun. Surfaced during PR #27 review (back-and-forth on which form to use); the explicit-drop form was the anti-RAII pattern. Standard now matches what idiomatic Rust would write.
