@@ -64,7 +64,15 @@ impl IntoResponse for AppError {
 
 impl From<sea_orm::DbErr> for AppError {
     fn from(e: sea_orm::DbErr) -> Self {
-        AppError::Internal(format!("Database error: {e}"))
+        use sea_orm::{DbErr, SqlErr};
+        match &e {
+            DbErr::RecordNotFound(msg) => AppError::NotFound(msg.clone()),
+            _ => match e.sql_err() {
+                Some(SqlErr::UniqueConstraintViolation(m)) => AppError::Conflict(m),
+                Some(SqlErr::ForeignKeyConstraintViolation(m)) => AppError::BadRequest(m),
+                _ => AppError::Internal(format!("Database error: {e}")),
+            },
+        }
     }
 }
 
@@ -77,5 +85,99 @@ impl From<jsonwebtoken::errors::Error> for AppError {
 impl From<argon2::password_hash::Error> for AppError {
     fn from(e: argon2::password_hash::Error) -> Self {
         AppError::Internal(format!("Password hashing error: {e}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::{ActiveModelTrait, DbErr, Set};
+
+    use super::*;
+    use crate::{
+        entities::users,
+        test_helpers::{create_user, setup_db},
+    };
+
+    #[test]
+    fn test_record_not_found_maps_to_not_found() {
+        let err: AppError = DbErr::RecordNotFound("user not found".to_string()).into();
+        match err {
+            AppError::NotFound(msg) => assert_eq!(msg, "user not found"),
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_unrecognized_dberr_maps_to_internal() {
+        // DbErr::Custom does not produce a SqlErr, so it should fall through to Internal.
+        let err: AppError = DbErr::Custom("something went wrong".to_string()).into();
+        match err {
+            AppError::Internal(msg) => assert!(msg.contains("something went wrong")),
+            other => panic!("expected Internal, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_unique_constraint_violation_maps_to_conflict() {
+        let db = setup_db().await;
+        // First insert succeeds — username has a unique constraint.
+        create_user(&db, "alice").await;
+
+        // Second insert with the same username triggers UniqueConstraintViolation.
+        let now = chrono::Utc::now().naive_utc();
+        let result = users::ActiveModel {
+            id: Set(uuid::Uuid::new_v4().to_string()),
+            username: Set("alice".to_string()),
+            email: Set(None),
+            password_hash: Set("placeholder".to_string()),
+            preferred_character_id: Set(None),
+            preferred_body_id: Set(None),
+            preferred_wheel_id: Set(None),
+            preferred_glider_id: Set(None),
+            preferred_drink_type_id: Set(None),
+            refresh_token_version: Set(0),
+            created_at: Set(now),
+            updated_at: Set(now),
+        }
+        .insert(&db)
+        .await;
+
+        let dberr = result.expect_err("duplicate username should fail");
+        let app_err: AppError = dberr.into();
+        match app_err {
+            AppError::Conflict(_) => {}
+            other => panic!("expected Conflict, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_foreign_key_constraint_violation_maps_to_bad_request() {
+        let db = setup_db().await;
+
+        // Insert a user with a preferred_character_id that doesn't exist in characters.
+        let now = chrono::Utc::now().naive_utc();
+        let result = users::ActiveModel {
+            id: Set(uuid::Uuid::new_v4().to_string()),
+            username: Set("bob".to_string()),
+            email: Set(None),
+            password_hash: Set("placeholder".to_string()),
+            preferred_character_id: Set(Some(99_999)),
+            preferred_body_id: Set(None),
+            preferred_wheel_id: Set(None),
+            preferred_glider_id: Set(None),
+            preferred_drink_type_id: Set(None),
+            refresh_token_version: Set(0),
+            created_at: Set(now),
+            updated_at: Set(now),
+        }
+        .insert(&db)
+        .await;
+
+        let dberr = result.expect_err("missing FK should fail");
+        let app_err: AppError = dberr.into();
+        match app_err {
+            AppError::BadRequest(_) => {}
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
     }
 }
