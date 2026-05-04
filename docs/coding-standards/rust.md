@@ -291,7 +291,9 @@ The principle is *parse, don't validate*: turn raw strings/integers from the wir
   - **Why:** `forbid` (vs `deny`) means no descendant module can override with `#[allow]`. Free for a pure-safe API server.
   - **Source:** <https://doc.rust-lang.org/rustc/lints/levels.html>
 
-- **Rule:** `unwrap_used` and `expect_used` are `warn`-level globally and `allow` in test modules via `#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]`.
+- **Rule:** `unwrap_used` and `expect_used` are `warn`-level globally and allowed in test code. The form depends on where the test code lives:
+  - **In `lib.rs` / non-test source files** with `#[cfg(test)] mod tests { ... }` blocks: use `#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]` at the top of the file. The `cfg_attr(test, ...)` gating is load-bearing — it suppresses the lints only when the file is being compiled as a test target.
+  - **In integration test files under `tests/`**: use bare `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]` at the top of each file. Files under `tests/` are *only* compiled under `cargo test` — `cfg(test)` is unconditionally true there, so the `cfg_attr` gating is redundant and arguably misleading (it implies the file might compile outside test mode).
   - **Why:** Forbidding outright pushes people to `.expect("INFALLIBLE")` which is no better. A warn nudges thinking; tests legitimately want to panic.
   - **Source:** <https://matklad.github.io/2022/07/10/almost-rules.html>
 
@@ -518,3 +520,4 @@ Anyone modifying Rust code in this repo should have read at least the first thre
 
 - 2026-05-02 — Initial draft as part of `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into `docs/coding-standards/rust.md`. Added: file length, serde, Cargo.toml hygiene, rustfmt, config/env, feature flags. Tightened type-driven design to commit to `nutype` + entity-boundary conversion. Added "tests trace to requirements, not lines" rule to testing. Added "re-review docs on PR" rule to documentation.
+- 2026-05-04 — Clarified § 8 unwrap/expect rule for test modules vs integration test files: lib code uses `cfg_attr(test, allow(...))`, files under `tests/` use bare `#![allow(...)]` since `cfg(test)` is unconditionally true there. Surfaced during PR-A1 (#24) review.
