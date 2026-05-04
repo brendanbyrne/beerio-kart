@@ -65,7 +65,7 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 - **Dependencies:** None (could land before A1; no harm in interleaving).
 - **Risk:** Low. The current behavior produces 500s where 404/409/400 belong; this fix changes a small set of response codes that no client should be depending on.
 - **Verification:** New tests pass; manually trigger a `find_by_id` for a missing record and confirm the response is 404 not 500.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #25 merged 2026-05-04.
 
 ### PR-B2: Fix SQLite PRAGMA scope by switching to SqliteConnectOptions
 
@@ -403,3 +403,4 @@ Some PRs (B1, B3, E3) have no dependencies and can land in parallel with A1/A2.
 - 2026-05-02 — Initial draft. PRs identified by reading the standards docs against design.md and the repo file listing. Some PRs (D1, E2) presume audit findings (PR-A2) — concrete scopes will tighten once the audit lands.
 - 2026-05-04 — Marked PR-E3 sign-off complete (merged 2026-05-03 as PR #23).
 - 2026-05-04 — Marked PR-A1 sign-off complete (merged 2026-05-04 as PR #24).
+- 2026-05-04 — Marked PR-B1 sign-off complete (merged 2026-05-04 as PR #25).
