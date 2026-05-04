@@ -274,6 +274,20 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Verification:** Force a SQLite lock (long write transaction in another connection); confirm the blocked query times out cleanly with the configured budget.
 - **Sign-off:** [ ]
 
+### PR-F5: `#[tracing::instrument]` audit on services and handlers
+
+- **Scope:**
+  - Annotate every public `async fn` in `backend/src/services/` and `backend/src/routes/` with `#[tracing::instrument]`.
+  - Use `skip(...)` for non-`Debug` or large arguments (e.g. `db`, password fields, full request bodies); use `fields(...)` to surface IDs (`user_id`, `session_id`, etc.) so log lines inside the function carry them automatically.
+  - Don't instrument trivial helpers in tight loops (per `tokio.md` § 10).
+- **Standards refs:** `tokio.md` § 10.
+- **Effort:** M. Mostly mechanical, but every service/handler needs a thoughtful `skip` / `fields` choice.
+- **Dependencies:** None. Could land in parallel with most Phase D/E PRs.
+- **Risk:** Low. Adds tracing spans; no behavior change.
+- **Verification:** Run with `RUST_LOG=info,beerio_kart=debug`; hit a handler that traverses two service calls and confirm log lines from inside both nested spans carry the parent's `user_id` / `session_id` fields.
+- **Sign-off:** [ ]
+- **Why this exists:** Surfaced during PR-27 (Argon2 spawn_blocking) review. The reviewer correctly flagged that the new async helpers lack `#[tracing::instrument]` — a real `tokio.md` § 10 violation — but scoped it out of PR-27 because no other public async fn in `services/` or `routes/` is annotated either. That's the right call for one PR, the wrong outcome long-term: the gap won't fix itself. This row makes it a tracked work item.
+
 ---
 
 ## Phase G — Documentation, tests, formatting
@@ -387,12 +401,13 @@ If you want to look at one ordered list:
 15. **F2** — session cleanup task
 16. **F3** — Tower middleware
 17. **F4** — per-call timeouts
-18. **G1** — test SQLite `cache=shared`
-19. **G2** — rstest / proptest / insta
-20. **G3** — doc-comment audit
-21. **G4** — file-length splits
-22. **H1+** — lint cleanup PRs (many)
-23. **I1** — code review skill update
+18. **F5** — `#[tracing::instrument]` audit on services and handlers
+19. **G1** — test SQLite `cache=shared`
+20. **G2** — rstest / proptest / insta
+21. **G3** — doc-comment audit
+22. **G4** — file-length splits
+23. **H1+** — lint cleanup PRs (many)
+24. **I1** — code review skill update
 
 Some PRs (B1, B3, E3) have no dependencies and can land in parallel with A1/A2.
 
@@ -405,3 +420,4 @@ Some PRs (B1, B3, E3) have no dependencies and can land in parallel with A1/A2.
 - 2026-05-04 — Marked PR-A1 sign-off complete (merged 2026-05-04 as PR #24).
 - 2026-05-04 — Marked PR-B1 sign-off complete (merged 2026-05-04 as PR #25).
 - 2026-05-04 — Marked PR-B2 sign-off complete (merged 2026-05-04 as PR #26).
+- 2026-05-04 — Added PR-F5 (`#[tracing::instrument]` audit on services and handlers) per `tokio.md` § 10. Surfaced and scoped-out during PR #27 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR.
