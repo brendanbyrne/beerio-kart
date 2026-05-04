@@ -78,7 +78,7 @@ Each in-scope file keeps a `## Document history` section at the bottom. Any AI-a
 
 - **Unit tests:** Use `#[cfg(test)] mod tests { }` in the same file as the code being tested. Cover business logic: validation rules, service functions, data transformations, error cases.
 - **Integration tests:** Use `tests/` directory or Axum's test utilities to test HTTP endpoints end-to-end. Cover the happy path and key error cases (bad input, auth failures, not found, conflicts).
-- **What doesn't need tests:** Pure boilerplate (entity definitions, mod.rs re-exports), one-time startup code (seeding, migration runner), and simple config loading. Use judgment — if it has logic, it needs tests.
+- **What doesn't need tests:** Hand-written entities (declarations of column shape — no testable logic to unit-test; the schema-drift test (PR-X2) covers mismatches between migration and entity), `mod.rs` re-exports, one-time startup code (seeding, migration runner), and simple config loading. Use judgment — if it has logic, it needs tests.
 - **Test naming:** Descriptive names that read as sentences: `test_login_with_wrong_password_returns_401`, not `test_login_2`.
 
 ## Development Workflow

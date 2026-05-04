@@ -21,8 +21,8 @@ test:
 fmt:
     cd backend && cargo +nightly fmt
 
-# Regenerate SeaORM entities from the database
-entities:
+# One-shot scaffold for a new table — hand-edit afterward, do not re-run on existing entities (clobbers hand-edits)
+entities-bootstrap:
     cd backend && sea-orm-cli generate entity -o src/entities
 
 # Production build (backend + frontend)

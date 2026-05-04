@@ -207,20 +207,28 @@
 
 ## 6. Entity organization
 
-- **Rule:** Treat the generated `entities/*.rs` files as build output. No hand-edits.
-  - **Why:** `sea-orm-cli generate entity` clobbers them on regen. Custom logic on a generated file is a time bomb.
-  - **Source:** <https://www.sea-ql.org/SeaORM/docs/generate-entity/entity-first/>
+The migration code in `migration/` is the schema source of truth. Entities mirror that shape; they are **committed source code**, hand-edited as the schema evolves. Codegen (`sea-orm-cli generate entity`) is a one-shot scaffolding tool, not a routine workflow step. The architectural reasoning is recorded in [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../../reviews/design/2026-05-02-entity-codegen-strategy.md); the short version is that round-tripping schema information through SQLite introspection (migration → DB → entity) loses information the migration already contains (most notably partial-index predicates), and we have no need to pay that cost on a greenfield project we own end-to-end.
+
+- **Rule:** Entities under `backend/src/entities/` are committed source. Hand-edit them as the schema evolves. Do not re-run codegen on existing entity files.
+  - **Why:** Codegen will clobber hand-corrections — currently the partial-unique-index attribute on `session_participants.user_id` and the `has_many` cardinality on `users` ↔ `session_participants` — and the same class of bug is likely to recur as new partial indexes appear. The information lives in the migration; the entity is just the Rust mirror.
+  - **Source:** Project decision recorded in [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../../reviews/design/2026-05-02-entity-codegen-strategy.md).
+
+- **Rule:** When adding a new table, write the migration first, then run `just entities-bootstrap` to scaffold the entity into `backend/src/entities/{table}.rs`. Hand-edit and commit. From then on, the file is owned source.
+  - **Why:** The CLI still produces a useful starting point — column derives, `Relation` enum, `Related` impls. Saving 20 minutes of typing on the initial scaffold is fine; the cost the design record warns against is *re-running* it on existing entities.
+
+- **Rule:** When changing an existing table, edit the migration and the entity (and any service / DTO code that depends on the schema) in the same PR. Reset the dev DB after the migration edit per CLAUDE.md's prelaunch schema rule.
+  - **Why:** Atomic schema changes — the entity, the migration, and the consuming code all move together. The schema-drift verification test (PR-X2) is a backstop for column/type mismatches, not a substitute for atomicity.
+
+- **Rule:** Implement `ActiveModelBehavior` either inline in the entity file or in a sibling `entities/{entity}_behavior.rs`. Either is fine; sibling files are useful when the impl is large or imports a lot of domain code.
+  - **Why:** With entities as committed source, the historic "keep behavior in a sibling so codegen doesn't clobber it" rule no longer applies. Locality wins for small impls; sibling files win for big ones. Pick by size.
 
 - **Rule:** Put domain logic in sibling modules (`services/`, `domain/`), not on entity types.
-  - **Why:** Keeps generated code generated and domain code domain. Free functions taking `&impl ConnectionTrait` and `&Model` references compose better than methods.
+  - **Why:** Entities are a thin Rust mirror of the schema. Methods on `Model` blur the layering — services should orchestrate, entities should describe shape.
 
-- **Rule:** Implement `ActiveModelBehavior` in a sibling file under `entities/` (e.g. `entities/users_behavior.rs`) wired in through `entities/mod.rs`. Do **not** edit the generated `users.rs`.
-  - **Why:** This is the one trait you legitimately need to implement on a generated type. Putting it in a sibling preserves "regenerate freely."
+- **Rule:** Add `Serialize` / `Deserialize` derives by hand on the entities that need them. There's no codegen flag to chase any more.
+  - **Why:** Same reason as everything else in this section — the file is yours; derive what you need.
 
-- **Rule:** Add `Serialize` / `Deserialize` via `sea-orm-cli generate entity --with-serde both`, not by hand. The flag persists across regens; hand-added derives don't.
-  - **Source:** <https://www.sea-ql.org/SeaORM/docs/generate-entity/sea-orm-cli/>
-
-- **Rule:** Newtype boundary. Entities use codegen-default primitives (`String` for UUID columns, `i32` for INTEGER columns). Conversion to/from domain newtypes (`UserId`, `RaceTimeMs`, etc. — see `rust.md` § 2) happens at the entity↔service boundary inside the service layer. Don't try to teach codegen to use newtypes directly; the entity boundary is the explicit conversion point.
+- **Rule:** Newtype boundary. Entities use SeaORM-default primitives (`String` for UUID columns, `i32` for INTEGER columns). Conversion to/from domain newtypes (`UserId`, `RaceTimeMs`, etc. — see `rust.md` § 2) happens at the entity↔service boundary inside the service layer.
   - **Example:**
     ```rust
     // In services/users.rs:
@@ -232,7 +240,10 @@
         // ...
     };
     ```
-  - **Why:** Codegen can't be reliably taught to use third-party newtypes. The boundary conversion is one place to audit, easy to test, and the cost (one block of `try_from`s per entity) is small.
+  - **Why:** SeaORM's macro DSL doesn't give us a clean way to use third-party newtypes on column fields, and we don't want service-level invariants leaking into the entity definition. The boundary conversion is one place to audit, easy to test, and the cost (one block of `try_from`s per entity) is small.
+
+- **Rule:** Keep schema-mirroring concerns in the entity file (column attributes, `Relation` variants, `Related` impls). Anything richer — caching, denormalized fields, derived helpers — belongs outside `entities/`.
+  - **Why:** A reader scanning an entity file should see "what does the table look like, and what does it relate to?" and nothing else. That clarity is the trade we make for owning the file.
 
 ## 7. Error handling
 
@@ -360,16 +371,18 @@
 
 ## 11. Relations
 
-- **Rule:** Trust codegen for vanilla one-to-many / many-to-one relations. The CLI infers them from foreign keys.
+Entities are hand-written (§ 6), so the rules below describe what to *write* — not corrections to apply over codegen output.
 
-- **Rule:** Define many-to-many relations manually (in a sibling module) by implementing `Related` on both sides through the junction entity.
-  - **Why:** Codegen produces parent ↔ junction and junction ↔ child but not the direct `Related<Child> for Parent` impl.
+- **Rule:** Declare one-to-many / many-to-one relations as `belongs_to` / `has_many` entries on the `Relation` enum. The `from` / `to` columns spell out the FK; SeaORM generates the join from there.
+  - **Source:** <https://www.sea-ql.org/SeaORM/docs/relation/one-to-many/>
+
+- **Rule:** Many-to-many relations are declared by implementing `Related` on both sides through the junction entity. The junction itself has `belongs_to` entries on each side; the M2M shortcut is the additional `Related<Far> for Near` impl that supplies `to()` (junction → far-side leg) and `via()` (reverse of the near-side leg).
+  - **Why:** SeaORM has no "many-to-many" primitive — the M2M is just two one-to-many legs and the `Related` impl that stitches them together. See `entities/users.rs` and `entities/session_races.rs` for the pattern as applied to the `session_race_participations` junction.
   - **Source:** <https://www.sea-ql.org/SeaORM/docs/relation/many-to-many/>
 
-- **Rule:** When two FKs link the same pair of tables, give them distinct `Relation` variants and reference them by name.
-  - **Why:** Codegen historically produces ambiguous relations when there are multiple FKs between the same two tables (#405). Without distinct names, "find related users" doesn't know which FK to follow.
-  - **Note:** No current schema instances; the rule remains in force for any future table that reuses a target.
-  - **Source:** <https://github.com/SeaQL/sea-orm/issues/405>
+- **Rule:** When two FKs link the same pair of tables, give the `Relation` variants distinct, intent-revealing names (e.g. `Author`, `Editor` rather than two `Users` variants). When an M2M and a direct relation point at the same far-side entity, name them apart too — the `Related<Far> for Near` impl picks one of them, so the other needs a unique name to be reachable through `find_related`.
+  - **Why:** Without distinct names, "find related users" is ambiguous — SeaORM has no way to pick which FK to follow. A historical codegen bug ([sea-orm #405](https://github.com/SeaQL/sea-orm/issues/405)) exposed the same shape; hand-written entities don't have the bug, but the underlying constraint on naming still applies.
+  - **Note:** Current schema example: `session_races.chosen_by` is a direct FK to `users` that coexists with the participations M2M. The chooser direction is currently unused, so no `Relation` variant is declared for it (see entity-file doc-comments). If a caller needs it, add a `ChosenSessionRaces` / `Chooser` pair rather than reusing the `Users` / `SessionRaces` names already taken by the M2M.
 
 ## 12. Pitfalls (consolidated)
 
@@ -393,3 +406,4 @@ A single-screen review checklist:
 - 2026-05-02 — Initial draft as part of `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into `docs/coding-standards/seaorm.md`. Added explicit "launch" definition to § 5. Updated § 9 to use `?cache=shared`. Added entity↔domain newtype boundary rule to § 6. Noted upcoming `sessions.created_by` removal in § 11.
 - 2026-05-02 — Removed the live-instance reference from § 11 after `sessions.created_by` was dropped (PR #23). Multi-FK rule retained for any future table that reuses a target.
+- 2026-05-04 — Hand-written entities convention. § 6 rewritten and § 11 reworded to drop the "trust codegen" framing in favor of declarative guidance for owned entity files. Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
