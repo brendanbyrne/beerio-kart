@@ -6,13 +6,14 @@ use std::sync::Arc;
 use axum::{Router, http::StatusCode, routing::get};
 use axum_test::TestServer;
 use beerio_kart::{
-    AppState,
+    ARGON2_MAX_CONCURRENT, AppState,
     config::AppConfig,
     middleware::auth::{AdminUser, AuthUser},
 };
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde_json::Value;
+use tokio::sync::Semaphore;
 
 const TEST_SECRET: &str = "middleware-test-secret";
 
@@ -44,7 +45,11 @@ async fn setup_server(admin_user_id: Option<&str>) -> TestServer {
     Migrator::up(&db, None).await.expect("migrate");
 
     let config = make_config(admin_user_id);
-    let state = AppState { db, config };
+    let state = AppState {
+        db,
+        config,
+        argon2_limit: Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT)),
+    };
 
     let app = Router::new()
         .route("/auth-only", get(auth_handler))

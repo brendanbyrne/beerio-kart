@@ -5,8 +5,9 @@ use argon2::{
 use chrono::{TimeDelta, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
 
-use crate::config::AppConfig;
+use crate::{config::AppConfig, error::AppError};
 
 /// Claims for short-lived access tokens (sent in response body, stored in JS memory).
 #[derive(Debug, Serialize, Deserialize)]
@@ -45,19 +46,48 @@ pub struct RefreshClaims {
 ///
 /// Returns the PHC-format hash string that includes the salt, algorithm
 /// parameters, and hash — everything needed to verify later.
-pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
-    let salt = SaltString::generate(&mut rand_core::OsRng);
-    let argon2 = Argon2::default(); // Argon2id with default params
-    let hash = argon2.hash_password(password.as_bytes(), &salt)?;
-    Ok(hash.to_string())
+///
+/// Argon2 is deliberately CPU/memory-hard (50–200 ms per hash). The work
+/// runs on Tokio's blocking pool via `spawn_blocking` so it never stalls an
+/// async worker, and `limiter` caps concurrent hashes (see
+/// `coding-standards/tokio.md` § 2 and § 12).
+pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<String, AppError> {
+    let _permit = limiter
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal("argon2 semaphore closed".into()))?;
+    tokio::task::spawn_blocking(move || {
+        let salt = SaltString::generate(&mut rand_core::OsRng);
+        Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .map(|h| h.to_string())
+            .map_err(AppError::from)
+    })
+    .await
+    .map_err(|_| AppError::Internal("argon2 hash task panicked".into()))?
 }
 
 /// Verify a plaintext password against a stored Argon2id hash.
-pub fn verify_password(password: &str, hash: &str) -> Result<bool, argon2::password_hash::Error> {
-    let parsed = PasswordHash::new(hash)?;
-    Ok(Argon2::default()
-        .verify_password(password.as_bytes(), &parsed)
-        .is_ok())
+///
+/// Like `hash_password`, this offloads the verify to the blocking pool and
+/// is gated by the shared semaphore.
+pub async fn verify_password(
+    limiter: &Semaphore,
+    password: String,
+    hash: String,
+) -> Result<bool, AppError> {
+    let _permit = limiter
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal("argon2 semaphore closed".into()))?;
+    tokio::task::spawn_blocking(move || {
+        let parsed = PasswordHash::new(&hash).map_err(AppError::from)?;
+        Ok(Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok())
+    })
+    .await
+    .map_err(|_| AppError::Internal("argon2 verify task panicked".into()))?
 }
 
 /// Create a short-lived access token for the given user.
@@ -149,9 +179,16 @@ pub fn clear_refresh_cookie(config: &AppConfig) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::{Duration, Instant},
+    };
 
     use super::*;
+    use crate::ARGON2_MAX_CONCURRENT;
 
     fn test_config() -> Arc<AppConfig> {
         Arc::new(AppConfig {
@@ -163,32 +200,130 @@ mod tests {
         })
     }
 
-    #[test]
-    fn test_hash_password_produces_argon2id_hash() {
-        let hash = hash_password("mysecretpassword").unwrap();
+    fn test_limiter() -> Arc<Semaphore> {
+        Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT))
+    }
+
+    #[tokio::test]
+    async fn test_hash_password_produces_argon2id_hash() {
+        let limiter = test_limiter();
+        let hash = hash_password(&limiter, "mysecretpassword".to_string())
+            .await
+            .unwrap();
         assert!(
             hash.starts_with("$argon2id$"),
             "Expected argon2id hash, got: {hash}"
         );
     }
 
-    #[test]
-    fn test_hash_password_produces_different_hashes_for_same_input() {
-        let hash1 = hash_password("samepassword").unwrap();
-        let hash2 = hash_password("samepassword").unwrap();
+    #[tokio::test]
+    async fn test_hash_password_produces_different_hashes_for_same_input() {
+        let limiter = test_limiter();
+        let hash1 = hash_password(&limiter, "samepassword".to_string())
+            .await
+            .unwrap();
+        let hash2 = hash_password(&limiter, "samepassword".to_string())
+            .await
+            .unwrap();
         assert_ne!(hash1, hash2);
     }
 
-    #[test]
-    fn test_verify_password_correct() {
-        let hash = hash_password("correctpassword").unwrap();
-        assert!(verify_password("correctpassword", &hash).unwrap());
+    #[tokio::test]
+    async fn test_verify_password_correct() {
+        let limiter = test_limiter();
+        let hash = hash_password(&limiter, "correctpassword".to_string())
+            .await
+            .unwrap();
+        assert!(
+            verify_password(&limiter, "correctpassword".to_string(), hash)
+                .await
+                .unwrap()
+        );
     }
 
-    #[test]
-    fn test_verify_password_wrong() {
-        let hash = hash_password("correctpassword").unwrap();
-        assert!(!verify_password("wrongpassword", &hash).unwrap());
+    #[tokio::test]
+    async fn test_verify_password_wrong() {
+        let limiter = test_limiter();
+        let hash = hash_password(&limiter, "correctpassword".to_string())
+            .await
+            .unwrap();
+        assert!(
+            !verify_password(&limiter, "wrongpassword".to_string(), hash)
+                .await
+                .unwrap()
+        );
+    }
+
+    /// Confirm the semaphore actually serializes concurrent hashes beyond
+    /// its capacity. Two assertions:
+    ///
+    /// 1. A polling observer must see the limiter saturated at some point.
+    ///    Without the semaphore wired up, `available_permits()` would never
+    ///    drop, so this catches accidental removal of the limiter call.
+    /// 2. With PERMITS=2 and TASKS=6, the slowest task waits through two
+    ///    earlier "waves" before its turn — completion time must spread out
+    ///    by a multiple of the per-hash latency. Without bounded
+    ///    concurrency, all six would run on the blocking pool and finish at
+    ///    near-identical times.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_argon2_limiter_caps_concurrent_hashes() {
+        const PERMITS: usize = 2;
+        const TASKS: usize = 6;
+
+        let limiter = Arc::new(Semaphore::new(PERMITS));
+        let max_in_flight = Arc::new(AtomicUsize::new(0));
+
+        // Observer polls the semaphore at ~1 ms cadence and records the
+        // peak in-flight count. Aborts when the test finishes.
+        let observer_handle = {
+            let limiter = limiter.clone();
+            let max_in_flight = max_in_flight.clone();
+            tokio::spawn(async move {
+                loop {
+                    let in_flight = PERMITS - limiter.available_permits();
+                    let prev = max_in_flight.load(Ordering::Relaxed);
+                    if in_flight > prev {
+                        max_in_flight.store(in_flight, Ordering::Relaxed);
+                    }
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+            })
+        };
+
+        let start = Instant::now();
+        let mut handles = Vec::with_capacity(TASKS);
+        for _ in 0..TASKS {
+            let limiter = limiter.clone();
+            handles.push(tokio::spawn(async move {
+                hash_password(&limiter, "password123".to_string())
+                    .await
+                    .unwrap();
+                start.elapsed()
+            }));
+        }
+
+        let mut elapsed = Vec::with_capacity(TASKS);
+        for h in handles {
+            elapsed.push(h.await.unwrap());
+        }
+        observer_handle.abort();
+        elapsed.sort();
+
+        let observed = max_in_flight.load(Ordering::Relaxed);
+        let fastest = elapsed[0];
+        let slowest = *elapsed.last().unwrap();
+
+        assert_eq!(
+            observed, PERMITS,
+            "expected limiter to saturate at PERMITS={PERMITS} during the \
+             run (max observed = {observed})"
+        );
+        assert!(
+            slowest >= fastest * 2,
+            "slowest {slowest:?} expected ≥ 2× fastest {fastest:?} \
+             (PERMITS={PERMITS}, TASKS={TASKS}; without the limiter, all \
+             tasks would finish at roughly the same time)"
+        );
     }
 
     #[test]

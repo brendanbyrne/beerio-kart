@@ -4,15 +4,16 @@
 
 mod seed;
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     Json, Router,
     routing::{get, post, put},
 };
-use beerio_kart::{AppState, config::AppConfig, db, routes, services};
+use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::AppConfig, db, routes, services};
 use migration::{Migrator, MigratorTrait};
 use serde::Serialize;
+use tokio::sync::Semaphore;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -62,7 +63,11 @@ async fn main() {
     seed::run(&db).await.expect("Failed to seed database");
     tracing::info!("Seeding complete");
 
-    let state = AppState { db, config };
+    let state = AppState {
+        db,
+        config,
+        argon2_limit: Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT)),
+    };
 
     // Clone the DB connection for the background cleanup task before `state`
     // is moved into the router.
