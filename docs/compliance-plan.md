@@ -405,8 +405,7 @@ The architectural decision to switch from codegen-driven entities to hand-writte
 - **Scope:**
   - Add `tests/entity_schema_drift.rs` (or similar) that connects to `sqlite::memory:?cache=shared`, runs `Migrator::up`, and issues `Entity::find().limit(0).all(&db)` once per entity.
   - Wire into the existing `cargo test` job — no separate CI step.
-- **Follow-up (lands separately, post-merge, docs-only direct-to-main per CLAUDE.md):**
-  - Update CLAUDE.md `## Testing` with a third bullet category alongside Unit and Integration: *Verification tests* — drift checks that exercise structural invariants between layers. Deferred so the new bullet doesn't reference a not-yet-merged file; lands as a separate one-line edit once PR-X2 is on `main`.
+  - Update CLAUDE.md `## Testing` with a third bullet category alongside Unit and Integration: *Verification tests* — drift checks that exercise structural invariants between layers.
 - **Standards refs:** `seaorm.md` § 6 (drift-test backstop).
 - **Effort:** S.
 - **Dependencies:** PR-X1.
@@ -460,4 +459,3 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-04 — Marked PR-B2 sign-off complete (merged 2026-05-04 as PR #26).
 - 2026-05-04 — Added PR-F5 (`#[tracing::instrument]` audit on services and handlers) per `tokio.md` § 10. Surfaced and scoped-out during PR #27 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR.
 - 2026-05-04 — Added Phase J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
-- 2026-05-04 — Moved the CLAUDE.md `## Testing` "Verification tests" bullet out of PR-X2's main scope into a "Follow-up" section. The bullet was originally written under PR-X2's scope but lands separately as a docs-only direct-to-main commit after PR-X2 merges (so the bullet doesn't reference a not-yet-merged file). PR-X2.
