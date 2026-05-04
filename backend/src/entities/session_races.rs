@@ -20,6 +20,8 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::runs::Entity")]
     Runs,
+    #[sea_orm(has_many = "super::session_race_participations::Entity")]
+    SessionRaceParticipations,
     #[sea_orm(
         belongs_to = "super::sessions::Entity",
         from = "Column::SessionId",
@@ -52,6 +54,12 @@ impl Related<super::runs::Entity> for Entity {
     }
 }
 
+impl Related<super::session_race_participations::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SessionRaceParticipations.def()
+    }
+}
+
 impl Related<super::sessions::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Sessions.def()
@@ -66,7 +74,14 @@ impl Related<super::tracks::Entity> for Entity {
 
 impl Related<super::users::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Users.def()
+        super::session_race_participations::Relation::Users.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::session_race_participations::Relation::SessionRaces
+                .def()
+                .rev(),
+        )
     }
 }
 
