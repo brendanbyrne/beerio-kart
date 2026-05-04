@@ -91,7 +91,7 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 - **Dependencies:** None.
 - **Risk:** Low. Worst case the semaphore permit count is wrong; tunable.
 - **Verification:** Load test login endpoint at modest concurrency (~50 concurrent logins). Confirm the server stays responsive on unrelated endpoints.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #27 merged 2026-05-04.
 
 ---
 
@@ -461,3 +461,4 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-04 — Added Phase J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-04 — Marked PR-X1 sign-off complete (merged 2026-05-04 as PR #28).
 - 2026-05-04 — Marked PR-X2 sign-off complete (merged 2026-05-04 as PR #29).
+- 2026-05-04 — Marked PR-B3 sign-off complete (merged 2026-05-04 as PR #27).
