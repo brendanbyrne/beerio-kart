@@ -85,7 +85,8 @@ All route handlers return `Result<impl IntoResponse, AppError>` where `AppError`
 
 **Key behaviors:**
 - `Internal` logs the real error via `tracing::error!` but returns a generic message to the client — internal details are never exposed.
-- `From` impls for `sea_orm::DbErr`, `jsonwebtoken::errors::Error`, and `argon2::password_hash::Error` auto-convert library errors into `Internal`, so `?` works directly on DB queries, token operations, and password hashing.
+- `From` impls for `jsonwebtoken::errors::Error` and `argon2::password_hash::Error` map library errors to `Internal`, so `?` works directly on token operations and password hashing.
+- `From<sea_orm::DbErr>` is variant-aware: `RecordNotFound` → `NotFound` (404), `SqlErr::UniqueConstraintViolation` → `Conflict` (409), `SqlErr::ForeignKeyConstraintViolation` → `BadRequest` (400), everything else → `Internal` (500). This preserves error semantics that a blanket-Internal mapping would otherwise hide.
 - Client-facing errors (`BadRequest`, `Unauthorized`, etc.) are always constructed explicitly — they require human judgment about the appropriate status code and message.
 
 **Response format:** All errors return JSON: `{ "error": "<message>" }`
@@ -977,3 +978,4 @@ Random ideas that may or may not be pursued.
 ## Document history
 
 - 2026-05-02 — Moved from repo root (`DESIGN.md`) to `docs/design.md`. Project structure section updated to reflect the move and the new `docs/` layout. The root `DESIGN.md` is kept as a redirect (Cowork sandbox cannot delete files); a Claude Code PR will remove it from the working tree.
+- 2026-05-04 — Updated the AppError "Key behaviors" bullet to reflect the variant-aware `From<sea_orm::DbErr>` impl (NotFound / Conflict / BadRequest / Internal mapping). PR #25.

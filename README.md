@@ -3,7 +3,7 @@
 [![codecov](https://codecov.io/gh/brendanbyrne/beerio-kart/graph/badge.svg)](https://codecov.io/gh/brendanbyrne/beerio-kart)
 
 We're really doing this thing.  There are two goals with this project.
-* A mobile-first web app for tracking times and stats for the Mario Kart 8 Deluxe drinking game. Players race time trials, optionally drink, and the app tracks personal bests, leaderboards, and run history.
+* A mobile-first web app for tracking times and stats for the Mario Kart 8 Deluxe drinking game. Players race time trials, drink something bubbly, and the app tracks personal bests, leaderboards, and run history.
 * Experimenting with using LLMs, with the intent to never write a line of actual code.  A test to see how far I can push a purely vibe coded project.
 
 ## Project layout
