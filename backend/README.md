@@ -63,6 +63,6 @@ The repo's [`justfile`](../justfile) defines common workflow commands. From the 
 ```sh
 just dev         # run dev server (frontend + backend)
 just test        # run cargo test
-just entities    # regenerate SeaORM entity files from the dev DB
+just entities-bootstrap  # one-shot scaffold for a new table — hand-edit afterward (see seaorm.md § 6)
 just coverage    # generate HTML coverage report
 ```
