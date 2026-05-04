@@ -65,8 +65,12 @@ pub enum Relation {
     // historical participant rows.
     #[sea_orm(has_many = "super::session_participants::Entity")]
     SessionParticipants,
+    #[sea_orm(has_many = "super::session_race_participations::Entity")]
+    SessionRaceParticipations,
     #[sea_orm(has_many = "super::session_races::Entity")]
     SessionRaces,
+    #[sea_orm(has_many = "super::sessions::Entity")]
+    Sessions,
     #[sea_orm(
         belongs_to = "super::wheels::Entity",
         from = "Column::PreferredWheelId",
@@ -113,15 +117,34 @@ impl Related<super::session_participants::Entity> for Entity {
     }
 }
 
-impl Related<super::session_races::Entity> for Entity {
+impl Related<super::session_race_participations::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::SessionRaces.def()
+        Relation::SessionRaceParticipations.def()
+    }
+}
+
+impl Related<super::sessions::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Sessions.def()
     }
 }
 
 impl Related<super::wheels::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Wheels.def()
+    }
+}
+
+impl Related<super::session_races::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::session_race_participations::Relation::SessionRaces.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::session_race_participations::Relation::Users
+                .def()
+                .rev(),
+        )
     }
 }
 
