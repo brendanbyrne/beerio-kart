@@ -39,9 +39,11 @@
 //!   `Related` impl, ambiguous M2M). These are structural, not column-shape,
 //!   and rely on review attention plus the atomic-PR rule from CLAUDE.md.
 //! - **Hand-corrected attributes** like the absent `unique` on
-//!   `session_participants.user_id` (which deliberately under-declares the
-//!   migration's partial unique index — see that file's doc-comment). Those
-//!   are intentional deviations, not drift; review catches them.
+//!   `session_participants.user_id`. The entity deliberately omits `unique`
+//!   so SeaORM doesn't infer `has_one` on the `users` ↔
+//!   `session_participants` relation (see that entity's doc-comment for
+//!   the full reasoning, including the two distinct migration constraints
+//!   that justify it). Intentional deviation, not drift; review catches it.
 //! - **Migration-only constraints** like `CHECK` clauses, partial indexes,
 //!   or compound `UNIQUE`s that the entity doesn't model. The entity is a
 //!   column-shape mirror, not a constraint mirror.
