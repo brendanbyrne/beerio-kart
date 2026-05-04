@@ -1,13 +1,20 @@
 //! Hand-written entity for `session_participants`.
 //!
 //! `user_id` deliberately carries no `unique` attribute. The migration
-//! enforces uniqueness only over *active* participation rows
-//! (`CREATE UNIQUE INDEX ... ON session_participants(user_id) WHERE left_at IS NULL`),
-//! which lets a user re-join the same session — each rejoin produces a new
-//! row, with the previous one stamped via `left_at`. Marking the column
-//! `unique` here would imply a full constraint and would also coerce the
-//! `users` ↔ `session_participants` relation to `has_one`, breaking
-//! historical-row loading.
+//! defines two separate uniqueness constraints on this table:
+//!
+//! - `UNIQUE(session_id, user_id)` — at most one row per (session, user).
+//!   Rejoining the same session mutates the existing row (clears `left_at`)
+//!   rather than inserting a new one; see `services/sessions.rs::join_session`.
+//! - `CREATE UNIQUE INDEX ... ON session_participants(user_id) WHERE left_at IS NULL`
+//!   — a user can be active in at most one session at a time globally.
+//!
+//! Neither makes `user_id` standalone-unique on the table. `has_many` on the
+//! `users` ↔ `session_participants` relation reflects that a user accumulates
+//! one row per session they've ever joined (many rows across many sessions),
+//! even though within any single session there's only ever one row per user.
+//! Marking `user_id` `unique` here would coerce SeaORM into `has_one` and
+//! break loading of a user's full participation history.
 
 use sea_orm::entity::prelude::*;
 
