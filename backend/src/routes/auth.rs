@@ -114,8 +114,8 @@ pub async fn register(
         return Err(AppError::Conflict("Username already taken".into()));
     }
 
-    // Hash password
-    let password_hash = auth_service::hash_password(&body.password)?;
+    // Hash password (offloaded to the blocking pool, capped by argon2_limit)
+    let password_hash = auth_service::hash_password(&state.argon2_limit, body.password).await?;
 
     // Generate user ID and timestamps
     let user_id = uuid::Uuid::new_v4().to_string();
@@ -177,24 +177,29 @@ pub async fn login(
             // Hash a dummy password so the timing is similar to the "wrong password"
             // path. Prevents username enumeration via response-time analysis.
             let _ = auth_service::verify_password(
-                "dummy",
-                "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            );
+                &state.argon2_limit,
+                "dummy".to_string(),
+                "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                    .to_string(),
+            )
+            .await;
             return Err(AppError::Unauthorized(
                 "Invalid username or password".into(),
             ));
         }
     };
 
-    // Verify password
-    match auth_service::verify_password(&body.password, &user.password_hash) {
-        Ok(true) => {}
-        Ok(false) => {
-            return Err(AppError::Unauthorized(
-                "Invalid username or password".into(),
-            ));
-        }
-        Err(e) => return Err(AppError::from(e)),
+    // Verify password (offloaded to the blocking pool, capped by argon2_limit)
+    let password_ok = auth_service::verify_password(
+        &state.argon2_limit,
+        body.password,
+        user.password_hash.clone(),
+    )
+    .await?;
+    if !password_ok {
+        return Err(AppError::Unauthorized(
+            "Invalid username or password".into(),
+        ));
     }
 
     // Generate tokens
@@ -326,18 +331,20 @@ pub async fn change_password(
         .ok_or_else(|| AppError::NotFound("User not found".into()))?;
 
     // Verify current password
-    match auth_service::verify_password(&body.current_password, &db_user.password_hash) {
-        Ok(true) => {}
-        Ok(false) => {
-            return Err(AppError::Unauthorized(
-                "Current password is incorrect".into(),
-            ));
-        }
-        Err(e) => return Err(AppError::from(e)),
+    let current_ok = auth_service::verify_password(
+        &state.argon2_limit,
+        body.current_password,
+        db_user.password_hash.clone(),
+    )
+    .await?;
+    if !current_ok {
+        return Err(AppError::Unauthorized(
+            "Current password is incorrect".into(),
+        ));
     }
 
     // Hash new password
-    let new_hash = auth_service::hash_password(&body.new_password)?;
+    let new_hash = auth_service::hash_password(&state.argon2_limit, body.new_password).await?;
 
     // Update password and bump version (invalidates all other sessions)
     let new_version = db_user.refresh_token_version + 1;

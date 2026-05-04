@@ -11,10 +11,11 @@ use axum::{
     routing::{get, post},
 };
 use axum_test::TestServer;
-use beerio_kart::{AppState, config::AppConfig, routes};
+use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::AppConfig, routes};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
 use serde_json::{Value, json};
+use tokio::sync::Semaphore;
 
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 
@@ -51,6 +52,7 @@ async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
     let state = AppState {
         db: db.clone(),
         config,
+        argon2_limit: Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT)),
     };
 
     let app = Router::new()

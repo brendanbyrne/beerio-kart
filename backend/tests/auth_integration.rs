@@ -9,10 +9,11 @@ use axum::{
     routing::{get, post, put},
 };
 use axum_test::TestServer;
-use beerio_kart::{AppState, config::AppConfig, routes};
+use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::AppConfig, routes};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde_json::{Value, json};
+use tokio::sync::Semaphore;
 
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 
@@ -46,7 +47,11 @@ async fn setup_test_app() -> TestServer {
         .expect("Failed to run migrations");
 
     let config = test_config();
-    let state = AppState { db, config };
+    let state = AppState {
+        db,
+        config,
+        argon2_limit: Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT)),
+    };
 
     let app = Router::new()
         .route("/api/v1/auth/register", post(routes::auth::register))

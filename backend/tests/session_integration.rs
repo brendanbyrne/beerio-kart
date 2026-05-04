@@ -12,7 +12,7 @@ use axum::{
 };
 use axum_test::TestServer;
 use beerio_kart::{
-    AppState,
+    ARGON2_MAX_CONCURRENT, AppState,
     config::AppConfig,
     drink_type_id::drink_type_uuid,
     entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels},
@@ -22,6 +22,7 @@ use chrono::Utc;
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
 use serde_json::{Value, json};
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 const TEST_SECRET: &str = "test-secret-for-session-tests";
@@ -53,6 +54,7 @@ async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
     let state = AppState {
         db: db.clone(),
         config,
+        argon2_limit: Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT)),
     };
 
     let app = Router::new()
