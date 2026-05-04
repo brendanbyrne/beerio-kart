@@ -1,3 +1,6 @@
+// Tests legitimately want to panic — per rust.md § 8.
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 pub mod config;
 pub mod domain;
 pub mod drink_type_id;

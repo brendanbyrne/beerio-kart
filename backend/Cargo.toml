@@ -1,6 +1,55 @@
 [workspace]
 members = ["migration"]
 
+[workspace.lints.rust]
+warnings = "deny"
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# Tame the noisy pedantic ones:
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+# `cargo` group — relevant for crates.io publishing, not an internal binary:
+cargo_common_metadata = "allow"
+multiple_crate_versions = "allow"
+# Phase H scaffolding — clear each in a follow-up PR per rust.md § 8:
+doc_markdown = "allow"
+use_self = "allow"
+needless_raw_string_hashes = "allow"
+too_long_first_doc_paragraph = "allow"
+missing_const_for_fn = "allow"
+single_match_else = "allow"
+redundant_closure_for_method_calls = "allow"
+redundant_clone = "allow"
+map_unwrap_or = "allow"
+manual_let_else = "allow"
+items_after_statements = "allow"
+too_many_lines = "allow"
+used_underscore_binding = "allow"
+# High-value extras:
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+todo = "warn"
+unimplemented = "warn"
+expect_used = "warn"
+unwrap_used = "warn"
+panic = "warn"
+# Async (catastrophic if missed) — see tokio.md § 3:
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+unused_async = "warn"
+
 [package]
 name = "beerio-kart"
 version = "0.1.0"
@@ -24,8 +73,8 @@ rand = "0.8"
 rand_core = { version = "0.6", features = ["getrandom"] }
 migration = { path = "migration" }
 
-[lints.rust]
-warnings = "deny"
+[lints]
+workspace = true
 
 [dev-dependencies]
 axum-test = "19.1.1"
