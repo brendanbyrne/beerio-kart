@@ -26,6 +26,7 @@ Everything lives in [`docs/`](./docs):
 - **[`docs/api-contract.md`](./docs/api-contract.md)** — Wire-format conventions between backend and frontend (error codes, ETag polling, idempotency keys, time format).
 - **[`docs/coding-standards/`](./docs/coding-standards)** — Backend coding standards split by area: general Rust (`rust.md`), SeaORM (`seaorm.md`), async/Tokio (`tokio.md`), plus a `README.md` index.
 - **[`docs/compliance-plan.md`](./docs/compliance-plan.md)** — Sequenced PRs to bring the existing code into compliance with the coding standards.
+- **[`docs/research/`](./docs/research)** — Long-form exploration and primary-source evaluation of approaches we haven't decided on yet (e.g., OCR strategy, SeaORM 2.0 evaluation). Reference-only — these aren't authoritative until they crystallize into `design.md` or `coding-standards/`.
 
 ## Prerequisites
 

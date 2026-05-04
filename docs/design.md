@@ -811,7 +811,8 @@ beerio-kart/
 │   ├── design.md                # This file — architecture design (single source of truth)
 │   ├── api-contract.md          # Wire-format conventions between backend and frontend
 │   ├── compliance-plan.md       # Sequenced PRs to bring code to the coding standard
-│   └── coding-standards/        # Backend coding standards (rust.md, seaorm.md, tokio.md)
+│   ├── coding-standards/        # Backend coding standards (rust.md, seaorm.md, tokio.md)
+│   └── research/                # Long-form research (no decisions made; reference-only)
 │
 ├── reviews/
 │   ├── pr/                      # Claude Code-generated PR review explanations
@@ -972,6 +973,7 @@ Random ideas that may or may not be pursued.
 - **`api-contract.md`** — Wire-format conventions between backend and frontend (error codes, ETag polling, idempotency keys, time format).
 - **`coding-standards/`** — Backend coding standards (general Rust, SeaORM, Tokio).
 - **`compliance-plan.md`** — Sequenced PRs to bring the existing code into compliance with the coding standards.
+- **`research/`** — Long-form exploration of approaches not yet decided (e.g., OCR strategy, SeaORM 2.0 evaluation). Reference-only; not authoritative until promoted into this file or `coding-standards/`.
 - **`reviews/design/`** — Per-session design review records, signed off section by section.
 - **`reviews/pr/`** — Per-PR review notes from Claude Code.
 
@@ -979,3 +981,4 @@ Random ideas that may or may not be pursued.
 
 - 2026-05-02 — Moved from repo root (`DESIGN.md`) to `docs/design.md`. Project structure section updated to reflect the move and the new `docs/` layout. The root `DESIGN.md` is kept as a redirect (Cowork sandbox cannot delete files); a Claude Code PR will remove it from the working tree.
 - 2026-05-04 — Updated the AppError "Key behaviors" bullet to reflect the variant-aware `From<sea_orm::DbErr>` impl (NotFound / Conflict / BadRequest / Internal mapping). PR #25.
+- 2026-05-04 — Added `docs/research/` to the project-structure tree and a corresponding entry in Related documents (long-form exploration not yet promoted to design or coding-standards).
