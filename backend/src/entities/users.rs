@@ -72,10 +72,11 @@ pub enum Relation {
     Gliders,
     #[sea_orm(has_many = "super::runs::Entity")]
     Runs,
-    // `has_many` (not `has_one`): a user accumulates one active and many
-    // historical participation rows over the lifetime of a session — the
-    // partial unique index on `user_id WHERE left_at IS NULL` only constrains
-    // active rows, not the full set.
+    // `has_many` (not `has_one`): a user accumulates one row per session
+    // they've ever joined — many rows across many sessions. Within a given
+    // session there's only ever one row (rejoin mutates `left_at` rather
+    // than inserting), enforced by `UNIQUE(session_id, user_id)`. See
+    // `entities/session_participants.rs` for the full constraint picture.
     #[sea_orm(has_many = "super::session_participants::Entity")]
     SessionParticipants,
     #[sea_orm(has_many = "super::session_race_participations::Entity")]

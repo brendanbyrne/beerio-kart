@@ -206,7 +206,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Scope:**
   - Design decision in `reviews/design/sessions-created-by-removal.md` (one-line: "host_id is the only host indicator; created_by adds no current product value").
   - Update consolidated migration: remove `created_by` column and its FK.
-  - Update entity (regenerate via `just entities`).
+  - Update the `sessions` entity by hand to drop the `created_by` column and its `Relation` variant (entities are committed source per `seaorm.md` § 6).
   - Update design.md: change "host_id starts as created_by" to "host_id starts as the user who created the session, transfers on leave."
   - Update services and routes that reference `created_by`.
   - Update CLAUDE.md if anything references `created_by` policy.
@@ -458,4 +458,4 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-04 — Marked PR-B1 sign-off complete (merged 2026-05-04 as PR #25).
 - 2026-05-04 — Marked PR-B2 sign-off complete (merged 2026-05-04 as PR #26).
 - 2026-05-04 — Added PR-F5 (`#[tracing::instrument]` audit on services and handlers) per `tokio.md` § 10. Surfaced and scoped-out during PR #27 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR.
-- 2026-05-04 — Added Phase J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
+- 2026-05-04 — Added Phase J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
