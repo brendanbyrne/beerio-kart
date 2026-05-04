@@ -398,7 +398,7 @@ The architectural decision to switch from codegen-driven entities to hand-writte
 - **Dependencies:** None (the design record is signed off; no upstream PRs gate this).
 - **Risk:** Low. No runtime change — same column shapes, same relations, same `Related` impls. The diff is structural.
 - **Verification:** `cargo build --all-targets`, `cargo clippy --all-targets`, `cargo +nightly fmt --check`, `cargo test` all clean.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #28 merged 2026-05-04.
 
 ### PR-X2: Schema-drift verification test
 
@@ -411,7 +411,7 @@ The architectural decision to switch from codegen-driven entities to hand-writte
 - **Dependencies:** PR-X1.
 - **Risk:** Low.
 - **Verification:** Test passes on a clean tree; intentionally renaming a column in the migration without updating the entity makes the test fail with a column-not-found error.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #29 merged 2026-05-04.
 
 ---
 
@@ -459,3 +459,5 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-04 — Marked PR-B2 sign-off complete (merged 2026-05-04 as PR #26).
 - 2026-05-04 — Added PR-F5 (`#[tracing::instrument]` audit on services and handlers) per `tokio.md` § 10. Surfaced and scoped-out during PR #27 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR.
 - 2026-05-04 — Added Phase J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
+- 2026-05-04 — Marked PR-X1 sign-off complete (merged 2026-05-04 as PR #28).
+- 2026-05-04 — Marked PR-X2 sign-off complete (merged 2026-05-04 as PR #29).
