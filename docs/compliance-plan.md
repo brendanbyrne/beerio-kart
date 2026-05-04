@@ -78,7 +78,7 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 - **Dependencies:** None.
 - **Risk:** Low–medium. Changes pool sizing and PRAGMA application. Run integration tests + smoke test on Unraid before merging.
 - **Verification:** `PRAGMA foreign_keys` is on for *every* pool connection (test by acquiring multiple connections in parallel and inserting a row that violates an FK — should fail consistently); WAL mode confirmed via `PRAGMA journal_mode` query.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #26 merged 2026-05-04.
 
 ### PR-B3: Confirm/add Argon2 `spawn_blocking`
 
@@ -404,3 +404,4 @@ Some PRs (B1, B3, E3) have no dependencies and can land in parallel with A1/A2.
 - 2026-05-04 — Marked PR-E3 sign-off complete (merged 2026-05-03 as PR #23).
 - 2026-05-04 — Marked PR-A1 sign-off complete (merged 2026-05-04 as PR #24).
 - 2026-05-04 — Marked PR-B1 sign-off complete (merged 2026-05-04 as PR #25).
+- 2026-05-04 — Marked PR-B2 sign-off complete (merged 2026-05-04 as PR #26).
