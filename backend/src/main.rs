@@ -1,10 +1,6 @@
 // Startup code — panic-on-misconfiguration is intentional (CLAUDE.md "what
 // doesn't need tests" carve-out for one-time startup code).
-#![allow(
-    clippy::expect_used,
-    clippy::unwrap_used,
-    clippy::uninlined_format_args
-)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 mod seed;
 
@@ -165,8 +161,7 @@ async fn main() {
         // fall back to index.html so React Router can handle client-side routing.
         // Using .fallback() instead of .not_found_service() returns 200 (not 404).
         .fallback_service(
-            ServeDir::new(&static_dir)
-                .fallback(ServeFile::new(format!("{}/index.html", static_dir))),
+            ServeDir::new(&static_dir).fallback(ServeFile::new(format!("{static_dir}/index.html"))),
         );
 
     // Spawn background task to close stale sessions (no activity for 1 hour).
