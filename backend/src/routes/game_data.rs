@@ -5,10 +5,12 @@ use axum::{
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
-use crate::entities::{bodies, characters, cups, gliders, tracks, wheels};
-use crate::error::AppError;
-use crate::middleware::auth::AuthUser;
+use crate::{
+    AppState,
+    entities::{bodies, characters, cups, gliders, tracks, wheels},
+    error::AppError,
+    middleware::auth::AuthUser,
+};
 
 // ── Response types ───────────────────────────────────────────────────
 

@@ -6,12 +6,14 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::entities::{
-    bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
-    users, wheels,
+use crate::{
+    entities::{
+        bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
+        users, wheels,
+    },
+    error::AppError,
+    services::{helpers, sessions},
 };
-use crate::error::AppError;
-use crate::services::{helpers, sessions};
 
 /// Maximum allowed track time: 10 minutes in milliseconds.
 const MAX_TRACK_TIME_MS: i32 = 600_000;
@@ -453,8 +455,10 @@ pub async fn get_run_defaults(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::sessions;
-    use crate::test_helpers::{create_user, seed_game_data, setup_db};
+    use crate::{
+        services::sessions,
+        test_helpers::{create_user, seed_game_data, setup_db},
+    };
 
     fn test_drink_id() -> String {
         crate::drink_type_id::drink_type_uuid("Test Beer")

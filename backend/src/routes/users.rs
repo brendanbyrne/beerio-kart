@@ -6,11 +6,10 @@ use chrono::{DateTime, Utc};
 use sea_orm::EntityTrait;
 use serde::Serialize;
 
-use crate::AppState;
-use crate::entities::users;
-use crate::error::AppError;
-use crate::middleware::auth::AuthUser;
-use crate::services::users as user_service;
+use crate::{
+    AppState, entities::users, error::AppError, middleware::auth::AuthUser,
+    services::users as user_service,
+};
 
 // ── Response types (API contract) ───────────────────────────────────
 

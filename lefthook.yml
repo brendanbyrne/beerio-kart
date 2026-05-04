@@ -4,7 +4,7 @@ pre-commit:
     rust-fmt:
       root: backend/
       glob: "*.rs"
-      run: cargo fmt --check
+      run: cargo +nightly fmt --check
     rust-clippy:
       root: backend/
       glob: "*.rs"

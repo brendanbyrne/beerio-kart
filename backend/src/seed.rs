@@ -1,12 +1,14 @@
+use std::collections::HashSet;
+
+use beerio_kart::{
+    drink_type_id::drink_type_uuid,
+    entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels},
+};
 use sea_orm::{
     ActiveModelBehavior, ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, Set,
     TransactionTrait,
 };
 use serde::Deserialize;
-use std::collections::HashSet;
-
-use beerio_kart::drink_type_id::drink_type_uuid;
-use beerio_kart::entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels};
 
 // Serde structs matching the JSON file shapes. These are separate from the
 // SeaORM entities because entity Models carry ORM metadata we don't need for

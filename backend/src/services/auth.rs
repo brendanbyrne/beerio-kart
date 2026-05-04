@@ -149,8 +149,9 @@ pub fn clear_refresh_cookie(config: &AppConfig) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Arc;
+
+    use super::*;
 
     fn test_config() -> Arc<AppConfig> {
         Arc::new(AppConfig {

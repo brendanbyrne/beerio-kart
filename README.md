@@ -29,7 +29,7 @@ Everything lives in [`docs/`](./docs):
 
 ## Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (stable)
+- [Rust](https://www.rust-lang.org/tools/install) (stable, plus `nightly` for `rustfmt` only — see Setup)
 - [Bun](https://bun.sh/) (v1+)
 - For Docker: [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/)
 
@@ -39,6 +39,11 @@ Everything lives in [`docs/`](./docs):
 cp .env.example .env
 # Edit .env and set JWT_SECRET to a random string
 bun install      # installs all dependencies (root + frontend workspace)
+
+# Install nightly rustfmt (used only for `cargo fmt`; builds and tests
+# stay on stable). Required because rustfmt.toml uses imports_granularity
+# and group_imports, both nightly-only as of Rust 1.94.
+rustup toolchain install nightly --component rustfmt
 ```
 
 ## Running (local dev)
@@ -100,7 +105,7 @@ The pre-commit hook runs these checks in parallel:
 
 | Check | Scope | Tool |
 |-------|-------|------|
-| Format | `backend/*.rs` | `cargo fmt --check` |
+| Format | `backend/*.rs` | `cargo +nightly fmt --check` |
 | Lint | `backend/*.rs` | `cargo clippy` |
 | Lint | `frontend/*.{ts,tsx}` | ESLint |
 | Format | `frontend/*.{ts,tsx,css,json}` | Prettier |
@@ -108,8 +113,8 @@ The pre-commit hook runs these checks in parallel:
 To run manually:
 
 ```sh
-# Backend
-cd backend && cargo fmt --check && cargo clippy -- -D warnings
+# Backend (or `just fmt` for the format step)
+cd backend && cargo +nightly fmt --check && cargo clippy -- -D warnings
 
 # Frontend
 cd frontend && bunx eslint src/ && bunx prettier --check "src/**/*.{ts,tsx,css,json}"

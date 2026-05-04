@@ -1,10 +1,12 @@
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::race_setup::RaceSetupUpdate;
-use crate::entities::{bodies, characters, drink_types, gliders, users, wheels};
-use crate::error::AppError;
-use crate::services::helpers;
+use crate::{
+    domain::race_setup::RaceSetupUpdate,
+    entities::{bodies, characters, drink_types, gliders, users, wheels},
+    error::AppError,
+    services::helpers,
+};
 
 // ── Types ────────────────────────────────────────────────────────────
 

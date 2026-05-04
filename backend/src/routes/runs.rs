@@ -6,10 +6,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::AppState;
-use crate::error::AppError;
-use crate::middleware::auth::AuthUser;
-use crate::services::runs;
+use crate::{AppState, error::AppError, middleware::auth::AuthUser, services::runs};
 
 /// POST /runs — create a run.
 pub async fn create_run(

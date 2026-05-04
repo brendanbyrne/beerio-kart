@@ -11,17 +11,18 @@ use axum::{
     routing::{get, post},
 };
 use axum_test::TestServer;
+use beerio_kart::{
+    AppState,
+    config::AppConfig,
+    drink_type_id::drink_type_uuid,
+    entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels},
+    routes,
+};
 use chrono::Utc;
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
 use serde_json::{Value, json};
 use uuid::Uuid;
-
-use beerio_kart::AppState;
-use beerio_kart::config::AppConfig;
-use beerio_kart::drink_type_id::drink_type_uuid;
-use beerio_kart::entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels};
-use beerio_kart::routes;
 
 const TEST_SECRET: &str = "test-secret-for-session-tests";
 
