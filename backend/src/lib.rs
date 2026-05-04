@@ -2,6 +2,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod config;
+pub mod db;
 pub mod domain;
 pub mod drink_type_id;
 #[allow(unused_imports)]

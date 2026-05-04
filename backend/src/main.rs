@@ -10,9 +10,8 @@ use axum::{
     Json, Router,
     routing::{get, post, put},
 };
-use beerio_kart::{AppState, config::AppConfig, routes, services};
+use beerio_kart::{AppState, config::AppConfig, db, routes, services};
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{ConnectionTrait, Database};
 use serde::Serialize;
 use tower_http::{
     services::{ServeDir, ServeFile},
@@ -45,18 +44,12 @@ async fn main() {
     // Load config from env vars (panics if JWT_SECRET is missing)
     let config = AppConfig::from_env();
 
-    // Connect to the database. The ?mode=rwc flag creates the file if it
-    // doesn't exist yet. SeaORM wraps sqlx under the hood.
-    let db = Database::connect(&database_url)
+    // Build the SQLx pool with per-connection PRAGMAs (foreign_keys, busy_timeout,
+    // synchronous, journal_mode), then wrap as a SeaORM DatabaseConnection. See
+    // src/db.rs for the rationale and seaorm.md § 8 for the rule.
+    let db = db::connect(&database_url)
         .await
         .expect("Failed to connect to database");
-
-    // SQLite doesn't enforce foreign keys by default — this PRAGMA enables it
-    // per connection. Without it, you can insert rows referencing nonexistent
-    // foreign keys and SQLite will silently accept them.
-    db.execute_unprepared("PRAGMA foreign_keys = ON")
-        .await
-        .expect("Failed to enable foreign key enforcement");
 
     // Run all pending migrations. On a fresh database this creates every table.
     Migrator::up(&db, None)
