@@ -46,7 +46,7 @@ Chosen: **Option C** — H2H is derived. For any two players, walk the `session_
 
 ### Negative consequences / trade-offs
 
-- Read-time computation. For players with many shared races, the H2H query touches more rows than a stored aggregate. Mitigation: `session_race_id` is indexed; for the realistic data scale this is well within budget. Revisit if performance ever surfaces (it won't at MVP scale).
+- Read-time computation. For players with many shared races, the H2H query touches more rows than a stored aggregate. Mitigation: `session_race_id` is indexed. Revisit if a real query plan shows the cost.
 - DQ'd runs (per ADR 0012) are excluded from H2H — this is intentional but worth flagging: a DQ doesn't count as a loss.
 
 ## Links

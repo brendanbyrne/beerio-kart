@@ -26,7 +26,7 @@ Once a race time is submitted, leaderboards and H2H stats depend on its value. A
 
 ## Decision outcome
 
-Chosen: **Option D** — After a user submits a run, they cannot edit it. Admins can edit runs to correct typos and OCR errors, and edited runs are flagged as admin-modified.
+Chosen: **Option D** — After a user submits a run, they cannot edit it. Admins can edit runs to correct typos and OCR errors. Whether admin edits surface as a visible flag on the run is a follow-up question (see Negative consequences); the immutability rule itself doesn't depend on it.
 
 ### Positive consequences
 
@@ -37,6 +37,7 @@ Chosen: **Option D** — After a user submits a run, they cannot edit it. Admins
 ### Negative consequences / trade-offs
 
 - Users who spot a typo immediately after submission have to ask an admin to fix it. Acceptable: creates accountability and keeps the flow simple.
+- Admin edits aren't currently distinguishable from user-created runs in the schema. If "this score was changed by an admin" needs to be visible to users (or auditable post-hoc), `run_flags` (ADR 0029) would gain an `admin_edit` reason or `runs` would gain an `admin_modified_at` column. Open follow-up; not blocking the immutability rule itself.
 
 ## Links
 
