@@ -28,3 +28,8 @@ reviews/
 
 # Static images
 frontend/public/images/*
+
+# Doc drafts: gitignored work-in-progress, with WIP_ checkpoint exception
+docs/drafts/*
+!docs/drafts/WIP_*.md
+!docs/drafts/.gitkeep

@@ -55,6 +55,7 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 - Database naming: Tables plural snake_case, columns snake_case, FKs `{singular}_id`, PKs `id`.
 - Rust style: Follow standard `rustfmt` and `clippy` conventions.
 - Frontend style: TypeScript, functional React components, Tailwind for styling.
+- Drafts in `docs/drafts/` are gitignored except for `WIP_*.md` files. Aggressive cleanup commands (`git clean -fdx`) will wipe them — check `docs/drafts/` before running them.
 
 ### Schema changes (prelaunch)
 
@@ -163,7 +164,7 @@ Cowork can read and write GitHub data — issues, pull requests, project board i
 | Deployment config | Claude Code (with Cowork for planning) |
 | Browser-based tasks | Cowork |
 | Design reviews | Cowork (writes to `reviews/design/`) |
-| PR reviews | Claude Code (writes to `reviews/pr/`) |
+| PR reviews | Claude Code (posts as PR comment via `gh pr comment` or MCP) |
 
 ### Review directories
 

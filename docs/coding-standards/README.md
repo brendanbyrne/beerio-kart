@@ -17,7 +17,7 @@ Companion documents:
 
 **Writing new code.** Read the area file relevant to what you're writing, plus the compliance plan if that area is mid-migration. Where rules cross areas (e.g., `AppError` is defined in `rust.md` but referenced from `seaorm.md`), cross-references are explicit.
 
-**Disagreements.** Every rule has a `Source:` link. Re-litigate against evidence, not opinion. If the evidence has shifted since a rule was written, propose an update in a `reviews/design/` checkbox session.
+**Disagreements.** Every rule has a `Source:` link. Re-litigate against evidence, not opinion. If the evidence has shifted since a rule was written, propose an update in a `docs/designs/` checkbox session.
 
 ## Format
 
