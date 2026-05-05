@@ -64,10 +64,12 @@ GitHub Issue templates at `.github/ISSUE_TEMPLATE/feature.md` and `bug.md` pre-p
 Transitions:
 
 - **Backlog → Ready** — Brendan stamps. Cowork can stamp autonomously when (a) Brendan is in the conversation that filed the Issue, and (b) acceptance criteria are unambiguous. Otherwise filed at Backlog and surfaced for triage.
-- **Ready → In Progress** — Whoever picks up the Issue moves it. No permission needed; status is a state-of-the-world signal, not a gate.
+- **Ready → In Progress** — Whoever picks up the Issue moves it. No permission needed; status is a state-of-the-world signal, not a gate. **Do this as the first action on pickup, not at the end** — the value of the signal is the visibility that work has started.
 - **In Progress → Done** — Automatic on PR merge for Issue-closing PRs (via `Closes #NN`). For Issues with no PR (Cowork-only work like updating a design record or running an MCP batch), close the Issue manually when done.
 
 If you start work and find the Issue is broken (acceptance criteria wrong, dependency unclear, scope misjudged), pause: comment on the Issue and write a `claude-code-handoff.md` (or `cowork-handoff.md` in the reverse direction). Don't "creatively interpret" the acceptance criteria — body changes go through the original creator or Brendan.
+
+**If a workflow step itself is blocked** — a tool you don't have, a token scope you're missing, a permission you can't acquire — surface it the moment you hit it, don't silently skip. File a follow-up Issue if the gap is recurring; route the step through the assistant that *can* perform it (e.g., handoff to Cowork for project-board mutations Claude Code can't do); or pause and ask. Silent-skip on a workflow signal is worse than not having the signal at all, because it makes the convention look optional. The conventions in this file are load-bearing — if you can't follow one, name it.
 
 ### Who can create, who can edit
 
@@ -274,3 +276,4 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 
 - 2026-05-05 — Initial draft, captured as part of the documentation overhaul (PR 1). Decisions worked through across the 2026-05-05 Cowork session covering the decision tree, Issue conventions, milestone conventions, PR conventions, triage cadence, and multi-assistant coordination. Sourced from `cowork-notes.md` and the design record amendment §12.
 - 2026-05-05 — Added `### Commit messages` subsection (`<issue_number>: <summary>` title format) and `### Plan deviations during PR work` subsection (PR Reviewer notes is primary; `claude-code-handoff.md` cross-references when deviation has implications beyond the PR). Surfaced during PR 1's implementation when Claude Code deviated from the handoff plan; the deviation pattern wasn't documented.
+- 2026-05-05 — Hardened the Ready → In Progress transition rule (do it as the *first* action on pickup) and added a paragraph on surfacing workflow-step blockers immediately rather than silently skipping. Surfaced during PR 2 when Claude Code deferred the status move on Issue #39 instead of attempting it (and discovering the `gh` token lacks `read:project` / `project` scopes — now tracked in #44).
