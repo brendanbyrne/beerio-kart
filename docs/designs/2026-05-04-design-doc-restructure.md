@@ -817,3 +817,7 @@ When all eleven checkboxes above are Approved (or Skip with rationale), implemen
 - [adr-agent](https://github.com/macromania/adr-agent)
 - [MindStudio — 5 Claude Code Workflow Patterns](https://www.mindstudio.ai/blog/claude-code-agentic-workflow-patterns)
 - [Claude Cowork Multi-Agent Orchestration — Fast.io](https://fast.io/resources/claude-cowork-multi-agent-orchestration/)
+
+## Document history
+
+- 2026-05-05 — Promoted from `reviews/design/` to `docs/designs/` as part of PR 1 (docs restructure foundation). In-place fixes from §12.3 / §13.3 applied at promotion: example milestone names in §4.2 and §8.6 changed from `Phase 3: Sessions & Run Recording` to `Star: Sessions & Run Recording`; three new §9 PR 1 bullets added; "Prerequisites already in `main`" note added; §9 PR 6 `docs/CLAUDE.md` line struck (file landed in PR 1). PR #41.

@@ -557,4 +557,4 @@ These are decisions Brendan should make before §12 kicks off:
 
 ## Document history
 
-- 2026-05-04 — Split from reviews/design/2026-05-04-ci-research.md per docs/designs/2026-05-04-design-doc-restructure.md §6.5 + triage.
+- 2026-05-05 — Created in `docs/research/` by splitting from the 2026-05-04 `reviews/design/2026-05-04-ci-research.md` per the triage decision in `docs/designs/2026-05-04-design-doc-restructure.md` §6.5. PR #41.

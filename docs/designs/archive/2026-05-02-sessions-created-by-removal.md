@@ -133,7 +133,7 @@ The only non-trivial verification: confirm that no service code or test outside 
 - This design record is the sign-off gate. After all checkboxes are checked, implementation lands as **PR-E3** in `docs/compliance-plan.md`.
 - PR-E3 dependencies: none. Can land in parallel with other Phase A/B PRs.
 - After the implementation PR merges, the `seaorm.md` § 11 parenthetical noted in § 6 above gets a one-line update.
-- After the design.md updates are made (§ 5 above) and the seaorm.md § 11 footnote is tightened, this design record is archived (kept in `reviews/design/` as historical record per project convention).
+- After the design.md updates are made (§ 5 above) and the seaorm.md § 11 footnote is tightened, this design record is archived (kept in `docs/designs/archive/` as historical record per project convention).
 
 - [x] Approved — sequencing
 
