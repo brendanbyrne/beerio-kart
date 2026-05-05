@@ -67,7 +67,7 @@ If any fail, include the output. If all pass, note that briefly so it's clear th
 
 ## Review structure
 
-Three tiers of output.
+Two outputs: a chat summary for orientation, and a GitHub PR review where the durable findings live.
 
 ### Tier 1: Chat summary (always)
 
@@ -75,42 +75,56 @@ Three tiers of output.
 - **What this PR does:** 1–2 sentences.
 - **Areas covered:** which standards files you read for this review (e.g., "rust.md, seaorm.md, design.md").
 - **Findings, grouped by severity:**
-  - **Critical** (blocks merge): security vulnerabilities, data loss risks, broken functionality.
-  - **Important** (should fix before merge): logic errors, missing validation, standards violations.
-  - **Suggestions** (nice to have): style improvements, minor refactors, readability.
+  - 🔴 **Critical** (blocks merge): security vulnerabilities, data loss risks, broken functionality.
+  - 🟡 **Important** (should fix before merge): logic errors, missing validation, standards violations.
+  - 🔵 **Suggestion** (nice to have): style improvements, minor refactors, readability.
   - Each finding cites the rule it violates, so the author can verify against the doc.
 - **Design-doc accuracy:** explicit verdict — see below.
 - **What's good:** call out things done well. Positive reinforcement matters; reviews shouldn't read as a list of complaints.
 
-### Tier 2: PR comments (when issues found)
+### Tier 2: GitHub PR review with line-anchored comments (default)
 
-For specific issues tied to lines:
+Once the user confirms, post findings as a **single PR review** containing:
+
+- A **review-level body** with the verdict, what-this-PR-does, what-was-verified, and any findings whose lines aren't in the diff (the API rejects line-anchored comments outside any hunk).
+- An **inline comment per finding** that *can* be line-anchored. Each comment is self-contained: a severity prefix (🔴/🟡/🔵), the finding, and the suggested fix.
+
+Batch all of this into one API call — don't post per-comment, that creates N separate review threads and floods the PR.
 
 ```bash
-gh pr review <number> --comment --body "Review summary"
-
-# Line-specific:
-gh api repos/{owner}/{repo}/pulls/{number}/comments \
-  -f body="Comment text" \
-  -f path="path/to/file.rs" \
-  -f commit_id="$(gh pr view <number> --json headRefOid -q .headRefOid)" \
-  -F line=42 \
-  -f side="RIGHT"
+HEAD_SHA=$(gh pr view <number> --json headRefOid -q .headRefOid)
+# Build /tmp/pr<N>-review.json (shape below), then:
+gh api repos/<owner>/<repo>/pulls/<number>/reviews --method POST --input /tmp/pr<N>-review.json
 ```
 
-Batch into a single review when possible. Keep PR comments focused — broader discussion goes in the chat summary.
+JSON shape:
 
-**Ask the user before posting comments.**
-
-### Tier 3: Markdown file (for complex reviews)
-
-If more than ~5 issues, or issues need detailed explanation with code examples, save to:
-
+```json
+{
+  "commit_id": "<HEAD_SHA>",
+  "event": "COMMENT",
+  "body": "Review-level body (verdict, summary, unanchorable findings).",
+  "comments": [
+    {
+      "path": "docs/foo.md",
+      "line": 42,
+      "side": "RIGHT",
+      "body": "🟡 **Important** — finding and suggested fix."
+    }
+  ]
+}
 ```
-reviews/pr/pr-<number>-review.md
-```
 
-Include the full analysis with code snippets, rule citations, and detailed fix suggestions. Link to it from the chat summary.
+Notes on the API:
+
+- Use `event: "COMMENT"` — it posts findings without forcing a state change. `APPROVE` and `REQUEST_CHANGES` are reserved for Brendan, who is the only approver.
+- `line` is the line number in the *new* file (head SHA). `side: "RIGHT"` means the new-file side; use `"LEFT"` only when commenting on a removed line.
+- A line is anchorable iff it's inside a diff hunk (added or context). Lines in unchanged regions of modified files are *not* anchorable — put those findings in the review body. New files are entirely in the diff, so any line is anchorable.
+- For multi-line comments, add `start_line` and `start_side` alongside `line` and `side`.
+
+After posting, verify with `gh api repos/<owner>/<repo>/pulls/<number>/reviews/<review-id>/comments --jq '.[] | {path, position, body: (.body[0:80])}'` — `position` (legacy diff-position field) being non-null confirms the inline anchored correctly even when `line` returns null.
+
+**Confirm with the user before posting.** Posting publishes findings to anyone who can see the PR. Once approved, post via the single review POST as the default mechanism — no other tiers, no markdown file in `reviews/pr/`. The `reviews/pr/` directory was retired by `docs/designs/2026-05-04-design-doc-restructure.md` § 8.8: PR review feedback now lives entirely on GitHub.
 
 ## What to look for
 
@@ -185,4 +199,4 @@ When `docs/coding-standards/frontend.md` lands, this section gets replaced with 
 - **Current phase: 3** (Sessions & Run Recording) per CLAUDE.md. Don't flag missing features that are planned for later phases — check the build plan in `design.md`.
 - **Prelaunch in the data-preservation sense:** the consolidated migration file is edited in place; dev DB is reset on schema changes. See `seaorm.md` § 5 for the policy. Don't flag append-only-migration violations until we cross the launch threshold (first deployment where data persistence matters).
 - **Compliance plan exists:** `docs/compliance-plan.md` tracks 23 sequenced PRs that bring existing code to the standard. If a PR touches code that's already on the compliance plan as a known gap, note that — the existing non-compliance is acknowledged debt, not a fresh finding. New code is held to the standard regardless of whether legacy code in the same file conforms.
-- **Two-assistant setup:** Cowork (Claude Desktop) handles design and review work; Claude Code handles implementation. PR review (this skill) is a Claude Code-side task by default, but Cowork can review too. Output goes to `reviews/pr/`.
+- **Two-assistant setup:** Cowork (Claude Desktop) handles design and review work; Claude Code handles implementation. PR review (this skill) is a Claude Code-side task by default, but Cowork can review too. Output goes to a single GitHub PR review (line-anchored comments + review body) per the Tier 2 pattern above.
