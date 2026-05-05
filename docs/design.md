@@ -561,44 +561,7 @@ Required test scenarios per ruleset: normal flow, recusal by one player, recusal
 
 ## Resolved Decisions
 
-- **SQLite STRICT mode on lookup / static tables; DATETIME columns on timestamped tables.** STRICT kept on static game data tables for type safety at insert time. Dropped on timestamped tables so columns use `DATETIME` type, giving Rust `DateTime<Utc>` via SeaORM codegen instead of stringly-typed timestamps.
-- **Global leaderboard ranking:** Most track records held.
-- **Account recovery:** Admin reset for now.
-- **Time entry validation:** No validation against plausible track times. Rely on photos and eventual OCR.
-- **Beer vs water:** Separate leaderboards by default, with combined view. Default toggle matches user's preferred drink category.
-- **Track variants:** 150cc only.
-- **Admin model:** Lightweight admin page gated by user ID in env variable. No formal role system for MVP.
-- **Run immutability:** Users cannot edit runs after creation. Admin can edit (for correcting OCR errors, etc.).
-- **Head-to-head tracking:** Derived from session races. Two players have a H2H record when they both submitted non-DQ'd runs for the same session race. Replaces the earlier timestamp-clustering approach.
-- **Sessions replace standalone run recording.** All runs are recorded within session context. Solo racing uses a one-person session (MVP). Future enhancement: nullable `session_race_id` for lightweight standalone runs.
-- **H2H ties:** Identical times = 0-0 (draw). Neither player gets a win or loss.
-- **H2H drink category:** H2H does not distinguish alcoholic vs non-alcoholic. A drinker and non-drinker in the same session race have their result counted. Drink category only matters for leaderboards.
-- **DQ'd runs:** Recorded but excluded from H2H tallies and leaderboard positions. Self-reported at submission time (honor system). DQ = didn't finish drink before finishing race.
-- **Pending race cap:** UI shows max 3 pending races (oldest expire first). Schema supports unlimited — cap is a UX guardrail, adjustable later.
-- **Session host transfer:** When host leaves, earliest-joined remaining participant becomes new host.
-- **Session timeout handling (MVP):** "Skip turn" allows any participant to pass the chooser's turn. Vote-to-kick deferred. Leave-and-restart is the fallback for stuck sessions.
-- **Session passwords:** Deferred. The `POST /sessions/:id/join` endpoint is a dedicated action so password checking can be added later without restructuring the join flow.
-- **Ruleset changes mid-session:** Deferred post-MVP.
-- **Real-time updates via polling, not WebSockets.** Clients poll `GET /sessions/:id` every 2-3 seconds. For a turn-based game where events happen every few minutes, polling latency is imperceptible. WebSockets can be added later as an optimization. Polling is stateless, testable with standard HTTP tools, and avoids connection state management, reconnection logic, and heartbeat complexity.
-- **Admin defense in depth.** Admin-only operations (editing runs, resolving flags) are checked in both the route middleware (AdminUser extractor) and the service layer independently. Two independent checks — if either the middleware or the service rejects the request, it fails. Prevents a middleware bug from exposing admin operations.
-- **Photo upload validation.** Validate server-side by checking magic bytes (not just Content-Type header). Accept JPEG, PNG, HEIC/HEIF. Max file size: 10MB. Generate filenames from run ID (`{run_id}.{ext}`) — never use user-provided filenames. Optionally strip EXIF data (GPS, device info) for privacy in a future pass.
-- **Upload path isolation.** User uploads are served from a separate URL prefix and filesystem directory from static assets. Static assets at `/static/...` (from `STATIC_DIR`), uploads at `/uploads/...` (from `UPLOAD_DIR`). Different prefixes and different directories prevent path traversal across boundaries.
-- **Rulesets implemented as a Rust trait.** Each ruleset (Random, Default, Least Played, Round-robin) is a separate module implementing a `Ruleset` trait, not conditionals in the session service. Adding a fifth ruleset later means adding one module, not modifying existing code.
-- **Hand-written SeaORM entities.** Entities under `backend/src/entities/` are committed source code, hand-edited as the schema evolves. The migration in `migration/` is the schema source of truth; entities mirror that shape. Codegen (`just entities-bootstrap`, wrapping `sea-orm-cli generate entity`) is a one-shot scaffolding tool used only when adding a brand-new table — running it on existing entities will clobber hand-corrections (partial-index attributes, relation cardinalities). Architectural reasoning: [`docs/designs/2026-05-02-entity-codegen-strategy.md`](./designs/2026-05-02-entity-codegen-strategy.md), implemented in PR-X1.
-- **just (not Make) for developer commands.** Cargo handles Rust build dependencies, Bun handles frontend dependencies, Docker handles container caching. Developer workflow commands (`just dev`, `just test`, `just entities-bootstrap`) don't need file-level dependency tracking — just a named command runner.
-- **Photo enforcement for records:** Runs are auto-flagged and hidden if record-breaking without a photo. Photo upload auto-resolves the flag.
-- **Lap time column naming:** `lap1_time`, `lap2_time`, `lap3_time` (no underscore before digit). Matches SeaORM's `DeriveIden` macro output for variants like `Lap1Time`, avoiding unnecessary custom naming.
-- **UUID storage in SQLite:** UUIDs stored as TEXT (not BLOB) for human readability when debugging with CLI tools. PostgreSQL migration will map to native UUID type. SeaORM maps both to `String` in Rust, so application code won't change.
-- **Timestamp storage in SQLite:** Timestamps stored as TEXT in ISO 8601 format. SQLite has no native timestamp type. PostgreSQL migration will map to `TIMESTAMPTZ`.
-- **run_flags audit trail:** `run_id` is not unique — a run can have multiple flags (different reasons tracked separately, resolved independently). Resolved flags are kept as history. Only duplicate flags (same run + same reason while unresolved) are prevented in application code.
-- **Frontend serving strategy:** Axum serves everything in a single container. The Vite build produces static files that Axum serves via `tower-http::ServeDir`, with SPA fallback to `index.html`. No nginx or separate frontend container. Rationale: simpler deployment for a small-scale app, no CORS (same origin), one container to manage. If static asset performance ever matters (it won't at this scale), a CDN or nginx can be added in front later.
-- **Auth token strategy:** Short-lived access token (15-30 min, Authorization header) + long-lived refresh token (7-30 days, HttpOnly/Secure/SameSite=Lax cookie scoped to `/api/v1/auth/refresh`). Lax (not Strict) because Strict blocks the cookie when navigating from an external link (e.g., a friend texts you the URL), which would force a re-login. Lax still protects against cross-origin POST attacks. A `refresh_token_version` column on `users` enables server-side revocation checked only on the refresh path, not every request. Frontend intercepts 401s, silently refreshes, and retries. Replaces the original 24-hour single JWT approach.
-- **Pagination:** Cursor-based (keyset) pagination using `created_at` + `id` for list endpoints, particularly `GET /runs` and run history views. Preferred over offset-based to avoid duplicate/skipped entries when new data is inserted during browsing. If implementation proves too complex relative to offset-based, revisit.
-- **Password change:** `PUT /auth/password` endpoint for users to change their own password. Implemented in Phase 2 alongside refresh token auth.
-- **Refresh token format:** JWT (not opaque). Contains `sub`, `refresh_token_version`, `exp`, `iat`, `token_type`. Same signing key as access token. Simplest approach — no new table. Per-device revocation deferred; version-bump covers logout and password change.
-- **Refresh token rotation:** On each refresh, a new refresh JWT is issued with a fresh expiry. Does not bump `refresh_token_version` — rotation is about extending the session window, not revocation.
-- **Cloudflare Tunnel (not port forwarding)** for exposing the app. Outbound-only connection from Unraid to Cloudflare edge. No open ports on the home network.
-- **Docker Compose Manager plugin** on Unraid for container management. compose.yaml as the single source of truth for the deployment.
+See [`decisions/`](./decisions/) — each prior bullet has been distilled into a MADR file under `docs/decisions/`. The index in [`decisions/README.md`](./decisions/README.md) lists every ADR with its title, status, and date.
 
 ## Backlog
 
@@ -628,3 +591,4 @@ Random ideas that may or may not be pursued.
 - 2026-05-04 — Added `docs/research/` to the project-structure tree and a corresponding entry in Related documents (long-form exploration not yet promoted to design or coding-standards).
 - 2026-05-04 — Replaced the "Entity regeneration via justfile recipe" rule with "Hand-written SeaORM entities"; updated the `just (not Make)` example to use `just entities-bootstrap`. Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](./reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-05 — Extracted Data Model section to `data-model.md`. PR 1 of the docs restructure.
+- 2026-05-05 — Replaced the Resolved Decisions bullet list with a pointer to `docs/decisions/`. Each prior bullet distilled into a MADR file (0002–0034). PR 2 of the docs restructure.
