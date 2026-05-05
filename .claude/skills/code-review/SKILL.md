@@ -48,6 +48,31 @@ gh pr diff <number> --name-only          # changed files (useful for large PRs)
 
 For large diffs, also read the changed source files directly so you have full context, not just the diff hunks.
 
+## Milestone context
+
+If the PR is part of a multi-PR milestone, the work may be deliberately split across siblings. Check before flagging "this should have been in this PR" findings:
+
+```bash
+# Find the milestone (returns null if the PR isn't on one)
+gh pr view <number> --json milestone -q '.milestone.title'
+
+# List sibling Issues + their state
+gh issue list --milestone "<title>" --state all --limit 30 \
+  --json number,title,state
+
+# Read a sibling's acceptance criteria when a finding looks deferrable
+gh issue view <issue-number> --json title,body
+```
+
+Re-frame findings as **deferred to PR-N (Issue #NN)** when a sibling's acceptance criteria explicitly cover the change. Note the deferral in the review body so the trail is on the record — this stops the same finding from being re-litigated each time the sibling slips.
+
+Two judgment calls this saves you from making blindly:
+
+- **"Why isn't X fixed in this PR?"** — because Issue #NN owns it.
+- **"Why is X half-fixed?"** — when a single file has both complete-in-this-PR work and to-be-finished-later work, the Document history entry (or equivalent record) only goes in once the file is done with that round of edits. A partial entry in this PR plus another in the sibling PR fragments the record. Defer when the file will be re-touched.
+
+If a finding doesn't map to *any* sibling's acceptance criteria, raise it normally — silence isn't deferral.
+
 ## Automated checks
 
 Run these before manual review and report results:
