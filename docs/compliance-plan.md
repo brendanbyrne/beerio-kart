@@ -14,7 +14,7 @@ PRs are grouped into *phases* by theme. Phases are loosely ordered by what unloc
 
 ---
 
-## Phase A — Tooling and audit
+## Stream A — Tooling and audit
 
 ### PR-A1: Workspace lint config, rustfmt, editorconfig
 
@@ -47,7 +47,7 @@ PRs are grouped into *phases* by theme. Phases are loosely ordered by what unloc
 
 ---
 
-## Phase B — Correctness bug fixes
+## Stream B — Correctness bug fixes
 
 These are real bugs the standard would prevent in new code, surfaced during research. Land before the larger refactors so they don't get lost.
 
@@ -95,7 +95,7 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 
 ---
 
-## Phase C — `AppError` foundation
+## Stream C — `AppError` foundation
 
 ### PR-C1: Migrate `AppError` to `thiserror`
 
@@ -114,7 +114,7 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 
 ---
 
-## Phase D — Type-driven design
+## Stream D — Type-driven design
 
 The largest phase. Each PR is independently reviewable; sequence keeps blast radius bounded.
 
@@ -175,7 +175,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 
 ---
 
-## Phase E — SeaORM ergonomics
+## Stream E — SeaORM ergonomics
 
 ### PR-E1: `ActiveModelBehavior::before_save` for timestamps
 
@@ -220,7 +220,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 
 ---
 
-## Phase F — Tokio infrastructure
+## Stream F — Tokio infrastructure
 
 ### PR-F1: TaskTracker + CancellationToken + graceful shutdown
 
@@ -282,7 +282,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
   - Don't instrument trivial helpers in tight loops (per `tokio.md` § 10).
 - **Standards refs:** `tokio.md` § 10.
 - **Effort:** M. Mostly mechanical, but every service/handler needs a thoughtful `skip` / `fields` choice.
-- **Dependencies:** None. Could land in parallel with most Phase D/E PRs.
+- **Dependencies:** None. Could land in parallel with most Stream D/E PRs.
 - **Risk:** Low. Adds tracing spans; no behavior change.
 - **Verification:** Run with `RUST_LOG=info,beerio_kart=debug`; hit a handler that traverses two service calls and confirm log lines from inside both nested spans carry the parent's `user_id` / `session_id` fields.
 - **Sign-off:** [ ]
@@ -290,7 +290,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 
 ---
 
-## Phase G — Documentation, tests, formatting
+## Stream G — Documentation, tests, formatting
 
 ### PR-G1: Test in-memory SQLite uses `?cache=shared`
 
@@ -346,7 +346,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 
 ---
 
-## Phase H — Lint cleanup
+## Stream H — Lint cleanup
 
 ### PR-H1+: Clear pedantic warnings, one or two lints per PR
 
@@ -363,7 +363,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 
 ---
 
-## Phase I — Workflow
+## Stream I — Workflow
 
 ### PR-I1: Update code review skill
 
@@ -380,7 +380,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 
 ---
 
-## Phase J — Codegen workflow
+## Stream J — Codegen workflow
 
 The architectural decision to switch from codegen-driven entities to hand-written entities is recorded in [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). These two PRs implement that decision.
 
@@ -443,8 +443,8 @@ If you want to look at one ordered list:
 22. **G4** — file-length splits
 23. **H1+** — lint cleanup PRs (many)
 24. **I1** — code review skill update
-25. **X1** — convert to hand-written entities (Phase J)
-26. **X2** — schema-drift verification test (Phase J; depends on X1)
+25. **X1** — convert to hand-written entities (Stream J)
+26. **X2** — schema-drift verification test (Stream J; depends on X1)
 
 Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/A2.
 
@@ -458,7 +458,8 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-04 — Marked PR-B1 sign-off complete (merged 2026-05-04 as PR #25).
 - 2026-05-04 — Marked PR-B2 sign-off complete (merged 2026-05-04 as PR #26).
 - 2026-05-04 — Added PR-F5 (`#[tracing::instrument]` audit on services and handlers) per `tokio.md` § 10. Surfaced and scoped-out during PR #27 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR.
-- 2026-05-04 — Added Phase J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
+- 2026-05-04 — Added Stream J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-04 — Marked PR-X1 sign-off complete (merged 2026-05-04 as PR #28).
 - 2026-05-04 — Marked PR-X2 sign-off complete (merged 2026-05-04 as PR #29).
 - 2026-05-04 — Marked PR-B3 sign-off complete (merged 2026-05-04 as PR #27).
+- 2026-05-05 — Renamed `Phase A`–`Phase J` to `Stream A`–`Stream J` throughout to free the `Phase` namespace for build phases only, per the cup-name milestone convention adopted in the design record's 2026-05-05 amendment ([`reviews/design/2026-05-04-design-doc-restructure.md`](../reviews/design/2026-05-04-design-doc-restructure.md) §12.5 #2).
