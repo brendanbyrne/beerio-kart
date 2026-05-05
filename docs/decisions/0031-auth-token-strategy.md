@@ -27,15 +27,28 @@ Phase 2's auth refactor replaces the single-token model with the standard short-
 
 ## Considered options
 
-- **Option A:** Single long-lived JWT. Original design. Simple but no revocation, no graceful re-auth, long bearer-token exposure.
-- **Option B:** Access + refresh, both in JS-accessible storage. Standard pattern but refresh token is XSS-reachable.
-- **Option C:** Access + refresh, refresh in HttpOnly cookie scoped to `/api/v1/auth/refresh`. (Chosen.) JS can't read the refresh token; cookie-scoped path means it isn't sent on most requests.
+This ADR resolves four parallel sub-decisions. Each lists the considered options inline for symmetry.
 
-A second decision orthogonal to the storage choice: **`SameSite=Lax` vs `SameSite=Strict`** on the refresh cookie. Strict blocks the cookie when the request originates from another site — including the entirely benign case of clicking a link to the app from a text message or email. Lax still blocks the cross-site POST attacks the cookie attribute is meant to prevent (CSRF on refresh) while letting "user navigated here from outside" work.
+### Storage of the refresh token
 
-A third decision: **refresh token format** — opaque random string with a server-side lookup table, or JWT signed with the same key as the access token. JWT wins on simplicity (no new table); per-device revocation is the only thing it gives up, and we don't need that for MVP.
+- **A:** Single long-lived JWT in the `Authorization` header. Original design. Simple but no revocation, no graceful re-auth, long bearer-token exposure.
+- **B:** Access + refresh, both in JS-accessible storage (localStorage / in-memory). Refresh token is XSS-reachable.
+- **C (chosen):** Access in JS, refresh in an HttpOnly cookie scoped to `/api/v1/auth/refresh`. JS can't read the refresh token; the path scope means it isn't sent on most requests.
 
-A fourth decision: **rotation** — should each refresh issue a brand-new refresh token, or extend the existing one's expiry? New token. Simpler and matches the standard refresh-rotation pattern.
+### `SameSite` attribute on the refresh cookie
+
+- **Strict:** blocks the cookie on any cross-site request, including a benign click from an external link (text message, email). User would be forced to re-login after following such a link.
+- **Lax (chosen):** still blocks cross-site POSTs (which is what `SameSite` is meant to prevent — CSRF on the refresh endpoint), but allows top-level GET navigation. Preserves "follow a link to the app" without giving up CSRF protection.
+
+### Refresh token format
+
+- **Opaque random string + server-side lookup table:** enables per-device revocation, but adds a table and per-refresh DB hit.
+- **JWT signed with the same key as the access token (chosen):** no new table, no extra DB hit on refresh validation. Per-device revocation is the only thing given up, and MVP doesn't need it.
+
+### Rotation policy
+
+- **Extend existing refresh token's expiry on each refresh:** simpler in theory but requires mutable state on the token.
+- **Issue a brand-new refresh token on each refresh (chosen):** matches the standard refresh-rotation pattern and keeps tokens immutable. Rotation does *not* bump `refresh_token_version` — that's reserved for actual revocation events (logout, password change). Bumping on rotation would invalidate the just-issued token.
 
 ## Decision outcome
 

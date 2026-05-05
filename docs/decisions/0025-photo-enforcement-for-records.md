@@ -35,7 +35,7 @@ Chosen: **Option D** — automatic, asymmetric, self-resolving.
 
 **Resolution.** Uploading a photo against the same run auto-resolves the flag. The run becomes visible and the leaderboard updates on the next read. No admin action required for the common case.
 
-**Why this works.** The asymmetry is the win: 95% of submissions are not record-breaking and pass through with no friction. The 5% that are record-breaking are exactly the ones worth a photo. And the user who actually beat the record has the strongest incentive to upload the photo — they want the credit.
+**Why this works.** The asymmetry is the win: the vast majority of submissions aren't record-breaking and pass through with no friction. The rare case that is record-breaking is exactly the one worth a photo. And the user who actually beat the record has the strongest incentive to upload the photo — they want the credit.
 
 ### Positive consequences
 
@@ -46,8 +46,8 @@ Chosen: **Option D** — automatic, asymmetric, self-resolving.
 
 ### Negative consequences / trade-offs
 
+- **Unrelated-photo loophole.** A user can upload any image — a screenshot of someone else's race, a stock photo, a JPEG of nothing — and the flag auto-resolves. Magic-byte validation (ADR 0020) doesn't examine *content*. The MVP mitigation is social: users see each other's submissions and call out obvious fakes. The durable mitigation is OCR (planned post-MVP) — extract the time and player name from the photo and verify they match the submission. Until OCR ships, this is a real attack against leaderboard credibility, not a hypothetical one.
 - Slight delay between record submission and leaderboard update if the photo lags. Acceptable: the run is preserved; the user just has to upload to claim the spot.
-- Honor-system loophole: someone could upload an unrelated photo to resolve the flag. OCR work in a future phase tightens this; for MVP, the photo is enough of a deterrent because users see each other's submissions.
 - Adds complexity vs. trust-everyone. Acceptable: the leaderboard's value depends on records being credible.
 
 ## Links
