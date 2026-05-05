@@ -115,4 +115,4 @@ Issues produced: TBD
 
 ## Document history
 
-- 2026-05-04 — Distilled from `reviews/design/2026-04-04-session-screen-mockup-critique.md` per `2026-05-04-design-doc-restructure.md` migration triage.
+- 2026-05-05 — Created in `docs/designs/` by distilling the 2026-05-04 `reviews/design/2026-04-04-session-screen-mockup-critique.md` per the migration triage in `docs/designs/2026-05-04-design-doc-restructure.md`. PR #41.

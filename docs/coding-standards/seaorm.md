@@ -407,3 +407,4 @@ A single-screen review checklist:
 - 2026-05-02 — Split into `docs/coding-standards/seaorm.md`. Added explicit "launch" definition to § 5. Updated § 9 to use `?cache=shared`. Added entity↔domain newtype boundary rule to § 6. Noted upcoming `sessions.created_by` removal in § 11.
 - 2026-05-02 — Removed the live-instance reference from § 11 after `sessions.created_by` was dropped (PR #23). Multi-FK rule retained for any future table that reuses a target.
 - 2026-05-04 — Hand-written entities convention. § 6 rewritten and § 11 reworded to drop the "trust codegen" framing in favor of declarative guidance for owned entity files. Closes the codegen-strategy decision recorded at [`docs/designs/2026-05-02-entity-codegen-strategy.md`](../designs/2026-05-02-entity-codegen-strategy.md). PR-X1.
+- 2026-05-05 — Rewrote active-prose `reviews/design/` references to `docs/designs/` paths (§ 6 paragraph and § 6 Source bullet) as part of PR 1 (docs restructure foundation). PR #41.
