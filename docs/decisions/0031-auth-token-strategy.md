@@ -9,81 +9,80 @@ source: ad-hoc
 
 ## Context and problem statement
 
-The original Phase 1 design had a single 24-hour JWT in the `Authorization` header. That's adequate for "you're logged in for a day," but it has three problems:
+The original Phase 1 design used a single 24-hour JWT in the `Authorization` header. That's adequate for "you're logged in for a day," but three problems surface:
 
-1. **No revocation.** A leaked or compromised token is valid for the full window with no recourse. Bumping a key revokes everyone, which is unacceptable.
-2. **Long-lived bearer tokens in JS-accessible storage.** The 24-hour token sits wherever the frontend stores it (localStorage, in-memory). Either choice has tradeoffs around XSS exposure or page-reload state.
-3. **No graceful re-auth.** When the 24-hour mark hits, the user is bounced to login mid-session.
+1. **No revocation.** A leaked token is valid for the full window with no recourse. Bumping the signing key revokes everyone, which is unacceptable.
+2. **Long-lived bearer tokens in JS-accessible storage.** A 24-hour token sits wherever the frontend stores it — `localStorage` (XSS-readable) or in-memory (lost on reload). Both are bad.
+3. **No graceful re-auth.** When the 24 hours hit, the user is bounced to login mid-session.
 
-Phase 2's auth refactor replaces the single-token model with the standard short-access + long-refresh pattern, with one notable refinement: the refresh token lives in an HttpOnly cookie scoped to the refresh endpoint, not in JS-accessible storage. This single ADR consolidates four bullets that were originally separate but are too tightly coupled to live apart.
+Phase 2's auth refactor replaces the single-token model. The decision splits into one core choice (storage pattern for the refresh token) and three coupled sub-decisions (cookie `SameSite`, refresh format, rotation policy) that are easier to reason about together than separately.
 
 ## Decision drivers
 
-- Need server-side revocation without bumping a global signing key.
-- Want short bearer-token windows (minutes, not hours) to limit damage from theft.
-- Want the refresh path to survive page reload without re-login.
-- Want refresh tokens unreachable from JS (XSS-resilient).
-- Want the cookie to survive following an external link to the app (a friend texts you the URL — re-login is a bad first impression).
+- **Server-side revocation** without bumping a global signing key.
+- **Short bearer-token windows** (minutes, not hours) to limit damage from token theft.
+- **Survives page reload** without re-login.
+- **XSS-resilient.** The refresh token must be unreachable from JS.
+- **Survives external links.** A friend texts you the URL → you click → still logged in. Re-login from an external nav is a bad first impression.
 
 ## Considered options
 
-This ADR resolves four parallel sub-decisions. Each lists the considered options inline for symmetry.
+(Storage pattern only — sub-decisions are below in the outcome.)
 
-### Storage of the refresh token
-
-- **A:** Single long-lived JWT in the `Authorization` header. Original design. Simple but no revocation, no graceful re-auth, long bearer-token exposure.
-- **B:** Access + refresh, both in JS-accessible storage (localStorage / in-memory). Refresh token is XSS-reachable.
-- **C (chosen):** Access in JS, refresh in an HttpOnly cookie scoped to `/api/v1/auth/refresh`. JS can't read the refresh token; the path scope means it isn't sent on most requests.
-
-### `SameSite` attribute on the refresh cookie
-
-- **Strict:** blocks the cookie on any cross-site request, including a benign click from an external link (text message, email). User would be forced to re-login after following such a link.
-- **Lax (chosen):** still blocks cross-site POSTs (which is what `SameSite` is meant to prevent — CSRF on the refresh endpoint), but allows top-level GET navigation. Preserves "follow a link to the app" without giving up CSRF protection.
-
-### Refresh token format
-
-- **Opaque random string + server-side lookup table:** enables per-device revocation, but adds a table and per-refresh DB hit.
-- **JWT signed with the same key as the access token (chosen):** no new table, no extra DB hit on refresh validation. Per-device revocation is the only thing given up, and MVP doesn't need it.
-
-### Rotation policy
-
-- **Extend existing refresh token's expiry on each refresh:** simpler in theory but requires mutable state on the token.
-- **Issue a brand-new refresh token on each refresh (chosen):** matches the standard refresh-rotation pattern and keeps tokens immutable. Rotation does *not* bump `refresh_token_version` — that's reserved for actual revocation events (logout, password change). Bumping on rotation would invalidate the just-issued token.
+- **Option A:** Single long-lived JWT. Original design. Simple but no revocation, no graceful re-auth, long bearer-token exposure.
+- **Option B:** Access + refresh, both in JS-accessible storage. Standard pattern, but the refresh token is XSS-reachable.
+- **Option C (chosen):** Access + refresh, refresh in HttpOnly cookie scoped to `/api/v1/auth/refresh`. JS can't read the refresh token; the cookie's path scope means it isn't sent on most requests.
 
 ## Decision outcome
 
-Chosen: **Option C** with the orthogonal pieces resolved as below.
+Chosen: **Option C.** Sub-decisions follow.
 
-**Tokens.**
+### Tokens
 
-- **Access token.** 15–30 minute lifetime. Sent in the `Authorization: Bearer <jwt>` header on every API call. JWT signed with the auth key.
-- **Refresh token.** 7–30 day lifetime. Lives in an HttpOnly, Secure, `SameSite=Lax` cookie scoped to `Path=/api/v1/auth/refresh`. JWT signed with the same key as the access token. Claims: `sub`, `refresh_token_version`, `exp`, `iat`, `token_type: "refresh"`.
+- **Access token.** 15–30 minute lifetime. Sent in `Authorization: Bearer <jwt>` on every API call. JWT signed with the auth key.
+- **Refresh token.** 7–30 day lifetime. HttpOnly, Secure, `SameSite=Lax` cookie scoped to `Path=/api/v1/auth/refresh`. JWT signed with the same key as the access token. Claims: `sub`, `refresh_token_version`, `exp`, `iat`, `token_type: "refresh"`.
 
-**Revocation: `refresh_token_version` column on `users`.** Bumped on logout and on password change. The refresh path is the only place the version is checked — the access-token path is unchanged (no DB hit per request). A bumped version invalidates every existing refresh token for that user; the next refresh attempt is rejected and the user is bounced to login. Per-device revocation is deferred — a single global counter is sufficient for MVP.
+### `SameSite=Lax`, not `Strict`
 
-**Rotation.** Each successful refresh issues a brand-new refresh JWT with a fresh expiry. The version is *not* bumped on rotation — rotation is about extending the session window, not revoking. Bumping on rotation would invalidate the just-issued token immediately.
+Strict blocks the cookie when the request originates from another site — including the entirely benign case of clicking a link to the app from a text message or email. The user follows the link, gets to the app, and is unexpectedly logged out. Lax still blocks the cross-site POST attacks the cookie attribute is meant to prevent (CSRF on refresh) while letting "user navigated here from outside" work. Lax wins on UX with no meaningful security loss.
 
-**Frontend behavior.** API responses with status 401 trigger a silent refresh: the frontend POSTs to `/api/v1/auth/refresh` (cookie attached automatically), receives a new access token + rotated refresh cookie, and retries the original request. User-visible re-login only happens when the refresh itself returns 401.
+### Refresh token format: JWT, not opaque
 
-**Password change.** `PUT /auth/password` lives on the same route module as the refresh endpoint. It bumps `refresh_token_version` as part of the change, invalidating any existing refresh cookies. The user re-authenticates after a password change — that's the desired behavior and the version-bump is the mechanism.
+Opaque random tokens require a server-side lookup table per token. JWT signed with the access-token key requires no new table. The only thing JWT gives up is per-device revocation — and we don't need that for MVP. If "log out other devices" ever becomes a feature, opaque tokens with a per-token DB row are the migration path; the existing `refresh_token_version` plumbing carries forward.
+
+### Rotation: new token on every refresh, no version bump
+
+Each successful refresh issues a brand-new refresh JWT with a fresh expiry. The version is **not** bumped on rotation — rotation extends the session window, not revokes existing sessions. Bumping on rotation would invalidate the just-issued token immediately.
+
+### Revocation: `refresh_token_version` column on `users`
+
+Bumped on logout and on password change. Checked **only on the refresh path** — the access-token path is unchanged (no DB hit per request). A bumped version invalidates every existing refresh token for that user; the next refresh attempt is rejected and the user is bounced to login.
+
+### Frontend behavior
+
+API responses with status 401 trigger a silent refresh: the frontend POSTs to `/api/v1/auth/refresh` (cookie attached automatically), receives a new access token + rotated refresh cookie, and retries the original request. User-visible re-login only happens when the refresh itself returns 401.
+
+### Password change
+
+`PUT /auth/password` lives on the same route module as the refresh endpoint. It bumps `refresh_token_version` as part of the change. The user re-authenticates after a password change — that's the desired behavior, and the version-bump is the mechanism.
 
 ### Positive consequences
 
-- Refresh token is unreachable from JS (XSS-resilient).
-- 401s trigger a silent refresh; users don't see the token expiry.
+- Refresh token unreachable from JS (XSS-resilient).
+- 401s trigger silent refresh; users don't see token expiry.
 - Server-side revocation without a per-token table — one integer per user.
-- Logout, password change, and "rotate everything" are all the same primitive (bump the counter).
-- The cookie scope (`Path=/api/v1/auth/refresh`) means the refresh token isn't sent on every API request — narrower attack surface than a session cookie.
+- Logout, password change, and "rotate everything" are the same primitive: bump the counter.
+- Cookie scoped to `/api/v1/auth/refresh` means the refresh token isn't sent on every API request — narrower attack surface than a session cookie.
 - `SameSite=Lax` keeps "follow a link to the app" working without sacrificing CSRF protection on the refresh path.
 
 ### Negative consequences / trade-offs
 
-- Two-token complexity vs. one. Frontend has to handle 401-then-refresh-then-retry; backend has two token validators. Acceptable: this is the standard pattern and the security/UX gains pay for it.
-- Per-device revocation isn't possible without a per-token table. Deferred until there's a feature that needs it (e.g., "log out other devices" UI).
-- Cookies require HTTPS in production (Secure attribute). Cloudflare Tunnel handles this; not a constraint in practice.
+- **Two-token complexity vs. one.** The frontend handles 401 → refresh → retry; the backend has two token validators. Acceptable: this is the standard pattern, and the security/UX gains pay for it.
+- **Per-device revocation isn't possible** without a per-token table. Deferred until there's a feature that needs it (e.g., a "log out other devices" UI).
+- **HTTPS required in production** for the Secure attribute. Cloudflare Tunnel (ADR 0033) provides this; not a constraint in practice.
 
 ## Links
 
 - Source: `ad-hoc`
-- Related ADRs: [0016 (session passwords deferred — re-uses the same `POST /sessions/:id/join` shape so password support is additive later)](0016-session-passwords-deferred.md)
+- Related ADRs: [0016 — session passwords deferred (re-uses POST `/sessions/:id/join` shape)](0016-session-passwords-deferred.md), [0033 — Cloudflare Tunnel for exposure](0033-cloudflare-tunnel-for-exposure.md)
 - Implementing PRs: PR #7 (Phase 2: Production config + refresh token auth)
