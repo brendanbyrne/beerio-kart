@@ -21,7 +21,7 @@ For task-specific handoffs that shouldn't collide with the canonical filenames, 
 **Why `docs/handoffs/` and not `.claude/`:** Cowork's `Write` and `Edit` tools refuse to write under `.claude/` — that path is protected at the Cowork tool layer to prevent the AI from silently rewriting its own context (CLAUDE.md, skills, settings). Bash writes still succeed, but routing routine handoffs through bash is awkward and obscures intent. `docs/handoffs/` keeps the protected zone protected and lets handoffs use the normal file tools.
 
 ## Project Phase
-Phase 3 — Sessions & Run Recording (core gameplay loop).
+Star — Sessions & Run Recording (core gameplay loop). ("Phase 3" under the old naming. See § GitHub access → Milestone naming for the cup-name convention.)
 
 ## UI Reference Device
 Use the **Pixel 9 Pro** as the reference phone for all UI mockups and layout work. Physical resolution: 1280 × 2856 pixels at 495 ppi. Logical (CSS) resolution: ~427 × 952 px at 3× device pixel ratio.
@@ -117,6 +117,8 @@ Cowork can read and write GitHub data — issues, pull requests, project board i
 - **Set Assignees, Labels, Milestone, or Repository via the project field mutation.** Those are properties of the underlying issue/PR; use the issue/PR mutations instead.
 
 **Field IDs reference:** `docs/project-field-ids.md` caches the project's field IDs and Status option IDs. Consult that file before issuing project-board write calls — Composio's tools require IDs, not names. Update the file if anyone changes the project's fields in the GitHub UI.
+
+**Milestone naming:** Project milestones use Mario Kart 8 Deluxe cup names (Mushroom, Flower, Star, Special, Shell, Banana, Leaf, Lightning, plus Crossing, Bell, Egg, Triforce, plus the eight Booster Course Pass cups: Golden Dash, Lucky Cat, Turnip, Propeller, Rock, Moon, Fruit, Boomerang), claimed in chronological start order — the Nth major work-chunk gets the Nth cup. No semantic mapping; cup names are arbitrary chronological labels. Closed milestones keep their cup name forever. Title format: `<CupName>: <Description>` (e.g., `Star: Sessions & Run Recording`). Rationale: avoids the three-way "Phase X" collision (build phases, `docs/compliance-plan.md`'s Phase A–J, the WIP CI-adoption draft's Phase A–D). The current cup-to-work-chunk mapping lives in the design record's 2026-05-05 amendment (`reviews/design/2026-05-04-design-doc-restructure.md` §12) until PR 3 creates `docs/roadmap.md`.
 
 **When to use Cowork vs. Claude Code for GitHub work:** anything that ends in a commit, push, or merge → Claude Code. Anything that stays inside GitHub's API surface (issue triage, project board updates, PR comments, milestone management) → Cowork is fine, and often faster because it can stay in conversation.
 
