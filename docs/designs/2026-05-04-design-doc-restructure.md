@@ -567,7 +567,6 @@ Each step leaves the repo in a working state. Steps can be paused between PRs wi
 **PR 1 — Skeleton + biggest extraction (Cowork drafts; Claude Code commits).**
 - Create `docs/decisions/` with `README.md` and `template.md` (template includes the `Source:` line per §8.2).
 - Create `docs/README.md` index.
-- Create `reviews/README.md` per §8.6.
 - Add `.github/pull_request_template.md` with the index-update checkbox per §10.1.
 - Add `.github/workflows/link-check.yml` running `lychee-action` per §10.4.
 - Add `docs/CLAUDE.md` from `WIP_pr1-docs-claude.md`.
@@ -821,3 +820,4 @@ When all eleven checkboxes above are Approved (or Skip with rationale), implemen
 ## Document history
 
 - 2026-05-05 — Promoted from `reviews/design/` to `docs/designs/` as part of PR 1 (docs restructure foundation). In-place fixes from §12.3 / §13.3 applied at promotion: example milestone names in §4.2 and §8.6 changed from `Phase 3: Sessions & Run Recording` to `Star: Sessions & Run Recording`; three new §9 PR 1 bullets added; "Prerequisites already in `main`" note added; §9 PR 6 `docs/CLAUDE.md` line struck (file landed in PR 1). PR #41.
+- 2026-05-05 — Struck the `Create reviews/README.md per §8.6` bullet from §9 PR 1 list. The bullet was internally inconsistent (§8.11 deletes `reviews/`; §8.6 isn't about a reviews README) and was a leftover from a pre-restructure draft. Surfaced by Claude Code's post-PR-1 handoff (item 5).

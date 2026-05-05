@@ -36,6 +36,18 @@ docs/drafts/*
 
 Warning: aggressive cleanup commands (`git clean -fdx`) wipe gitignored drafts. Don't run those without checking `drafts/` first.
 
+### Stripping the WIP_ comment header at install time
+
+Each `WIP_*.md` file opens with an HTML comment (`<!-- DRAFT for PR N — install at: ... -->`) that should be removed when the file moves to its final destination. The naive `tail -n +2 WIP_foo.md > docs/foo.md` only works if the comment is a single line — it leaves multi-line comment continuations behind.
+
+Use this `awk` pattern, which drops everything from the start of the file up to and including the first line containing `-->`:
+
+```bash
+awk 'BEGIN{strip=1} strip && /-->/ {strip=0; next} !strip {print}' docs/drafts/WIP_foo.md > docs/foo.md
+```
+
+Convention going forward: prefer **single-line** WIP comment headers (`<!-- DRAFT for PR N — install at: docs/foo.md -->`) so `tail -n +2` works for the common case. The `awk` recipe above is the fallback when a comment legitimately spans multiple lines.
+
 ## Design records (`designs/`)
 
 Single artifact type — no formal "plan vs design" distinction.
@@ -104,3 +116,8 @@ The root `CLAUDE.md` requires `docs/` files to maintain a `## Document history` 
 - `roadmap.md` — task tracking; history lives in Issues / Project board.
 
 The rule still applies to `design.md`, `data-model.md`, `workflows.md`, `api-contract.md`, `coding-standards/*`, `designs/*` records, and `research/*` files.
+
+## Document history
+
+- 2026-05-05 — Initial install as part of PR 1 (docs restructure foundation). Sourced from `WIP_pr1-docs-claude.md`. PR #41.
+- 2026-05-05 — Added `### Stripping the WIP_ comment header at install time` subsection under "Drafts → designs lifecycle" with the `awk` fallback pattern and the single-line-WIP-comment convention. Surfaced by Claude Code's post-PR-1 handoff (item 6) after `tail -n +2` mis-stripped a multi-line WIP comment in `docs/workflow.md`.
