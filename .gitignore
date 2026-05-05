@@ -13,8 +13,9 @@ target/
 # Environment files
 .env
 
-# Assistant handoff files (ephemeral)
-.claude/*-handoff.md
+# Assistant handoff files (ephemeral; live under docs/handoffs/, only the README is tracked)
+docs/handoffs/*
+!docs/handoffs/README.md
 
 # Assistant self-notes (ephemeral session state)
 .claude/*-notes.md

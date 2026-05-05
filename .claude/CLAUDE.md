@@ -4,14 +4,21 @@
 Read `docs/design.md` at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
 
 ### Handoff files
-Two handoff files enable async task passing between assistants. The writer creates the file, the reader deletes it when done — the file's existence is the signal.
 
-- **`.claude/cowork-handoff.md`** — Cowork → Claude Code. Check before starting work. Contains task instructions from the architecture/design assistant. Delete after completing the work.
-- **`.claude/claude-code-handoff.md`** — Claude Code → Cowork. Write this when you have questions, research requests, or design decisions for Cowork. Cowork deletes it after addressing.
+Two handoff channels enable async task passing between assistants. The writer creates the file; the reader deletes it when done — the file's existence is the signal.
+
+Handoff files live under `docs/handoffs/`. The directory is gitignored (handoffs are transient and shouldn't pollute git history); only `docs/handoffs/README.md` is checked in, and it documents the format and lifecycle for humans browsing the repo.
+
+- **`docs/handoffs/cowork-handoff.md`** — Cowork → Claude Code. Check before starting work. Contains task instructions from the architecture/design assistant. Claude Code deletes after completing the work.
+- **`docs/handoffs/claude-code-handoff.md`** — Claude Code → Cowork. Write this when you have questions, research requests, or design decisions for Cowork. Brendan or the next Claude Code session deletes after Cowork acknowledges in chat — Cowork's sandbox blocks `unlink()` repo-wide, so Cowork can't clean up its own inbox.
+
+For task-specific handoffs that shouldn't collide with the canonical filenames, use a dated variant: `cowork-handoff-<YYYY-MM-DD>-<slug>.md` or `claude-code-handoff-<YYYY-MM-DD>-<slug>.md`.
 
 **Anything intended for the other assistant to act on — task specs, code review findings, bug reports, design decisions, answers to their questions — MUST be written to the appropriate handoff file.** Delivering it only in chat means the other assistant won't see it. If you find yourself composing a substantive response that the other assistant needs, stop and write it to the handoff file instead.
 
-**Do not use handoff files for your own session notes.** The handoff files are one-way channels between assistants — if the file exists, the recipient assumes there's work to do. For self-notes or session state you want to preserve across your own sessions, use `.claude/cowork-notes.md` (Cowork) or a similar assistant-specific notes file.
+**Do not use handoff files for your own session notes.** The handoff files are one-way channels between assistants — if the file exists, the recipient assumes there's work to do. For self-notes or session state you want to preserve across your own sessions, use `.claude/cowork-notes.md` (Cowork) or `.claude/claude-code-notes.md` (Claude Code).
+
+**Why `docs/handoffs/` and not `.claude/`:** Cowork's `Write` and `Edit` tools refuse to write under `.claude/` — that path is protected at the Cowork tool layer to prevent the AI from silently rewriting its own context (CLAUDE.md, skills, settings). Bash writes still succeed, but routing routine handoffs through bash is awkward and obscures intent. `docs/handoffs/` keeps the protected zone protected and lets handoffs use the normal file tools.
 
 ## Project Phase
 Phase 3 — Sessions & Run Recording (core gameplay loop).
@@ -88,8 +95,30 @@ Each in-scope file keeps a `## Document history` section at the bottom. Any AI-a
 
 This project uses two AI environments:
 
-- **Cowork (Claude Desktop):** Design, architecture, documentation, research, review. Accesses the repo via a Windows mount (`C:\Users\obiva\beerio-kart`). Cannot access WSL2 filesystem, cannot access GitHub directly, and **cannot run git commands** — the Cowork sandbox mounts the repo via virtiofs with `unlink()` blocked at the mount layer (every file delete returns `EPERM`, including files Cowork just created). Git relies on creating and removing `.git/index.lock` and temp objects, so any git invocation from Cowork either fails outright or leaves a stale lock that breaks the next attempt. Cowork edits files only.
+- **Cowork (Claude Desktop):** Design, architecture, documentation, research, review. Accesses the repo via a Windows mount (`C:\Users\obiva\beerio-kart`). Cannot access WSL2 filesystem and **cannot run git commands** — the Cowork sandbox mounts the repo via virtiofs with `unlink()` blocked at the mount layer (every file delete returns `EPERM`, including files Cowork just created). Git relies on creating and removing `.git/index.lock` and temp objects, so any git invocation from Cowork either fails outright or leaves a stale lock that breaks the next attempt. Cowork edits files only. For GitHub API operations (issues, PRs, project board) see § GitHub access below.
 - **Claude Code (WSL2 CLI):** Coding, building, testing, git operations. Accesses the same checkout via `/mnt/c/Users/obiva/beerio-kart/`. WSL2's `/mnt/c` (9P/DrvFs) supports unlink, so git works fine there.
+
+### GitHub access
+
+Cowork can read and write GitHub data — issues, pull requests, project board items, milestones — through Composio's GitHub MCP connector. The connection authenticates as the GitHub user `brendanbyrne`. Anything Cowork does via the MCP appears in the GitHub UI under that account.
+
+**What Cowork can do via the MCP:**
+
+- File, label, assign, triage, and close issues; add comments.
+- Read PR diffs, conversation threads, and review state. (Creating commits or PRs still requires Claude Code — that's a git operation, not an API operation.)
+- Add items to the project board, move them between Status columns, set custom field values, attach milestones.
+- Create and manage milestones.
+- Run arbitrary GraphQL queries against `api.github.com/graphql` when no purpose-built tool exists.
+
+**What the MCP cannot do, regardless of which assistant calls it:**
+
+- **Run `git`.** The MCP only talks to GitHub's API. Branch creation, commits, pushes, and merges remain Claude Code's job.
+- **Create or edit project custom fields, status field options (board columns), views, or built-in workflows.** GitHub's API does not expose these — they are configured in the project Settings UI only.
+- **Set Assignees, Labels, Milestone, or Repository via the project field mutation.** Those are properties of the underlying issue/PR; use the issue/PR mutations instead.
+
+**Field IDs reference:** `docs/project-field-ids.md` caches the project's field IDs and Status option IDs. Consult that file before issuing project-board write calls — Composio's tools require IDs, not names. Update the file if anyone changes the project's fields in the GitHub UI.
+
+**When to use Cowork vs. Claude Code for GitHub work:** anything that ends in a commit, push, or merge → Claude Code. Anything that stays inside GitHub's API surface (issue triage, project board updates, PR comments, milestone management) → Cowork is fine, and often faster because it can stay in conversation.
 
 ### Git workflow
 
@@ -113,7 +142,7 @@ This project uses two AI environments:
 **Coordination between assistants:**
 
 - Both assistants work on the same checkout — no push/pull needed to see each other's changes.
-- **Cowork** cannot run git at all (its sandbox mount blocks `unlink`). When Cowork wants a change committed, it edits the working tree and notes the intended commit in `.claude/cowork-handoff.md` or chat; Brendan or Claude Code then stages, commits, and pushes.
+- **Cowork** cannot run git at all (its sandbox mount blocks `unlink`). When Cowork wants a change committed, it edits the working tree and notes the intended commit in `docs/handoffs/cowork-handoff.md` or chat; Brendan or Claude Code then stages, commits, and pushes.
 - **Claude Code** must `git push` after making changes so the remote stays current.
 - Both should check `git status` before starting work to avoid conflicts.
 - If both need to edit the same file, coordinate through the user (Brendan).
@@ -128,6 +157,7 @@ This project uses two AI environments:
 | Git commits | Claude Code or Brendan (Cowork cannot run git) |
 | Git pushes | Claude Code (or Brendan) |
 | Code review & research | Either |
+| Project board / issue triage | Either (Cowork via MCP, Claude Code via `gh`) |
 | Deployment config | Claude Code (with Cowork for planning) |
 | Browser-based tasks | Cowork |
 | Design reviews | Cowork (writes to `reviews/design/`) |
