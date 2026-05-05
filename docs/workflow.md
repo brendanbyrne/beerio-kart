@@ -157,6 +157,18 @@ For multi-PR Issues, only the final PR uses `Closes #NN`; intermediates use `Ref
 
 The PR template at `.github/pull_request_template.md` has a "Linked work" section that enforces this in practice.
 
+### Commit messages
+
+Each commit's title follows the format `<issue_number>: <summary>` — e.g., `42: extract leaderboard service`, `87: fix lap-time validation off-by-one`.
+
+Why:
+
+- Cross-references the work to its tracking Issue at a glance.
+- `git log --oneline` becomes a scannable history of which Issues were touched when.
+- Especially valuable in PRs with many commits (e.g., one-commit-per-ADR distillation in Issue #39 / PR 2).
+
+For chore PRs without an Issue, omit the prefix (just the summary). For multi-Issue PRs, use the primary Issue number in the prefix; the commit body can reference others (`Refs #NN`).
+
 ### Review and merge
 
 - **Never push directly to `main`.** All code changes require a PR.
@@ -242,6 +254,15 @@ Two rules that follow:
 
 The same convention applies in reverse — Cowork → Claude Code handoffs that file Issues use the same minimal format.
 
+### Plan deviations during PR work
+
+When Claude Code deviates from a handoff or design record during implementation:
+
+- **Always:** describe the deviation in the PR's "Reviewer notes" section. That's the durable artifact attached to the diff.
+- **Additionally, write `docs/handoffs/claude-code-handoff.md` if** the deviation has implications beyond this PR — the handoff plan was wrong, the design record needs updating, or future PRs are affected. The handoff cross-references the PR with a one-line description of what Cowork needs to address. **Don't duplicate the Reviewer notes content; point at it.**
+
+Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag with action prompts, not a description of the work. Keep it small enough that future Cowork can scan it in seconds.
+
 ### What does NOT belong in handoff files
 
 - **Anything that fits Issue shape.** That's an Issue, not a handoff.
@@ -252,3 +273,4 @@ The same convention applies in reverse — Cowork → Claude Code handoffs that 
 ## Document history
 
 - 2026-05-05 — Initial draft, captured as part of the documentation overhaul (PR 1). Decisions worked through across the 2026-05-05 Cowork session covering the decision tree, Issue conventions, milestone conventions, PR conventions, triage cadence, and multi-assistant coordination. Sourced from `cowork-notes.md` and the design record amendment §12.
+- 2026-05-05 — Added `### Commit messages` subsection (`<issue_number>: <summary>` title format) and `### Plan deviations during PR work` subsection (PR Reviewer notes is primary; `claude-code-handoff.md` cross-references when deviation has implications beyond the PR). Surfaced during PR 1's implementation when Claude Code deviated from the handoff plan; the deviation pattern wasn't documented.
