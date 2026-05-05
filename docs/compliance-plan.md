@@ -35,7 +35,7 @@ PRs are grouped into *phases* by theme. Phases are loosely ordered by what unloc
 
 - **Scope:**
   - Walk every section of every standards doc (`rust.md`, `seaorm.md`, `tokio.md`) and for each rule, check whether the existing code conforms.
-  - Output: a Cowork-generated review file at `reviews/design/standards-audit-001.md` using the project's checkbox format (one finding per non-conformance).
+  - Output: a Cowork-generated design record at `docs/designs/<date>-standards-audit.md` using the project's checkbox format (one finding per non-conformance).
   - Each finding identifies the rule, the file/lines that violate it, and a recommended fix.
   - Re-order or split the remaining PRs in this plan based on what the audit finds (especially Phases C–E).
 - **Standards refs:** All.
@@ -204,7 +204,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 ### PR-E3: Drop `sessions.created_by`
 
 - **Scope:**
-  - Design decision in `reviews/design/sessions-created-by-removal.md` (one-line: "host_id is the only host indicator; created_by adds no current product value").
+  - Design decision in [`docs/decisions/0001-sessions-no-created-by-column.md`](./decisions/0001-sessions-no-created-by-column.md) (one-line: "host_id is the only host indicator; created_by adds no current product value").
   - Update consolidated migration: remove `created_by` column and its FK.
   - Update the `sessions` entity by hand to drop the `created_by` column and its `Relation` variant (entities are committed source per `seaorm.md` § 6).
   - Update design.md: change "host_id starts as created_by" to "host_id starts as the user who created the session, transfers on leave."
@@ -382,7 +382,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 
 ## Stream J — Codegen workflow
 
-The architectural decision to switch from codegen-driven entities to hand-written entities is recorded in [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). These two PRs implement that decision.
+The architectural decision to switch from codegen-driven entities to hand-written entities is recorded in [`docs/designs/2026-05-02-entity-codegen-strategy.md`](./designs/2026-05-02-entity-codegen-strategy.md). These two PRs implement that decision.
 
 ### PR-X1: Convert to hand-written entities
 
