@@ -117,11 +117,33 @@ Cowork can read and write GitHub data — issues, pull requests, project board i
 - **Create or edit project custom fields, status field options (board columns), views, or built-in workflows.** GitHub's API does not expose these — they are configured in the project Settings UI only.
 - **Set Assignees, Labels, Milestone, or Repository via the project field mutation.** Those are properties of the underlying issue/PR; use the issue/PR mutations instead.
 
-**Field IDs reference:** `docs/project-field-ids.md` caches the project's field IDs and Status option IDs. Consult that file before issuing project-board write calls — Composio's tools require IDs, not names. Update the file if anyone changes the project's fields in the GitHub UI.
+**What Claude Code can do via `gh`:**
+
+Claude Code's `gh` CLI (authenticated as `brendanbyrne` via OAuth, stored at `~/.config/gh/hosts.yml` in WSL) can do everything the Composio MCP can do, plus run `git` itself. Capabilities depend on the token's scopes — see the bootstrap below if anything fails with `INSUFFICIENT_SCOPES`.
+
+- All issue / PR / milestone CRUD via `gh issue`, `gh pr`, `gh api repos/.../milestones`, etc. (`repo` scope.)
+- Read and write Project (V2) board state — list `projectItems`, set Status / Priority / other field values via `updateProjectV2ItemFieldValue`. (`project` scope.)
+- Run arbitrary GraphQL via `gh api graphql -f query='...'` against `api.github.com/graphql`.
+- Run `git` end-to-end (clone, branch, commit, push, merge). Git operations use SSH (`git@github.com:...`), separate from the gh API auth.
+
+**Bootstrap on a fresh checkout** (or to expand scopes on an existing token):
+
+```bash
+# Initial login with all required scopes:
+gh auth login --hostname github.com --git-protocol ssh \
+  --scopes "repo,read:org,gist,admin:public_key,project"
+
+# Or, if already logged in with insufficient scopes, just add the missing ones:
+gh auth refresh -h github.com -s read:project,project
+```
+
+Confirm the result with `gh auth status` — token scopes should include `project`. The full set Claude Code currently uses is `admin:public_key, gist, project, read:org, repo`.
+
+**Field IDs reference:** `docs/project-field-ids.md` caches the project's field IDs and Status option IDs. Consult that file before issuing project-board write calls — both Composio MCP and `gh api graphql` require IDs, not names. Update the file if anyone changes the project's fields in the GitHub UI.
 
 **Milestone naming:** Project milestones use Mario Kart 8 Deluxe cup names (Mushroom, Flower, Star, Special, Shell, Banana, Leaf, Lightning, plus Crossing, Bell, Egg, Triforce, plus the eight Booster Course Pass cups: Golden Dash, Lucky Cat, Turnip, Propeller, Rock, Moon, Fruit, Boomerang), claimed in chronological start order — the Nth major work-chunk gets the Nth cup. No semantic mapping; cup names are arbitrary chronological labels. Closed milestones keep their cup name forever. Title format: `<CupName>: <Description>` (e.g., `Star: Sessions & Run Recording`). Rationale: avoids the three-way "Phase X" collision (build phases, `docs/compliance-plan.md`'s Phase A–J, the WIP CI-adoption draft's Phase A–D). The current cup-to-work-chunk mapping lives in the design record's 2026-05-05 amendment (`reviews/design/2026-05-04-design-doc-restructure.md` §12) until PR 3 creates `docs/roadmap.md`.
 
-**When to use Cowork vs. Claude Code for GitHub work:** anything that ends in a commit, push, or merge → Claude Code. Anything that stays inside GitHub's API surface (issue triage, project board updates, PR comments, milestone management) → Cowork is fine, and often faster because it can stay in conversation.
+**When to use Cowork vs. Claude Code for GitHub work:** anything that ends in a commit, push, or merge → Claude Code. Anything that stays inside GitHub's API surface (issue triage, project board updates, PR comments, milestone management) → either works; pick whichever assistant is already in the conversation. Cowork is often faster for chat-driven triage; Claude Code is the natural choice when the GitHub action is part of a code-bearing PR (e.g., move-Issue-on-pickup at the start of a branch).
 
 ### Git workflow
 
