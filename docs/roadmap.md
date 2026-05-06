@@ -195,3 +195,15 @@ When OCR becomes the next active work-chunk, it claims a cup name (likely Lightn
 ## Future cups not yet allocated
 
 The remaining pool: Crossing, Bell, Egg, Triforce (MK8 Deluxe additions); Golden Dash, Lucky Cat, Turnip, Propeller, Rock, Moon, Fruit, Boomerang (Booster Course Pass). 20 cups in total — enough for any plausible Beerio Kart lifetime. Cups get claimed when their work-chunk starts.
+
+---
+
+## Random ideas
+
+Small ideas captured here without committing to a cup or filing as Issues. Things in this list are sub-cup-sized — too small to deserve their own milestone, too unstructured to file as Issues right now (per the "recorded but not visible in GitHub backlog" rule). When one ages into something concrete enough to act on, it graduates to an Issue.
+
+- Turn list of previous players into invite emails to join a session.
+- Ability for a user to change their username.
+- Ability to send emails (account recovery is the first concrete use case).
+
+Sharp-edged items get filed as Issues directly — they don't live here. The first such graduation was [#75 — handle concurrent `next_track` calls gracefully](https://github.com/brendanbyrne/beerio-kart/issues/75), which started life in this section before getting its own Issue.

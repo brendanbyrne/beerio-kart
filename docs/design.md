@@ -481,17 +481,6 @@ See [`roadmap.md`](./roadmap.md) for the cup-by-cup narrative — goals, scope, 
 
 See [`decisions/`](./decisions/) — each prior bullet has been distilled into a MADR file under `docs/decisions/`. The index in [`decisions/README.md`](./decisions/README.md) lists every ADR with its title, status, and date.
 
-## Backlog
-
-
-Random ideas that may or may not be pursued.
-
-- Turn list of previous players into invite emails to join.
-- Ability to Change Username.
-- Ability to send emails.
-   - Account recovery.
-- Handle concurrent `next_track` calls gracefully. Currently a double-tap can hit the `UNIQUE(session_id, race_number)` constraint and return a 500. Options: retry-on-conflict or optimistic locking. Low priority — single host makes this very unlikely.
-
 ## Related documents
 
 - **`api-contract.md`** — Wire-format conventions between backend and frontend (error codes, ETag polling, idempotency keys, time format).
@@ -511,3 +500,4 @@ Random ideas that may or may not be pursued.
 - 2026-05-05 — Extracted Data Model section to `data-model.md`. PR 1 of the docs restructure.
 - 2026-05-05 — Replaced the Resolved Decisions bullet list with a pointer to `docs/decisions/`. Each prior bullet distilled into a MADR file (0002–0034). PR 2 of the docs restructure.
 - 2026-05-06 — Replaced the Build Plan section with a one-paragraph pointer to `roadmap.md` (created in this PR). Phase narratives moved to roadmap.md per cup; the 20 unchecked Phase 3 / Milestone Star bullets were filed as GitHub Issues (#46, #47, #49, #50, #51, #54, #56, #58, #59, #61, #62, #63, #64, #65, #66, #67, #70, #71, #72, #73) under Milestone Star. PR 3 of the docs restructure.
+- 2026-05-06 — Removed the `## Backlog` section. The three random ideas (player invite emails, username change, send-emails / account recovery) moved to `docs/roadmap.md` § Random ideas. The fourth (concurrent `next_track` race condition) was filed as Issue #75 under Milestone Star with `enhancement` label.
