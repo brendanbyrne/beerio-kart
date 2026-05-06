@@ -195,9 +195,3 @@ When OCR becomes the next active work-chunk, it claims a cup name (likely Lightn
 ## Future cups not yet allocated
 
 The remaining pool: Crossing, Bell, Egg, Triforce (MK8 Deluxe additions); Golden Dash, Lucky Cat, Turnip, Propeller, Rock, Moon, Fruit, Boomerang (Booster Course Pass). 20 cups in total — enough for any plausible Beerio Kart lifetime. Cups get claimed when their work-chunk starts.
-
----
-
-## Document history
-
-- 2026-05-06 — Initial creation as part of PR 3 of the documentation restructure. Sourced from `docs/design.md`'s Build Plan section (which gets a pointer paragraph in the same PR) and the cup-mapping table from `docs/designs/2026-05-04-design-doc-restructure.md` §12.2.
