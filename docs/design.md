@@ -473,91 +473,9 @@ beerio-kart/
     └── uploads/                  # User-uploaded run photos (gitignored)
 ```
 
-## Build Plan (Phases)
+## Build Plan
 
-### Phase 1: Foundation
-- [x] Initialize Rust project with Axum
-- [x] Initialize React project with Vite + Bun + Tailwind
-- [x] Set up SeaORM with SQLite and migrations (all tables including run_flags)
-- [x] Seed MK8 Deluxe data (tracks, cups, characters, bodies, wheels, gliders)
-- [x] Basic auth (register/login with argon2 + JWT)
-- [x] Dockerfiles + compose.yaml
-
-### Phase 2: Deployment
-- [x] Validate single-container Dockerfile on Unraid (multi-stage build already exists from Phase 1)
-- [x] Validate compose.yaml on Unraid (already exists from Phase 1, single service + volumes)
-- [x] Configure Cloudflare tunnel to route domain to the app on Unraid
-- [x] Set Cloudflare encryption mode to **Full (strict)** — Flexible encrypts browser-to-Cloudflare but forwards plaintext to the origin server, which means passwords travel unencrypted on the last hop
-- [x] Verify HTTPS works end-to-end through Cloudflare
-- [x] Test basic auth flow from phone over real network
-- [x] Add .env / config for production vs development settings
-- [x] Upgrade auth to refresh token flow (short-lived access token + HttpOnly refresh cookie + `refresh_token_version` on users)
-
-Note: Deploying early (before core features) keeps the deployment simple and catches infrastructure issues before application complexity grows. The Dockerfile and compose.yaml were created in Phase 1 for local development — Phase 2 validates they work on the actual Unraid server behind Cloudflare.
-
-### Phase 3: Sessions & Run Recording
-- [ ] Session schema: sessions, session_participants, session_races tables + migrations
-- [ ] Add `session_race_id` and `disqualified` columns to runs table (migration)
-- [ ] Session polling endpoint (`GET /sessions/:id` returns full session state; clients poll every 2-3 seconds)
-- [ ] Session lifecycle: create, join, leave, auto-close on inactivity (1 hour)
-- [ ] Host transfer on leave (earliest-joined remaining participant)
-- [ ] Random ruleset (first ruleset — track chosen at random without replacement)
-- [ ] Run entry within session context (time, drink, race setup, DQ option)
-- [ ] Pending race tracking (max 3 in UI, submit in order, skip option)
-- [ ] 5-minute grace period for disconnects before pending races expire
-- [ ] "Skip turn" — any participant can pass the chooser's turn
-- [ ] Drink type selector with inline creation
-- [ ] Previous/preferred defaulting for drink and race setup
-- [ ] Photo upload (separate endpoint)
-- [ ] Auto-flagging for record-breaking runs without photos (DQ'd runs excluded)
-- [ ] Home screen: active sessions list + "Start a Session" primary action + recent runs
-- [ ] Background task: Tokio task to close stale sessions (no activity for 1 hour, check every ~5 min)
-- [ ] User profile endpoints (GET /users, GET /users/:id, PUT /users/:id for preferred setup and drink type)
-- [ ] Drink types API (create, list, get)
-- [ ] Sessions API (create, join, leave, next-track, choose-track, skip-turn, list races)
-- [x] Pre-seeded data read endpoints (characters, bodies, wheels, gliders, cups, tracks)
-- [ ] Runs API (create within session, list, delete, photo upload)
-- [ ] Password change endpoint (`PUT /auth/password`)
-- [ ] justfile with recipes: `dev`, `test`, `entities`, `build`
-
-Note: Solo racing uses a one-person session. Future enhancement: streamline the solo experience by making `session_race_id` nullable on runs and offering a lightweight entry flow without session overhead.
-
-### Phase 4: Session Rulesets
-- [ ] Default ruleset (least leaderboard points chooses; recusal; fallback to random)
-- [ ] Least Played ruleset (track with fewest runs chosen; drink category config at session creation)
-- [ ] Round-robin ruleset ("Can Choose" / "Can't Choose" groups; recusal; reset when empty)
-- [ ] Ruleset selection UI at session creation (brief inline explanations)
-
-Future consideration: allow ruleset changes mid-session (deferred post-MVP).
-
-Required test scenarios per ruleset: normal flow, recusal by one player, recusal by all players, player joins mid-session, player leaves mid-session, host leaves mid-session. Each ruleset needs all six scenarios covered.
-
-### Phase 5: Stats & Leaderboards
-- [ ] Personal stats page (PBs, averages, run count, most-played track, best track)
-- [ ] Session history in profile (date, participants, race count, personal W-L per session)
-- [ ] Full run history with detail view
-- [ ] Per-track time history with chart
-- [ ] Track leaderboard (alcoholic / non-alcoholic / combined toggle; DQ'd runs excluded)
-- [ ] Cup-level leaderboard
-- [ ] Global leaderboard (most track records held)
-- [ ] User rank pinned at bottom of leaderboards
-
-### Phase 6: Social & Head-to-Head
-- [ ] "Players you've competed with" (derived from shared session races)
-- [ ] Head-to-head comparison view (wins/losses derived from session race data; DQ'd runs excluded; ties = 0-0)
-- [ ] Win/loss records (H2H does not distinguish alcoholic vs non-alcoholic — drink category only matters for leaderboards)
-- [ ] Profile page with improvement trends
-- [ ] Flagging a run (user-initiated, with preset reasons + notes + visibility choice)
-- [ ] Admin page (lightweight, env-variable-gated)
-- [ ] Admin: review flagged runs, resolve, edit, or delete
-
-### Phase 7: Camera/OCR (Future)
-- [ ] Photo upload with each run (verification + training data)
-- [ ] Use phone camera to photograph TV screen showing race time
-- [ ] Extract time using OCR (likely browser-side Tesseract.js or similar)
-- [ ] Auto-populate time field from photo
-- [ ] Extract race setup from end-of-race screen
-- [ ] Retire preferred race setup from user profiles once OCR is reliable
+See [`roadmap.md`](./roadmap.md) for the cup-by-cup narrative — goals, scope, deferred work, and success criteria per work-chunk. Status of individual work items lives on the [project board](https://github.com/users/brendanbyrne/projects/3); active-cup work is tracked there as Issues, future-cup work as scope bullets in roadmap.md until each cup goes active.
 
 ## Resolved Decisions
 
@@ -592,3 +510,4 @@ Random ideas that may or may not be pursued.
 - 2026-05-04 — Replaced the "Entity regeneration via justfile recipe" rule with "Hand-written SeaORM entities"; updated the `just (not Make)` example to use `just entities-bootstrap`. Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](./reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-05 — Extracted Data Model section to `data-model.md`. PR 1 of the docs restructure.
 - 2026-05-05 — Replaced the Resolved Decisions bullet list with a pointer to `docs/decisions/`. Each prior bullet distilled into a MADR file (0002–0034). PR 2 of the docs restructure.
+- 2026-05-06 — Replaced the Build Plan section with a one-paragraph pointer to `roadmap.md` (created in this PR). Phase narratives moved to roadmap.md per cup; the 20 unchecked Phase 3 / Milestone Star bullets were filed as GitHub Issues (#46, #47, #49, #50, #51, #54, #56, #58, #59, #61, #62, #63, #64, #65, #66, #67, #70, #71, #72, #73) under Milestone Star. PR 3 of the docs restructure.
