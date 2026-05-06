@@ -225,6 +225,8 @@ All Cowork-created content on GitHub appears under `brendanbyrne` (the MCP authe
 - **In Progress → Done:** automatic via `Closes #NN` on PR merge.
 - **Body edits:** never. If AC is wrong, comment on the Issue and write a handoff for Brendan or Cowork.
 
+Claude Code's `gh` CLI token carries the `project` scope (which implicitly includes `read:project`), letting it set the Status field on project items via `gh api graphql` calls to `updateProjectV2ItemFieldValue`. Project field IDs are cached in `docs/project-field-ids.md`. If a fresh checkout fails with `INSUFFICIENT_SCOPES`, refresh with `gh auth refresh -h github.com -s project`. The token also carries `repo`, `read:org`, `gist`, and `admin:public_key` for unrelated workflows.
+
 ### Handoff-as-tag pattern
 
 When one assistant files Issues for the other to consider, it appends a small note to the corresponding handoff file. The handoff is a **lightweight notification with cross-references**, not a description of the work.
@@ -276,5 +278,6 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 
 - 2026-05-05 — Initial draft, captured as part of the documentation overhaul (PR 1). Decisions worked through across the 2026-05-05 Cowork session covering the decision tree, Issue conventions, milestone conventions, PR conventions, triage cadence, and multi-assistant coordination. Sourced from `cowork-notes.md` and the design record amendment §12.
 - 2026-05-05 — Added `### Commit messages` subsection (`<issue_number>: <summary>` title format) and `### Plan deviations during PR work` subsection (PR Reviewer notes is primary; `claude-code-handoff.md` cross-references when deviation has implications beyond the PR). Surfaced during PR 1's implementation when Claude Code deviated from the handoff plan; the deviation pattern wasn't documented.
+- 2026-05-06 — Added a paragraph under `### Claude Code's autonomy in moving Issue status` documenting the `project` scope on Claude Code's `gh` token, the `updateProjectV2ItemFieldValue` mutation, and the `gh auth refresh` recovery for `INSUFFICIENT_SCOPES` errors. Companion to PR #45's #44-closing change — with this paragraph and a matching trim of `.claude/CLAUDE.md` § GitHub access (committed together), `workflow.md` becomes the canonical home for these details and `.claude/CLAUDE.md` keeps a one-line pointer.
 - 2026-05-05 — Hardened the Ready → In Progress transition rule (do it as the *first* action on pickup) and added a paragraph on surfacing workflow-step blockers immediately rather than silently skipping. Surfaced during PR 2 when Claude Code deferred the status move on Issue #39 instead of attempting it (and discovering the `gh` token lacks `read:project` / `project` scopes — now tracked in #44).
 - 2026-05-05 — Removed the now-stale parenthetical from the workflow-step-blocker rule that gave "handoff to Cowork for project-board mutations Claude Code can't do" as the example. Closes the loop with #44 — Claude Code's `gh` token now has `project` scope, so project mutations are no longer routed through Cowork.

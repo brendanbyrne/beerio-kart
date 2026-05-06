@@ -117,27 +117,7 @@ Cowork can read and write GitHub data — issues, pull requests, project board i
 - **Create or edit project custom fields, status field options (board columns), views, or built-in workflows.** GitHub's API does not expose these — they are configured in the project Settings UI only.
 - **Set Assignees, Labels, Milestone, or Repository via the project field mutation.** Those are properties of the underlying issue/PR; use the issue/PR mutations instead.
 
-**What Claude Code can do via `gh`:**
-
-Claude Code's `gh` CLI (authenticated as `brendanbyrne` via OAuth, stored at `~/.config/gh/hosts.yml` in WSL) can do everything the Composio MCP can do, plus run `git` itself. Capabilities depend on the token's scopes — see the bootstrap below if anything fails with `INSUFFICIENT_SCOPES`.
-
-- All issue / PR / milestone CRUD via `gh issue`, `gh pr`, `gh api repos/.../milestones`, etc. (`repo` scope.)
-- Read and write Project (V2) board state — list `projectItems`, set Status / Priority / other field values via `updateProjectV2ItemFieldValue`. (`project` scope.)
-- Run arbitrary GraphQL via `gh api graphql -f query='...'` against `api.github.com/graphql`.
-- Run `git` end-to-end (clone, branch, commit, push, merge). Git operations use SSH (`git@github.com:...`), separate from the gh API auth.
-
-**Bootstrap on a fresh checkout** (or to expand scopes on an existing token):
-
-```bash
-# Initial login with all required scopes:
-gh auth login --hostname github.com --git-protocol ssh \
-  --scopes "repo,read:org,gist,admin:public_key,project"
-
-# Or, if already logged in with insufficient scopes, just add the missing ones:
-gh auth refresh -h github.com -s read:project,project
-```
-
-Confirm the result with `gh auth status` — token scopes should include `project`. The full set Claude Code currently uses is `admin:public_key, gist, project, read:org, repo`.
+**What Claude Code can do via `gh`:** see [`docs/workflow.md`](../docs/workflow.md) § Claude Code's autonomy in moving Issue status for the token scopes, the `updateProjectV2ItemFieldValue` mutation, and the `INSUFFICIENT_SCOPES` recovery.
 
 **Field IDs reference:** `docs/project-field-ids.md` caches the project's field IDs and Status option IDs. Consult that file before issuing project-board write calls — both Composio MCP and `gh api graphql` require IDs, not names. Update the file if anyone changes the project's fields in the GitHub UI.
 
