@@ -86,7 +86,7 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 
 **Scope.** PRs 1–6 of the docs-restructure design record:
 
-- PR 1 — foundation (workflow.md, ADR scaffolding, Issue/PR templates, link-check workflow, `reviews/` migration, data-model extraction). Merged.
+- PR 1 — foundation (project-workflow.md, ADR scaffolding, Issue/PR templates, link-check workflow, `reviews/` migration, data-model extraction). Merged.
 - PR 2 — Resolved Decisions section → 33 ADRs in `decisions/`. Merged.
 - PR 3 — this file + spawn the Star backlog as Issues. (You are reading the result of this PR's first deliverable.)
 - PR 4 — merge `design.md`'s API Surface section into `api-contract.md`; move User Workflows + UI Screens into a new `user-workflows.md`.

@@ -458,8 +458,9 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-04 — Marked PR-B1 sign-off complete (merged 2026-05-04 as PR #25).
 - 2026-05-04 — Marked PR-B2 sign-off complete (merged 2026-05-04 as PR #26).
 - 2026-05-04 — Added PR-F5 (`#[tracing::instrument]` audit on services and handlers) per `tokio.md` § 10. Surfaced and scoped-out during PR #27 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR.
-- 2026-05-04 — Added Stream J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`reviews/design/2026-05-02-entity-codegen-strategy.md`](../reviews/design/2026-05-02-entity-codegen-strategy.md). PR-X1.
+- 2026-05-04 — Added Stream J (Codegen workflow) covering PR-X1 / PR-X2; updated PR-D3 and PR-E3 to drop the `just entities` regen step (entities are now committed source). Closes the codegen-strategy decision recorded at [`docs/designs/2026-05-02-entity-codegen-strategy.md`](./designs/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-04 — Marked PR-X1 sign-off complete (merged 2026-05-04 as PR #28).
 - 2026-05-04 — Marked PR-X2 sign-off complete (merged 2026-05-04 as PR #29).
 - 2026-05-04 — Marked PR-B3 sign-off complete (merged 2026-05-04 as PR #27).
-- 2026-05-05 — Renamed `Phase A`–`Phase J` to `Stream A`–`Stream J` throughout to free the `Phase` namespace for build phases only, per the cup-name milestone convention adopted in the design record's 2026-05-05 amendment ([`reviews/design/2026-05-04-design-doc-restructure.md`](../reviews/design/2026-05-04-design-doc-restructure.md) §12.5 #2).
+- 2026-05-05 — Renamed `Phase A`–`Phase J` to `Stream A`–`Stream J` throughout to free the `Phase` namespace for build phases only, per the cup-name milestone convention adopted in the design record's 2026-05-05 amendment ([`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12.5 #2).
+- 2026-05-08 — Repaired two broken `reviews/design/` markdown links in document history entries (lines 461, 465). Old `../reviews/design/...` paths now point at `./designs/...` per the PR 1 migration. Closes part of Issue #42. PR 5 of the docs restructure.
