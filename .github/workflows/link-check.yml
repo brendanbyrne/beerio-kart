@@ -25,14 +25,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Run lychee
+      # Two-pass retry: most runs end at attempt 1. Attempt 2 fires only
+      # if attempt 1 fails, and catches transient transport-level blips
+      # (connection-resets, brief upstream outages) that lychee's internal
+      # --max-retries can't ride out on its own. URL exclusions live in
+      # `.lycheeignore`. Lychee's retry config: --max-retries / --retry-
+      # wait-time / --timeout — exponential backoff, ~35s of retry window
+      # per URL across 4 attempts.
+      - name: Run lychee (attempt 1)
+        id: lychee1
+        continue-on-error: true
         uses: lycheeverse/lychee-action@v2
         with:
-          # URL exclusions live in `.lycheeignore` at the repo root.
-          # --max-retries / --retry-wait-time / --timeout ride out transient
-          # upstream blips (github.com 502s, slow blog hosts) without
-          # excluding otherwise-good URLs. Backoff is exponential, so 3s
-          # initial gives ~35s of retry window per URL across 4 attempts.
+          args: --verbose --no-progress --max-retries 4 --retry-wait-time 3 --timeout 30 --exclude-path docs/drafts --exclude-path docs/handoffs './**/*.md'
+          fail: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run lychee (attempt 2 if attempt 1 failed)
+        if: steps.lychee1.outcome == 'failure'
+        uses: lycheeverse/lychee-action@v2
+        with:
           args: --verbose --no-progress --max-retries 4 --retry-wait-time 3 --timeout 30 --exclude-path docs/drafts --exclude-path docs/handoffs './**/*.md'
           fail: true
         env:
