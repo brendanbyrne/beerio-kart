@@ -29,7 +29,11 @@ jobs:
         uses: lycheeverse/lychee-action@v2
         with:
           # URL exclusions live in `.lycheeignore` at the repo root.
-          args: --verbose --no-progress --exclude-path docs/drafts --exclude-path docs/handoffs './**/*.md'
+          # --max-retries / --retry-wait-time / --timeout ride out transient
+          # upstream blips (github.com 502s, slow blog hosts) without
+          # excluding otherwise-good URLs. Backoff is exponential, so 3s
+          # initial gives ~35s of retry window per URL across 4 attempts.
+          args: --verbose --no-progress --max-retries 4 --retry-wait-time 3 --timeout 30 --exclude-path docs/drafts --exclude-path docs/handoffs './**/*.md'
           fail: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
