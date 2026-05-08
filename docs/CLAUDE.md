@@ -115,9 +115,10 @@ The root `CLAUDE.md` requires `docs/` files to maintain a `## Document history` 
 - ADRs (`decisions/`) — frontmatter has `date`; the ADR is intrinsically historical.
 - `roadmap.md` — task tracking; history lives in Issues / Project board.
 
-The rule still applies to `design.md`, `data-model.md`, `workflows.md`, `api-contract.md`, `coding-standards/*`, `designs/*` records, and `research/*` files.
+The rule still applies to `design.md`, `data-model.md`, `user-workflows.md`, `api-contract.md`, `coding-standards/*`, `designs/*` records, and `research/*` files.
 
 ## Document history
 
 - 2026-05-05 — Initial install as part of PR 1 (docs restructure foundation). Sourced from `WIP_pr1-docs-claude.md`. PR #41.
 - 2026-05-05 — Added `### Stripping the WIP_ comment header at install time` subsection under "Drafts → designs lifecycle" with the `awk` fallback pattern and the single-line-WIP-comment convention. Surfaced by Claude Code's post-PR-1 handoff (item 6) after `tail -n +2` mis-stripped a multi-line WIP comment in `docs/workflow.md`.
+- 2026-05-06 — Updated the document-history rule's file list: `workflows.md` → `user-workflows.md` (renamed in PR 4 due to grep collision with operational `workflow.md`).

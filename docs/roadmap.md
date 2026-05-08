@@ -89,7 +89,7 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 - PR 1 — foundation (workflow.md, ADR scaffolding, Issue/PR templates, link-check workflow, `reviews/` migration, data-model extraction). Merged.
 - PR 2 — Resolved Decisions section → 33 ADRs in `decisions/`. Merged.
 - PR 3 — this file + spawn the Star backlog as Issues. (You are reading the result of this PR's first deliverable.)
-- PR 4 — merge `design.md`'s API Surface section into `api-contract.md`; move User Workflows + UI Screens into a new `workflows.md`.
+- PR 4 — merge `design.md`'s API Surface section into `api-contract.md`; move User Workflows + UI Screens into a new `user-workflows.md`.
 - PR 5 — final `design.md` trim to ~250 lines + repo-root `README.md` + cross-reference cleanup.
 - PR 6 (optional) — nested `backend/CLAUDE.md` and `frontend/CLAUDE.md`.
 
