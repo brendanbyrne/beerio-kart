@@ -78,7 +78,7 @@
 
 - **Rule:** Use `DeriveIntoActiveModel` on request DTOs so route handlers go directly from `Json<CreateRunRequest>` to `ActiveModel`.
   - **Why:** Cuts boilerplate; `Option<T>` fields naturally become `NotSet` when absent, which is exactly what you want for partial updates.
-  - **Source:** <https://www.sea-ql.org/SeaORM/docs/advanced-query/custom-active-model/>
+  - **Source:** <https://www.sea-ql.org/SeaORM/docs/1.1.x/advanced-query/custom-active-model/>
 
 ## 2. Find / query patterns
 
@@ -105,7 +105,7 @@
     let participants: Vec<Vec<session_participants::Model>> =
         sessions.load_many(session_participants::Entity, db).await?;
     ```
-  - **Source:** <https://www.sea-ql.org/SeaORM/docs/relation/data-loader/>
+  - **Source:** <https://www.sea-ql.org/SeaORM/docs/1.1.x/relation/data-loader/>
 
 - **Rule:** Compose multi-clause `WHERE`s with `Condition::all()` / `Condition::any()` when mixing AND and OR. Don't chain `.filter()` for that case.
   - **Why:** Chained `.filter()` is always AND. Mixing it with a `Condition::any()` argument has produced order-of-operations bugs (sea-query #414).
@@ -408,3 +408,4 @@ A single-screen review checklist:
 - 2026-05-02 — Removed the live-instance reference from § 11 after `sessions.created_by` was dropped (PR #23). Multi-FK rule retained for any future table that reuses a target.
 - 2026-05-04 — Hand-written entities convention. § 6 rewritten and § 11 reworded to drop the "trust codegen" framing in favor of declarative guidance for owned entity files. Closes the codegen-strategy decision recorded at [`docs/designs/2026-05-02-entity-codegen-strategy.md`](../designs/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-05 — Rewrote active-prose `reviews/design/` references to `docs/designs/` paths (§ 6 paragraph and § 6 Source bullet) as part of PR 1 (docs restructure foundation). PR #41.
+- 2026-05-08 — Pinned two broken SeaORM doc URLs to the `1.1.x` versioned path: `/SeaORM/docs/advanced-query/custom-active-model/` and `/SeaORM/docs/relation/data-loader/`. Both pages 404 on the unversioned (latest) path, likely because the SeaORM site is mid-restructure; pinning to `1.1.x` (which matches the `sea-orm = "1"` dep in `backend/Cargo.toml`) resolves to a stable page. The eight other SeaORM URLs in this file are left unversioned (they still resolve). PR 5 of the docs restructure (plan deviation — surfaced when lychee `fail: true` flipped on).

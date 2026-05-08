@@ -550,7 +550,7 @@ These are decisions Brendan should make before §12 kicks off:
 - [GitHub Repository Rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
 - [GitHub workflow concurrency docs](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
 - [`DavidAnson/markdownlint-cli2-action`](https://github.com/DavidAnson/markdownlint-cli2-action)
-- [`lycheeverse/lychee-action`](https://github.com/lycheeverse/lychee-action) and [recipes](https://lychee.cli.rs/github_action_recipes/check-repository/)
+- [`lycheeverse/lychee-action`](https://github.com/lycheeverse/lychee-action) and [GitHub Actions setup guide](https://lychee.cli.rs/continuous-integration/github/)
 - [`release-plz`](https://github.com/release-plz/release-plz) and [Orhun's release automation post](https://blog.orhun.dev/automated-rust-releases/)
 
 ---
@@ -558,3 +558,4 @@ These are decisions Brendan should make before §12 kicks off:
 ## Document history
 
 - 2026-05-05 — Created in `docs/research/` by splitting from the 2026-05-04 `reviews/design/2026-05-04-ci-research.md` per the triage decision in `docs/designs/2026-05-04-design-doc-restructure.md` §6.5. PR #41.
+- 2026-05-08 — Repaired broken lychee-action recipes URL in the "Repo & workflow hygiene" bullet: `https://lychee.cli.rs/github_action_recipes/check-repository/` → `https://lychee.cli.rs/continuous-integration/github/`. Old path was removed in lychee's site redesign; new path is the closest equivalent (CI integration guide). Updated link text to match. PR 5 of the docs restructure (plan deviation — surfaced when lychee `fail: true` flipped on).

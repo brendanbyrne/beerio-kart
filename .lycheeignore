@@ -1,0 +1,27 @@
+# URLs lychee should skip. One regex per line.
+#
+# Each entry below is a real, working link that lychee can't verify from
+# CI — either because the host blocks unauthenticated scrapers (Medium,
+# Fandom, Speedrun, Gitconnected), the URL requires GitHub login (user
+# project boards), or it routinely times out under CI's network conditions.
+# The links are useful to readers; lychee just can't confirm them.
+#
+# Add entries narrowly — prefer host-specific patterns over broad TLD
+# wildcards. Comment the reason on the same line for traceability.
+
+# GitHub user-scope project boards: 200 to logged-in users, 404 to scrapers.
+github\.com/users/brendanbyrne/projects/
+
+# Medium and Medium-family hosts: 403 anti-bot on all unauthenticated traffic.
+medium\.com
+levelup\.gitconnected\.com
+
+# Speedrun.com forums: 403 anti-bot.
+www\.speedrun\.com
+
+# Fandom (Mario Kart Racing Wiki and friends): 403 anti-bot. Referenced
+# from frontend/{public,dist}/images/README.md when those READMEs exist.
+mariokart\.fandom\.com
+
+# nx.dev/docs: routinely times out under GitHub Actions network conditions.
+nx\.dev/docs/

@@ -18,6 +18,7 @@ jobs:
       - name: Run lychee
         uses: lycheeverse/lychee-action@v2
         with:
+          # URL exclusions live in `.lycheeignore` at the repo root.
           args: --verbose --no-progress --exclude-path docs/drafts --exclude-path docs/handoffs './**/*.md'
           fail: true
         env:
