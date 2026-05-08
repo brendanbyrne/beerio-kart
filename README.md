@@ -2,31 +2,94 @@
 
 [![codecov](https://codecov.io/gh/brendanbyrne/beerio-kart/graph/badge.svg)](https://codecov.io/gh/brendanbyrne/beerio-kart)
 
-We're really doing this thing.  There are two goals with this project.
+There are two goals with this project.
 * A mobile-first web app for tracking times and stats for the Mario Kart 8 Deluxe drinking game. Players race time trials, drink something bubbly, and the app tracks personal bests, leaderboards, and run history.
 * Experimenting with using LLMs, with the intent to never write a line of actual code.  A test to see how far I can push a purely vibe coded project.
 
-## Project layout
+## Project structure
 
-| Path | What's there |
-|------|--------------|
-| [`backend/`](./backend) | Rust API server (Axum, SeaORM, SQLite). See [`backend/README.md`](./backend/README.md). |
-| [`frontend/`](./frontend) | React + TypeScript + Vite mobile-first web app. See [`frontend/README.md`](./frontend/README.md). |
-| [`docs/`](./docs) | Project documentation — see below. |
-| [`reviews/`](./reviews) | Design and PR review records (`reviews/design/`, `reviews/pr/`). |
-| [`data/`](./data) | Seed data (tracks, characters, etc.) and the gitignored SQLite DB / uploads. |
-| [`compose.yaml`](./compose.yaml), [`Dockerfile`](./Dockerfile) | Single-container deployment. |
-| [`justfile`](./justfile) | Developer workflow recipes. |
+```
+beerio-kart/
+├── .claude/                       # AI assistant context
+│   ├── CLAUDE.md                  # Project conventions (every-session read)
+│   ├── claude-code-notes.md       # Claude Code self-notes across sessions
+│   └── cowork-notes.md            # Cowork self-notes across sessions
+│
+├── .github/
+│   ├── ISSUE_TEMPLATE/            # bug.md, feature.md
+│   ├── pull_request_template.md
+│   └── workflows/                 # link-check.yml (lychee), coverage.yml
+│
+├── backend/                       # Rust + Axum API server
+│   ├── Cargo.toml
+│   ├── README.md
+│   ├── migration/                 # SeaORM migrations (single consolidated file prelaunch)
+│   ├── src/
+│   │   ├── main.rs                # Axum server setup, routing
+│   │   ├── lib.rs
+│   │   ├── config.rs              # Environment/config management
+│   │   ├── db.rs                  # DB connection + migration runner
+│   │   ├── error.rs               # AppError unified error type
+│   │   ├── seed.rs                # Pre-seeded data loader
+│   │   ├── test_helpers.rs        # Shared test utilities
+│   │   ├── domain/                # Domain primitives (enums, IDs, race setup)
+│   │   ├── entities/              # Hand-written SeaORM entities (per ADR 0023)
+│   │   ├── middleware/            # JWT extractors
+│   │   ├── routes/                # HTTP handlers per resource
+│   │   └── services/              # Business logic layer
+│   └── tests/                     # Integration + verification tests
+│
+├── frontend/                      # React + Vite + TypeScript + Tailwind
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tsconfig.*.json
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── public/                    # favicon.svg
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx
+│       ├── api/                   # API client functions
+│       ├── components/            # Reusable UI components
+│       ├── hooks/                 # Custom React hooks
+│       ├── pages/                 # Screen-level components
+│       └── utils/                 # time.ts, etc.
+│
+├── docs/                          # Project documentation — see Documentation below
+│
+├── tools/                         # Developer CLI utilities (login, register, change-password, ...)
+│
+├── data/
+│   ├── *.json                     # MK8D seed data (tracks, characters, bodies, wheels, gliders, cups, drink_types)
+│   ├── db/                        # SQLite database file (gitignored)
+│   └── uploads/                   # User-uploaded run photos (gitignored)
+│
+├── compose.yaml, Dockerfile       # Single-container deployment (Axum serves API + frontend bundle)
+├── justfile                       # Developer workflow recipes (`just dev`, `just test`, ...)
+├── package.json, bun.lock         # Bun root workspace + dev tooling (lefthook hooks)
+├── lefthook.yml                   # Pre-commit hook config
+├── codecov.yml                    # Codecov upload config
+├── rustfmt.toml                   # Rustfmt rules (uses nightly-only options)
+└── .env.example                   # Copy to `.env`; set JWT_SECRET to a random string
+```
 
 ## Documentation
 
-Everything lives in [`docs/`](./docs):
+Everything lives in [`docs/`](./docs). Start with [`docs/README.md`](./docs/README.md) — it's a short index that routes you to the right file based on what you're doing.
 
-- **[`docs/design.md`](./docs/design.md)** — Architecture design document. Single source of truth for the project's design decisions and data model. Read this first.
-- **[`docs/api-contract.md`](./docs/api-contract.md)** — Wire-format conventions between backend and frontend (error codes, ETag polling, idempotency keys, time format).
-- **[`docs/coding-standards/`](./docs/coding-standards)** — Backend coding standards split by area: general Rust (`rust.md`), SeaORM (`seaorm.md`), async/Tokio (`tokio.md`), plus a `README.md` index.
+The shape:
+
+- **[`docs/design.md`](./docs/design.md)** — Architectural overview: rules of the game, principles, tech stack, observability, naming. Read this first.
+- **[`docs/data-model.md`](./docs/data-model.md)** — Database schema, table definitions, schema-design decisions.
+- **[`docs/api-contract.md`](./docs/api-contract.md)** — Endpoint catalog plus wire-format conventions (error codes, ETag polling, idempotency, time format).
+- **[`docs/user-workflows.md`](./docs/user-workflows.md)** — End-user flows (registration → racing → stats → admin) and screen-by-screen UI breakdown.
+- **[`docs/roadmap.md`](./docs/roadmap.md)** — Cup-by-cup narrative of where the project is going (Mushroom, Flower, Star, Special, ...).
+- **[`docs/project-workflow.md`](./docs/project-workflow.md)** — Operational guide: Issue lifecycle, milestone conventions, PR conventions, triage, multi-assistant coordination.
 - **[`docs/compliance-plan.md`](./docs/compliance-plan.md)** — Sequenced PRs to bring the existing code into compliance with the coding standards.
-- **[`docs/research/`](./docs/research)** — Long-form exploration and primary-source evaluation of approaches we haven't decided on yet (e.g., OCR strategy, SeaORM 2.0 evaluation). Reference-only — these aren't authoritative until they crystallize into `design.md` or `coding-standards/`.
+- **[`docs/decisions/`](./docs/decisions)** — Architecture Decision Records in MADR format. Searchable index in [`docs/decisions/README.md`](./docs/decisions/README.md).
+- **[`docs/designs/`](./docs/designs)** — Design records: durable narratives of design sessions that produced one or more ADRs.
+- **[`docs/coding-standards/`](./docs/coding-standards)** — Backend coding standards split by area: general Rust, SeaORM, Tokio.
+- **[`docs/research/`](./docs/research)** — Long-form technical investigations that inform designs but don't propose decisions themselves.
 
 ## Prerequisites
 
