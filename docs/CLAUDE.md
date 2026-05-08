@@ -12,7 +12,7 @@ This file is loaded automatically when Claude works in `docs/`. It captures conv
 | Long-form technical investigation that informs designs but doesn't propose a decision | `research/<topic>.md` |
 | A phase's narrative goals and success criteria | `roadmap.md` |
 | A unit of executable work for Claude Code | A GitHub Issue (not a file) |
-| Non-task communication between Cowork and Claude Code | `docs/handoffs/cowork-handoff.md` or `docs/handoffs/claude-code-handoff.md` |
+| Non-task communication between Cowork and Claude Code | `.agents/handoffs/cowork-handoff.md` or `.agents/handoffs/claude-code-handoff.md` |
 | PR review feedback | A GitHub PR comment, line-anchored where possible (not a file) |
 | Project workflow convention (Issue lifecycle, branch naming, statuses, triage) | `project-workflow.md` |
 
@@ -115,7 +115,7 @@ The root `CLAUDE.md` requires `docs/` files to maintain a `## Document history` 
 - ADRs (`decisions/`) — frontmatter has `date`; the ADR is intrinsically historical.
 - `roadmap.md` — task tracking; history lives in Issues / Project board.
 
-The rule still applies to `design.md`, `data-model.md`, `user-workflows.md`, `api-contract.md`, `coding-standards/*`, `designs/*` records, and `research/*` files.
+The rule applies to in-scope files in `docs/`: `design.md`, `data-model.md`, `user-workflows.md`, `api-contract.md`, `coding-standards/*`, `designs/*` records, and `research/*` files. CLAUDE.md files (root `.claude/CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`, and this file) are not in scope — they describe current behavior, not its history. Initial-creation history sections are fine but not required for ongoing edits.
 
 ## Document history
 
@@ -123,3 +123,4 @@ The rule still applies to `design.md`, `data-model.md`, `user-workflows.md`, `ap
 - 2026-05-05 — Added `### Stripping the WIP_ comment header at install time` subsection under "Drafts → designs lifecycle" with the `awk` fallback pattern and the single-line-WIP-comment convention. Surfaced by Claude Code's post-PR-1 handoff (item 6) after `tail -n +2` mis-stripped a multi-line WIP comment in `docs/workflow.md`.
 - 2026-05-06 — Updated the document-history rule's file list: `workflows.md` → `user-workflows.md` (renamed in PR 4 due to grep collision with operational `workflow.md`).
 - 2026-05-08 — Updated the "Where does this content go?" table: project-workflow row now points at `project-workflow.md` (operational doc renamed from `workflow.md` for clarity now that `user-workflows.md` is its sibling).
+- 2026-05-08 — Updated handoff path in the "Where does this content go?" table (`docs/handoffs/...` → `.agents/handoffs/...`). Updated the Document history rule scope to clarify that CLAUDE.md files (root, nested backend/frontend, and this file itself) are out of scope; rule applies to `docs/` content files only. Companions to the AI-state reorg in [#79](https://github.com/brendanbyrne/beerio-kart/issues/79) and the nested CLAUDE.md introduction in [#38](https://github.com/brendanbyrne/beerio-kart/issues/38).
