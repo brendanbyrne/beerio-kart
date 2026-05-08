@@ -54,7 +54,7 @@ Before opening a PR that touches the backend, skim these:
 - **[`../docs/api-contract.md`](../docs/api-contract.md)** — Wire-format decisions (error codes, ETag polling, idempotency keys, time format).
 - **[`../docs/compliance-plan.md`](../docs/compliance-plan.md)** — Sequenced PRs to bring the existing code to the standard. If you're picking work, look here.
 
-If a PR introduces a pattern not covered by the standards, propose an addition in a `reviews/design/` checkbox session before merging.
+If a PR introduces a pattern not covered by the standards, propose an addition in a design record under [`../docs/designs/`](../docs/designs) before merging.
 
 ## Justfile recipes
 
