@@ -31,9 +31,9 @@ If you find yourself composing a substantive response in chat that the other ass
 
 ## Don't prescribe branch names
 
-Handoffs **must not** suggest branch names. Branch naming follows `docs/workflow.md` § PR conventions: `<issue_number>/<short-slug>` for Issue-linked PRs, `<slug>` for chore PRs. Claude Code derives the branch name from the linked Issue automatically — handoffs only need to point at the Issue.
+Handoffs **must not** suggest branch names. Branch naming follows `docs/project-workflow.md` § PR conventions: `<issue_number>/<short-slug>` for Issue-linked PRs, `<slug>` for chore PRs. Claude Code derives the branch name from the linked Issue automatically — handoffs only need to point at the Issue.
 
-Why: early Cowork handoffs prescribed branch names that contradicted the convention (e.g., suggesting `docs/pr1-restructure-foundation` for an Issue-linked PR when convention says `33/restructure-foundation`). Claude Code reasonably treated the handoff suggestion as more specific than workflow.md's general rule and used the wrong name twice. Removing the suggestion entirely closes the failure mode.
+Why: early Cowork handoffs prescribed branch names that contradicted the convention (e.g., suggesting `docs/pr1-restructure-foundation` for an Issue-linked PR when convention says `33/restructure-foundation`). Claude Code reasonably treated the handoff suggestion as more specific than project-workflow.md's general rule and used the wrong name twice. Removing the suggestion entirely closes the failure mode.
 
 If you genuinely need to constrain the slug (e.g., the same Issue is being split across two parallel branches), describe the constraint in prose — "use slug `pre-flight-checks` since `add-leaderboard` is the other split" — but never the full branch name.
 
@@ -58,3 +58,4 @@ Cowork's `Write` and `Edit` tools refuse to write any file under `.claude/`. The
 
 - 2026-05-05 — Initial creation as part of the handoff-convention move from `.claude/` to `docs/handoffs/`.
 - 2026-05-05 — Added "Don't prescribe branch names" subsection. Cowork's first two handoffs (CLAUDE.md milestone-naming, PR 1 foundation) suggested branch names that contradicted `docs/workflow.md` § PR conventions; Claude Code followed the (wrong) suggestions both times. Convention is now to omit branch suggestions from handoffs entirely.
+- 2026-05-08 — Updated the "Don't prescribe branch names" subsection's `workflow.md` references → `project-workflow.md` (operational doc renamed for clarity).
