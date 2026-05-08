@@ -4,7 +4,7 @@
 >
 > **Not in this file.** Game rules, design principles, tech stack, and architecture live in [`design.md`](./design.md). Endpoint catalog and wire-format conventions live in [`api-contract.md`](./api-contract.md). Database schema lives in [`data-model.md`](./data-model.md). For project-operational workflow (Issue lifecycle, milestones, PRs, triage), see [`workflow.md`](./workflow.md) — note the singular "workflow," distinct from this file.
 
-The workflows below reference UI Screens by number (e.g., "lands on the session screen — see § 2.3"). Screens are listed in § 2.
+UI Screens are listed in § 2.
 
 ---
 
