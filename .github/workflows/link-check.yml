@@ -10,11 +10,21 @@ on:
     paths:
       - '**/*.md'
 
+concurrency:
+  group: link-check-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   link-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Run lychee
         uses: lycheeverse/lychee-action@v2
         with:
