@@ -5,8 +5,8 @@ Start with `design.md` if you're new.
 ## I want to…
 
 - **Touch the database schema** → `data-model.md` + relevant ADRs in `decisions/`.
-- **Build or change an endpoint** → `api-contract.md` + `workflows.md`.
-- **Add a session ruleset** → `workflows.md` (session loop) + a new ADR.
+- **Build or change an endpoint** → `api-contract.md` + `user-workflows.md`.
+- **Add a session ruleset** → `user-workflows.md` (session loop) + a new ADR.
 - **Understand why a decision was made** → `decisions/` (search the index).
 - **Read background research on a topic** → `research/`.
 - **Plan or pick up phase work** → `roadmap.md` + GitHub Issues.
@@ -18,7 +18,7 @@ Start with `design.md` if you're new.
 
 - `design.md` — architectural overview (rules, principles, tech stack)
 - `data-model.md` — database schema
-- `workflows.md` — user workflows + UI screens
+- `user-workflows.md` — user workflows + UI screens
 - `api-contract.md` — wire-format conventions and endpoint list
 - `roadmap.md` — phase narrative
 - `workflow.md` — operational workflow (Issue lifecycle, branch naming, triage, multi-assistant coordination)
