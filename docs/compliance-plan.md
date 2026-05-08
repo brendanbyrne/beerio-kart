@@ -370,7 +370,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Scope:**
   - Update `.claude/` (or wherever the code-review skill is configured) to read `docs/coding-standards/README.md` first when starting a review.
   - The skill should identify which area files (`rust.md`, `seaorm.md`, `tokio.md`) the PR diff touches and load only those.
-  - Findings get written to `reviews/pr/` (existing convention).
+  - Findings get posted as GitHub PR review comments (line-anchored where possible) per [`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §8.8.
 - **Standards refs:** Workflow improvement; not a code rule.
 - **Effort:** S–M.
 - **Dependencies:** Doc split lands (already done).
@@ -464,3 +464,4 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-04 — Marked PR-B3 sign-off complete (merged 2026-05-04 as PR #27).
 - 2026-05-05 — Renamed `Phase A`–`Phase J` to `Stream A`–`Stream J` throughout to free the `Phase` namespace for build phases only, per the cup-name milestone convention adopted in the design record's 2026-05-05 amendment ([`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12.5 #2).
 - 2026-05-08 — Repaired two broken `reviews/design/` markdown links in document history entries (lines 461, 465). Old `../reviews/design/...` paths now point at `./designs/...` per the PR 1 migration. Closes part of Issue #42. PR 5 of the docs restructure.
+- 2026-05-08 — Updated PR-I1 scope: "Findings get written to `reviews/pr/`" → "Findings get posted as GitHub PR review comments per [`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §8.8." `reviews/pr/` was retired in the docs restructure; live-prose references should match the new convention. Closes part of [#89](https://github.com/brendanbyrne/beerio-kart/issues/89).

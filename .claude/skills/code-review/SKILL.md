@@ -149,7 +149,7 @@ Notes on the API:
 
 After posting, verify with `gh api repos/<owner>/<repo>/pulls/<number>/reviews/<review-id>/comments --jq '.[] | {path, position, body: (.body[0:80])}'` — `position` (legacy diff-position field) being non-null confirms the inline anchored correctly even when `line` returns null.
 
-**Confirm with the user before posting.** Posting publishes findings to anyone who can see the PR. Once approved, post via the single review POST as the default mechanism — no other tiers, no markdown file in `reviews/pr/`. The `reviews/pr/` directory was retired by `docs/designs/2026-05-04-design-doc-restructure.md` § 8.8: PR review feedback now lives entirely on GitHub.
+**Confirm with the user before posting.** Posting publishes findings to anyone who can see the PR. Once approved, post via the single review POST as the default mechanism — no other tiers, no markdown file output. PR review feedback lives entirely on GitHub per `docs/designs/2026-05-04-design-doc-restructure.md` § 8.8.
 
 ## What to look for
 
