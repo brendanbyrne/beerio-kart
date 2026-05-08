@@ -10,7 +10,7 @@ Start with `design.md` if you're new.
 - **Understand why a decision was made** → `decisions/` (search the index).
 - **Read background research on a topic** → `research/`.
 - **Plan or pick up phase work** → `roadmap.md` + GitHub Issues.
-- **Look up a workflow convention** (Issue lifecycle, branch naming, statuses, triage) → `workflow.md`.
+- **Look up a workflow convention** (Issue lifecycle, branch naming, statuses, triage) → `project-workflow.md`.
 - **Write a new design record** → start a draft in `drafts/`. Promote to `designs/` when signed off.
 - **Follow the coding standards** → `coding-standards/`.
 
@@ -21,7 +21,7 @@ Start with `design.md` if you're new.
 - `user-workflows.md` — user workflows + UI screens
 - `api-contract.md` — wire-format conventions and endpoint list
 - `roadmap.md` — phase narrative
-- `workflow.md` — operational workflow (Issue lifecycle, branch naming, triage, multi-assistant coordination)
+- `project-workflow.md` — operational workflow (Issue lifecycle, branch naming, triage, multi-assistant coordination)
 - `decisions/` — Architecture Decision Records (MADR format)
 - `designs/` — design records (durable narrative of how decisions were reached)
 - `drafts/` — work-in-progress design records (gitignored except `WIP_*.md`)
