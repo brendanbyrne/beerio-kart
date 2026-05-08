@@ -26,12 +26,12 @@ If you find yourself composing a substantive response in chat that the other ass
 
 ## What does NOT go here
 
-- **Self-notes / session state.** Those go in `.claude/cowork-notes.md` (Cowork) or `.claude/claude-code-notes.md` (Claude Code). Self-notes are persistent memory you keep for your own future sessions; handoffs are one-way coordination channels to the *other* assistant. Mixing them breaks the existence-as-signal rule.
+- **Self-notes / session state.** Those go in `.agents/memory/cowork.md` (Cowork) or `.agents/memory/claude-code.md` (Claude Code). Self-notes are persistent memory you keep for your own future sessions; handoffs are one-way coordination channels to the *other* assistant. Mixing them breaks the existence-as-signal rule.
 - **Anything intended for git history.** This directory is gitignored except for this README — handoffs are by definition transient and shouldn't pollute the log.
 
 ## Don't prescribe branch names
 
-Handoffs **must not** suggest branch names. Branch naming follows `docs/project-workflow.md` § PR conventions: `<issue_number>/<short-slug>` for Issue-linked PRs, `<slug>` for chore PRs. Claude Code derives the branch name from the linked Issue automatically — handoffs only need to point at the Issue.
+Handoffs **must not** suggest branch names. Branch naming follows [`docs/project-workflow.md`](../../docs/project-workflow.md) § PR conventions: `<issue_number>/<short-slug>` for Issue-linked PRs, `<slug>` for chore PRs. Claude Code derives the branch name from the linked Issue automatically — handoffs only need to point at the Issue.
 
 Why: early Cowork handoffs prescribed branch names that contradicted the convention (e.g., suggesting `docs/pr1-restructure-foundation` for an Issue-linked PR when convention says `33/restructure-foundation`). Claude Code reasonably treated the handoff suggestion as more specific than project-workflow.md's general rule and used the wrong name twice. Removing the suggestion entirely closes the failure mode.
 
@@ -39,23 +39,24 @@ If you genuinely need to constrain the slug (e.g., the same Issue is being split
 
 ## Lifecycle and constraints
 
-- **Cowork → Claude Code** is the easy direction. Cowork writes the file (via the normal Write tool — `docs/` is not in Cowork's protected zone). Claude Code reads it, applies the changes, commits, opens a PR, and `rm`s the handoff file as part of the PR. One round trip.
+- **Cowork → Claude Code** is the easy direction. Cowork writes the file (via the normal Write tool — `.agents/` is not in Cowork's protected zone). Claude Code reads it, applies the changes, commits, opens a PR, and `rm`s the handoff file as part of the PR. One round trip.
 - **Claude Code → Cowork** is messier because Cowork can't delete files. The flow:
   1. Claude Code writes `claude-code-handoff.md` and pushes (or just leaves it on the working tree, since it's gitignored).
   2. Cowork reads it on next session start and addresses it in chat.
-  3. Cowork tells Brendan it's been addressed and asks for the file to be deleted, OR notes in `.claude/cowork-notes.md` that the next Claude Code session should `rm` it.
+  3. Cowork tells Brendan it's been addressed and asks for the file to be deleted, OR notes in `.agents/memory/cowork.md` that the next Claude Code session should `rm` it.
   4. Brendan or Claude Code deletes the file.
 
 Yes, this is awkward — it's the cost of Cowork's sandbox blocking `unlink()` (which is otherwise the *right* default for an AI agent that shouldn't be deleting files unsupervised).
 
-## Why `docs/handoffs/` and not `.claude/`
+## Why `.agents/` and not `.claude/`
 
-Cowork's `Write` and `Edit` tools refuse to write any file under `.claude/`. The error string is "resolves to a protected location or a path outside the connected folder," and it's a Cowork tool-layer rule, not a filesystem permission — bash writes to `.claude/` succeed. The point of the rule is to prevent Cowork from silently rewriting its own context (`.claude/CLAUDE.md`, skills, `settings.local.json`), which is a healthy default for an AI agent. We don't want to poke holes in it just for handoffs.
+`.claude/` is reserved for low-churn project conventions read every session — `CLAUDE.md`, skills, `settings.local.json`. Mixing high-churn agent state (memory, transient handoffs) with stable conventions made `.claude/` harder to scan and conceptually muddy. `.agents/` is the deliberate home for high-churn state, separate from conventions.
 
-`docs/handoffs/` sits outside the protected zone, supports the normal file tools, and reads naturally to humans browsing the repo.
+There's also a Cowork tool-layer constraint that made the older `docs/handoffs/` location necessary: Cowork's `Write` and `Edit` tools refuse to write any file under `.claude/`. The error string is "resolves to a protected location or a path outside the connected folder," and the rule prevents Cowork from silently rewriting its own context (`.claude/CLAUDE.md`, skills, `settings.local.json`). That protection is healthy and we don't want to poke holes in it for handoffs. `.agents/` sits outside the protected zone, so the normal file tools work — and the conceptual separation is a happy bonus rather than just a workaround.
 
 ## Document history
 
 - 2026-05-05 — Initial creation as part of the handoff-convention move from `.claude/` to `docs/handoffs/`.
 - 2026-05-05 — Added "Don't prescribe branch names" subsection. Cowork's first two handoffs (CLAUDE.md milestone-naming, PR 1 foundation) suggested branch names that contradicted `docs/workflow.md` § PR conventions; Claude Code followed the (wrong) suggestions both times. Convention is now to omit branch suggestions from handoffs entirely.
 - 2026-05-08 — Updated the "Don't prescribe branch names" subsection's `workflow.md` references → `project-workflow.md` (operational doc renamed for clarity).
+- 2026-05-08 — Moved from `docs/handoffs/README.md` to `.agents/handoffs/README.md`. Path references throughout updated (`cowork-handoff.md` etc. now live under `.agents/handoffs/`). Self-notes pointer updated from `.claude/cowork-notes.md` → `.agents/memory/cowork.md`. "Why `docs/handoffs/` and not `.claude/`" section rewritten as "Why `.agents/` and not `.claude/`" — same fundamental constraint, but the framing is now "deliberate home for high-churn state" rather than "workaround for the tool-layer block." Closes part of [#79](https://github.com/brendanbyrne/beerio-kart/issues/79).

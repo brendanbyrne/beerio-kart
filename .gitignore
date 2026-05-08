@@ -13,12 +13,13 @@ target/
 # Environment files
 .env
 
-# Assistant handoff files (ephemeral; live under docs/handoffs/, only the README is tracked)
-docs/handoffs/*
-!docs/handoffs/README.md
+# Assistant handoff files (ephemeral; live under .agents/handoffs/, only the README is tracked)
+.agents/handoffs/*
+!.agents/handoffs/README.md
 
-# Assistant self-notes (ephemeral session state)
-.claude/*-notes.md
+# Assistant self-notes (ephemeral session state, live under .agents/memory/)
+.agents/memory/*
+!.agents/memory/.gitkeep
 
 # Tool state (tokens, cookies)
 tools/.state/

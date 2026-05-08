@@ -2,7 +2,7 @@
 
 How work moves through the project — Issues, Milestones, PRs, and the handoffs between Cowork (Claude Desktop) and Claude Code (WSL2 CLI).
 
-This file is the operational guide. For high-level role split see `.claude/CLAUDE.md`; for cached project-board IDs see [`project-field-ids.md`](./project-field-ids.md); for handoff-file mechanics see [`handoffs/README.md`](./handoffs/README.md); for the cup-name milestone convention see the design record at [`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12 (a copy of the cup mapping lands in `docs/roadmap.md` once that file is created in PR 3).
+This file is the operational guide. For high-level role split see `.claude/CLAUDE.md`; for cached project-board IDs see [`project-field-ids.md`](./project-field-ids.md); for handoff-file mechanics see [`.agents/handoffs/README.md`](../.agents/handoffs/README.md); for the cup-name milestone convention see the design record at [`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12 (a copy of the cup mapping lands in `docs/roadmap.md` once that file is created in PR 3).
 
 ## Decision tree: where does this thing belong?
 
@@ -15,8 +15,8 @@ When you have *something* to communicate or capture, route it to one of:
 | **PR comment** | Review feedback. Line-anchored where possible. |
 | **ADR (`docs/decisions/`)** | Durable architectural decision worth being grepped-by-topic later (e.g., "we chose Argon2id"). |
 | **Design record (`docs/designs/`)** | Multi-decision design session that produces ADRs and follow-up Issues. |
-| **Handoff file (`docs/handoffs/`)** | Non-task communication between assistants — research requests, design questions, urgent meta-changes, "this is a tag for those Issues I just filed." |
-| **Self-notes (`.claude/{cowork,claude-code}-notes.md`)** | Session memory you keep for your own future sessions. **Not** a coordination channel. |
+| **Handoff file (`.agents/handoffs/`)** | Non-task communication between assistants — research requests, design questions, urgent meta-changes, "this is a tag for those Issues I just filed." |
+| **Self-notes (`.agents/memory/{cowork,claude-code}.md`)** | Session memory you keep for your own future sessions. **Not** a coordination channel. |
 | **Chat (this conversation)** | Conversational only. Anything substantive that the other assistant needs gets written to one of the above. |
 
 Two clarifying rules:
@@ -254,7 +254,7 @@ Filed for design review: #4 (perf), #56 (race), #3 (follow-up). All on Backlog.
 Two rules that follow:
 
 1. **Don't duplicate Issue content in the handoff.** Details live in the Issues; the handoff just points at them.
-2. **Brendan or the next Claude Code session deletes the handoff** after Cowork acknowledges in chat. Cowork can't delete files (sandbox `unlink()` block per `docs/handoffs/README.md`).
+2. **Brendan or the next Claude Code session deletes the handoff** after Cowork acknowledges in chat. Cowork can't delete files (sandbox `unlink()` block per `.agents/handoffs/README.md`).
 
 The same convention applies in reverse — Cowork → Claude Code handoffs that file Issues use the same minimal format.
 
@@ -263,7 +263,7 @@ The same convention applies in reverse — Cowork → Claude Code handoffs that 
 When Claude Code deviates from a handoff or design record during implementation:
 
 - **Always:** describe the deviation in the PR's "Reviewer notes" section. That's the durable artifact attached to the diff.
-- **Additionally, write `docs/handoffs/claude-code-handoff.md` if** the deviation has implications beyond this PR — the handoff plan was wrong, the design record needs updating, or future PRs are affected. The handoff cross-references the PR with a one-line description of what Cowork needs to address. **Don't duplicate the Reviewer notes content; point at it.**
+- **Additionally, write `.agents/handoffs/claude-code-handoff.md` if** the deviation has implications beyond this PR — the handoff plan was wrong, the design record needs updating, or future PRs are affected. The handoff cross-references the PR with a one-line description of what Cowork needs to address. **Don't duplicate the Reviewer notes content; point at it.**
 
 Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag with action prompts, not a description of the work. Keep it small enough that future Cowork can scan it in seconds.
 
@@ -271,7 +271,7 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 
 - **Anything that fits Issue shape.** That's an Issue, not a handoff.
 - **PR review feedback.** That's a PR comment, line-anchored where possible.
-- **Self-notes.** Those go in `.claude/cowork-notes.md` or `.claude/claude-code-notes.md`.
+- **Self-notes.** Those go in `.agents/memory/cowork.md` or `.agents/memory/claude-code.md`.
 - **Anything intended to outlive the assistant's "I'm done with this" moment.** That goes to a durable artifact — Issue, ADR, design record, or self-notes.
 
 ## Document history
@@ -282,3 +282,4 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 - 2026-05-05 — Hardened the Ready → In Progress transition rule (do it as the *first* action on pickup) and added a paragraph on surfacing workflow-step blockers immediately rather than silently skipping. Surfaced during PR 2 when Claude Code deferred the status move on Issue #39 instead of attempting it (and discovering the `gh` token lacks `read:project` / `project` scopes — now tracked in #44).
 - 2026-05-05 — Removed the now-stale parenthetical from the workflow-step-blocker rule that gave "handoff to Cowork for project-board mutations Claude Code can't do" as the example. Closes the loop with #44 — Claude Code's `gh` token now has `project` scope, so project mutations are no longer routed through Cowork.
 - 2026-05-08 — Renamed file from `workflow.md` to `project-workflow.md`. The s/no-s distinction with the new sibling `user-workflows.md` (added in PR 4) was too fragile (grep noise, easy typos, tab-completion ambiguity); the rename makes intent explicit and matches the doc's `# Project workflow` title. Cross-references updated in `.claude/CLAUDE.md`, `docs/CLAUDE.md`, `docs/README.md`, `docs/handoffs/README.md`, `docs/roadmap.md`, and `docs/user-workflows.md`.
+- 2026-05-08 — Updated handoff and self-notes path references throughout (`docs/handoffs/` → `.agents/handoffs/`, `.claude/*-notes.md` → `.agents/memory/*.md`) per the AI-state reorg in [#79](https://github.com/brendanbyrne/beerio-kart/issues/79).

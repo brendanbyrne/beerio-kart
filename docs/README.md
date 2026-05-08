@@ -27,4 +27,3 @@ Start with `design.md` if you're new.
 - `drafts/` — work-in-progress design records (gitignored except `WIP_*.md`)
 - `research/` — long-form technical investigations that inform designs
 - `coding-standards/` — backend coding standards
-- `handoffs/` — async coordination between Cowork and Claude Code (gitignored except `README.md`)

@@ -10,10 +10,18 @@ There are two goals with this project.
 
 ```
 beerio-kart/
-├── .claude/                       # AI assistant context
+├── .claude/                       # AI assistant project conventions (low-churn)
 │   ├── CLAUDE.md                  # Project conventions (every-session read)
-│   ├── claude-code-notes.md       # Claude Code self-notes across sessions
-│   └── cowork-notes.md            # Cowork self-notes across sessions
+│   ├── skills/                    # Custom AI skills
+│   └── settings.local.json        # Per-developer Claude Code config (gitignored)
+│
+├── .agents/                       # AI assistant per-agent + inter-agent state (high-churn)
+│   ├── memory/                    # Per-agent self-notes across sessions (gitignored)
+│   │   ├── cowork.md              #   Cowork's session memory
+│   │   └── claude-code.md         #   Claude Code's session memory
+│   └── handoffs/                  # Inter-agent transient comms (gitignored except README)
+│       ├── README.md              #   Handoff convention + lifecycle
+│       └── *.md                   #   cowork-handoff.md, claude-code-handoff.md (transient)
 │
 ├── .github/
 │   ├── ISSUE_TEMPLATE/            # bug.md, feature.md
@@ -23,6 +31,7 @@ beerio-kart/
 ├── backend/                       # Rust + Axum API server
 │   ├── Cargo.toml
 │   ├── README.md
+│   ├── CLAUDE.md                  # Backend-specific conventions (loaded when working in backend/)
 │   ├── migration/                 # SeaORM migrations (single consolidated file prelaunch)
 │   ├── src/
 │   │   ├── main.rs                # Axum server setup, routing
@@ -41,6 +50,7 @@ beerio-kart/
 │
 ├── frontend/                      # React + Vite + TypeScript + Tailwind
 │   ├── package.json
+│   ├── CLAUDE.md                  # Frontend-specific conventions (loaded when working in frontend/)
 │   ├── vite.config.ts
 │   ├── tsconfig.*.json
 │   ├── eslint.config.js
