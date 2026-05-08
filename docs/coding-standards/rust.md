@@ -105,7 +105,7 @@ The principle is *parse, don't validate*: turn raw strings/integers from the wir
 
 - **Rule:** Use stdlib refinement types when they fit: `NonZeroI32` for "must be positive" race times, `Duration` for time intervals.
   - **Why:** Free, layout-optimized (`Option<NonZeroI32>` is 4 bytes), self-documenting.
-  - **Source:** <https://doc.rust-lang.org/std/num/struct.NonZeroI32.html>
+  - **Source:** <https://doc.rust-lang.org/std/num/type.NonZeroI32.html>
 
 - **Rule:** Add `#[must_use]` to constructors and to types representing a guard (e.g., `TransactionGuard`).
   - **Why:** `Result` is `#[must_use]` automatically; custom types aren't. A guard whose return value gets dropped silently leaks the resource.
@@ -521,3 +521,4 @@ Anyone modifying Rust code in this repo should have read at least the first thre
 - 2026-05-02 — Initial draft as part of `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into `docs/coding-standards/rust.md`. Added: file length, serde, Cargo.toml hygiene, rustfmt, config/env, feature flags. Tightened type-driven design to commit to `nutype` + entity-boundary conversion. Added "tests trace to requirements, not lines" rule to testing. Added "re-review docs on PR" rule to documentation.
 - 2026-05-04 — Clarified § 8 unwrap/expect rule for test modules vs integration test files: lib code uses `cfg_attr(test, allow(...))`, files under `tests/` use bare `#![allow(...)]` since `cfg(test)` is unconditionally true there. Surfaced during PR-A1 (#24) review.
+- 2026-05-08 — Repaired the broken Rust stdlib doc URL on the `NonZeroI32` rule: `struct.NonZeroI32.html` → `type.NonZeroI32.html` (the type became a type alias for `NonZero<i32>` in Rust 1.79, so the old struct page no longer exists). PR 5 of the docs restructure (plan deviation — surfaced when lychee `fail: true` flipped on).
