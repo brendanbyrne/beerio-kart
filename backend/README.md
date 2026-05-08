@@ -35,11 +35,11 @@ Integration tests live in [`tests/`](./tests); unit tests live inline as `#[cfg(
 | [`src/main.rs`](./src/main.rs) | Server bootstrap, routing, middleware, shutdown |
 | [`src/config.rs`](./src/config.rs) | Environment / config loading |
 | [`src/error.rs`](./src/error.rs) | Unified `AppError` and `IntoResponse` |
-| `src/routes/` | HTTP handlers (one file per resource) |
-| `src/services/` | Business logic (called from routes) |
-| `src/middleware/` | Auth, admin checks |
-| `src/entities/` | Hand-written SeaORM entity types (per ADR 0023) |
-| `src/domain/` | Hand-written domain types (IDs, enums, validated newtypes) |
+| [`src/routes/`](./src/routes) | HTTP handlers (one file per resource) |
+| [`src/services/`](./src/services) | Business logic (called from routes) |
+| [`src/middleware/`](./src/middleware) | Auth, admin checks |
+| [`src/entities/`](./src/entities) | Hand-written SeaORM entity types (per ADR 0023) |
+| [`src/domain/`](./src/domain) | Hand-written domain types (IDs, enums, validated newtypes) |
 | [`migration/`](./migration) | Schema migrations (workspace member crate) |
 
 ## Required reading
