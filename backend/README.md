@@ -38,7 +38,7 @@ Integration tests live in [`tests/`](./tests); unit tests live inline as `#[cfg(
 | `src/routes/` | HTTP handlers (one file per resource) |
 | `src/services/` | Business logic (called from routes) |
 | `src/middleware/` | Auth, admin checks |
-| `src/entities/` | SeaORM-generated entity types (do not hand-edit) |
+| `src/entities/` | Hand-written SeaORM entity types (per ADR 0023) |
 | `src/domain/` | Hand-written domain types (IDs, enums, validated newtypes) |
 | [`migration/`](./migration) | Schema migrations (workspace member crate) |
 
