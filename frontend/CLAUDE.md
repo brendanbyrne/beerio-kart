@@ -6,9 +6,9 @@ Loaded automatically when Claude works in `frontend/`. Captures conventions spec
 
 - **React + TypeScript** for components.
 - **Vite** for the dev server and bundler.
-- **Tailwind CSS** for styling — utility-first, mobile-first by convention.
+- **Tailwind v4** for styling — utility-first, mobile-first by convention. Note v4's CSS-first config (`@theme` blocks, `@import "tailwindcss"`); v3 patterns like `tailwind.config.js` and `@tailwind base/components/utilities` directives don't apply.
 - **Bun** for package management and script running (not npm).
-- **lucide-react** for icons.
+- **react-router-dom** for client-side routing.
 
 ## UI reference device
 
