@@ -9,7 +9,7 @@ Where Beerio Kart is going at the cup-by-cup level. Status of individual work it
 - **This file** is the narrative — each cup gets a section describing the goal, scope, deferred work, and success criteria. When a cup closes, its section keeps a brief retrospective and the cup keeps its name forever.
 - **Future-cup Scope sections double as the future-work record.** Cups not yet active list their work as bullets here, not as GitHub Issues. When a cup becomes the next active work-chunk, its bullets transcribe to Issues at that time and the Scope list in this file gets a "see Milestone X for current status" pointer. This keeps the GitHub Backlog scoped to "things we're committed to right now," not "everything we'd ever want to do."
 
-For the underlying conventions, see [`workflow.md`](./workflow.md) § Milestone lifecycle and [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12.
+For the underlying conventions, see [`project-workflow.md`](./project-workflow.md) § Milestone lifecycle and [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12.
 
 ## Cup mapping
 
@@ -82,7 +82,7 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 
 **Status:** Open, in progress.
 
-**Goal.** Restructure `docs/` from a few large files into a coherent multi-doc structure: ADRs in `decisions/`, design records in `designs/`, narrative in `roadmap.md` and `design.md`, an operational `workflow.md`, and CLAUDE.md files at the right scopes. Settled in [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md).
+**Goal.** Restructure `docs/` from a few large files into a coherent multi-doc structure: ADRs in `decisions/`, design records in `designs/`, narrative in `roadmap.md` and `design.md`, an operational `project-workflow.md`, and CLAUDE.md files at the right scopes. Settled in [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md).
 
 **Scope.** PRs 1–6 of the docs-restructure design record:
 

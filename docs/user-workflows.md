@@ -2,7 +2,7 @@
 
 > **Scope.** End-user-facing flows: how a player navigates the app from registration through racing, viewing stats, and admin review. Plus the screen-by-screen breakdown of what each surface contains.
 >
-> **Not in this file.** Game rules, design principles, tech stack, and architecture live in [`design.md`](./design.md). Endpoint catalog and wire-format conventions live in [`api-contract.md`](./api-contract.md). Database schema lives in [`data-model.md`](./data-model.md). For project-operational workflow (Issue lifecycle, milestones, PRs, triage), see [`workflow.md`](./workflow.md) — note the singular "workflow," distinct from this file.
+> **Not in this file.** Game rules, design principles, tech stack, and architecture live in [`design.md`](./design.md). Endpoint catalog and wire-format conventions live in [`api-contract.md`](./api-contract.md). Database schema lives in [`data-model.md`](./data-model.md). For project-operational workflow (Issue lifecycle, milestones, PRs, triage), see [`project-workflow.md`](./project-workflow.md).
 
 UI Screens are listed in § 2.
 
@@ -178,3 +178,4 @@ Streamlined compared to standalone entry — the track is already known from the
 ## 3. Document history
 
 - 2026-05-06 — Initial creation. Sourced from `design.md` § "User Workflows" (workflows 1-9) and § "UI Screens" (screens 1-7 + shared components). Content copied with two minor editorial changes: the Workflow 1.4 "Phase 3 detailed design" reference updated to "Milestone Star detailed design" (cup-name convention is now canonical), and the screens preamble adds the Pixel 9 Pro reference-device sentence (factored out of `.claude/CLAUDE.md` § UI Reference Device for proximity to the screens themselves). Filename `user-workflows.md` diverges from the design record's proposed `workflows.md` due to grep collision with the operational [`workflow.md`](./workflow.md) — see PR 4 discussion. PR 4 of the docs restructure.
+- 2026-05-08 — Updated the § 0 cross-reference: `workflow.md` → `project-workflow.md` (operational doc renamed for clarity — see that file's history). Dropped the "note the singular 'workflow'" caveat, no longer needed once the filename is unambiguous.

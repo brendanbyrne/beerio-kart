@@ -117,7 +117,7 @@ Cowork can read and write GitHub data — issues, pull requests, project board i
 - **Create or edit project custom fields, status field options (board columns), views, or built-in workflows.** GitHub's API does not expose these — they are configured in the project Settings UI only.
 - **Set Assignees, Labels, Milestone, or Repository via the project field mutation.** Those are properties of the underlying issue/PR; use the issue/PR mutations instead.
 
-**What Claude Code can do via `gh`:** see [`docs/workflow.md`](../docs/workflow.md) § Claude Code's autonomy in moving Issue status for the token scopes, the `updateProjectV2ItemFieldValue` mutation, and the `INSUFFICIENT_SCOPES` recovery.
+**What Claude Code can do via `gh`:** see [`docs/project-workflow.md`](../docs/project-workflow.md) § Claude Code's autonomy in moving Issue status for the token scopes, the `updateProjectV2ItemFieldValue` mutation, and the `INSUFFICIENT_SCOPES` recovery.
 
 **Field IDs reference:** `docs/project-field-ids.md` caches the project's field IDs and Status option IDs. Consult that file before issuing project-board write calls — both Composio MCP and `gh api graphql` require IDs, not names. Update the file if anyone changes the project's fields in the GitHub UI.
 
