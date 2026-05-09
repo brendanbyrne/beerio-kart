@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    domain::{RunId, SessionId, SessionRaceId, UserId},
     entities::{
         bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
         users, wheels,
@@ -35,10 +36,10 @@ pub struct CreateRunRequest {
 
 #[derive(Serialize)]
 pub struct RunDetail {
-    pub id: String,
-    pub user_id: String,
+    pub id: RunId,
+    pub user_id: UserId,
     pub username: String,
-    pub session_race_id: String,
+    pub session_race_id: SessionRaceId,
     pub track_id: i32,
     pub track_time: i32,
     pub lap1_time: i32,
@@ -79,10 +80,10 @@ struct RunDetailRow {
 impl From<RunDetailRow> for RunDetail {
     fn from(r: RunDetailRow) -> Self {
         Self {
-            id: r.id,
-            user_id: r.user_id,
+            id: RunId::new(r.id),
+            user_id: UserId::new(r.user_id),
             username: r.username,
-            session_race_id: r.session_race_id,
+            session_race_id: SessionRaceId::new(r.session_race_id),
             track_id: r.track_id,
             track_time: r.track_time,
             lap1_time: r.lap1_time,
@@ -111,8 +112,8 @@ pub struct RunDefaults {
 }
 
 pub struct RunFilters {
-    pub session_race_id: Option<String>,
-    pub user_id: Option<String>,
+    pub session_race_id: Option<SessionRaceId>,
+    pub user_id: Option<UserId>,
     pub track_id: Option<i32>,
 }
 
@@ -150,7 +151,7 @@ fn validate_time_fields(body: &CreateRunRequest) -> Result<(), AppError> {
 /// Create a run for a session race. Validates all inputs before inserting.
 pub async fn create_run(
     db: &DatabaseConnection,
-    user_id: &str,
+    user_id: &UserId,
     body: CreateRunRequest,
 ) -> Result<RunDetail, AppError> {
     validate_time_fields(&body)?;
@@ -161,7 +162,8 @@ pub async fn create_run(
         .await?
         .ok_or_else(|| AppError::NotFound("Session race not found".to_string()))?;
 
-    helpers::load_active_session(db, &session_race.session_id)
+    let session_id = SessionId::new(session_race.session_id.clone());
+    helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
             AppError::Conflict(_) => {
@@ -169,7 +171,7 @@ pub async fn create_run(
             }
             other => other,
         })?;
-    helpers::require_active_participant(db, &session_race.session_id, user_id).await?;
+    helpers::require_active_participant(db, &session_id, user_id).await?;
 
     // Check for duplicate submission
     let existing = runs::Entity::find()
@@ -221,7 +223,7 @@ pub async fn create_run(
     // match the oldest. The contract holds today, but `min_by_key` removes
     // the implicit dependency so the error message can't silently name a
     // wrong race if the SQL ORDER BY is ever dropped or inverted.
-    let pending = sessions::get_pending_races(db, &session_race.session_id, user_id).await?;
+    let pending = sessions::get_pending_races(db, &session_id, user_id).await?;
     if let Some(older) = pending
         .iter()
         .filter(|p| p.race_number < session_race.race_number)
@@ -242,13 +244,13 @@ pub async fn create_run(
         .await?;
 
     let now = Utc::now().naive_utc();
-    let run_id = Uuid::new_v4().to_string();
+    let run_id = RunId::new(Uuid::new_v4().to_string());
 
     let txn = db.begin().await?;
 
     runs::ActiveModel {
-        id: Set(run_id.clone()),
-        user_id: Set(user_id.to_string()),
+        id: Set(run_id.as_str().to_string()),
+        user_id: Set(user_id.as_str().to_string()),
         session_race_id: Set(body.session_race_id.clone()),
         track_id: Set(session_race.track_id),
         character_id: Set(body.character_id),
@@ -268,7 +270,7 @@ pub async fn create_run(
     .insert(&txn)
     .await?;
 
-    helpers::touch_session(&txn, &session_race.session_id).await?;
+    helpers::touch_session(&txn, &session_id).await?;
 
     txn.commit().await?;
 
@@ -276,7 +278,7 @@ pub async fn create_run(
 }
 
 /// Fetch a single run by ID with JOINed username and drink_type_name.
-pub async fn get_run(db: &DatabaseConnection, run_id: &str) -> Result<RunDetail, AppError> {
+pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetail, AppError> {
     let row = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -359,15 +361,15 @@ pub async fn list_runs(
 /// Delete a run. Only the run's owner can delete, and the session must be active.
 pub async fn delete_run(
     db: &DatabaseConnection,
-    run_id: &str,
-    user_id: &str,
+    run_id: &RunId,
+    user_id: &UserId,
 ) -> Result<(), AppError> {
     let run = runs::Entity::find_by_id(run_id)
         .one(db)
         .await?
         .ok_or_else(|| AppError::NotFound("Run not found".to_string()))?;
 
-    if run.user_id != user_id {
+    if run.user_id.as_str() != user_id.as_str() {
         return Err(AppError::Forbidden(
             "Only the run's owner can delete it".to_string(),
         ));
@@ -379,8 +381,9 @@ pub async fn delete_run(
         .await?
         .ok_or_else(|| AppError::Internal("Session race not found for run".to_string()))?;
 
+    let session_id = SessionId::new(session_race.session_id.clone());
     // FK guarantees the session exists; NotFound here signals data corruption.
-    helpers::load_active_session(db, &session_race.session_id)
+    helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
             AppError::NotFound(_) => AppError::Internal("Session not found for run".to_string()),
@@ -394,7 +397,7 @@ pub async fn delete_run(
 
     run.delete(&txn).await?;
 
-    helpers::touch_session(&txn, &session_race.session_id).await?;
+    helpers::touch_session(&txn, &session_id).await?;
 
     txn.commit().await?;
 
@@ -405,7 +408,7 @@ pub async fn delete_run(
 /// Cascade: previous run → user preferences → none.
 pub async fn get_run_defaults(
     db: &DatabaseConnection,
-    user_id: &str,
+    user_id: &UserId,
 ) -> Result<RunDefaults, AppError> {
     // Try most recent run
     let latest_run = runs::Entity::find()
@@ -542,9 +545,9 @@ mod tests {
         assert!(validate_time_fields(&req).is_err());
     }
 
-    fn valid_run_request(session_race_id: &str) -> CreateRunRequest {
+    fn valid_run_request(session_race_id: &SessionRaceId) -> CreateRunRequest {
         CreateRunRequest {
-            session_race_id: session_race_id.to_string(),
+            session_race_id: session_race_id.as_str().to_string(),
             track_time: 120_000,
             lap1_time: 40_000,
             lap2_time: 39_000,
@@ -559,7 +562,10 @@ mod tests {
     }
 
     /// Helper: create session, pick a track, return (session_id, session_race_id)
-    async fn setup_session_with_race(db: &DatabaseConnection, host_id: &str) -> (String, String) {
+    async fn setup_session_with_race(
+        db: &DatabaseConnection,
+        host_id: &UserId,
+    ) -> (SessionId, SessionRaceId) {
         let session = sessions::create_session(db, host_id, "random")
             .await
             .expect("create session");
@@ -580,7 +586,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(run.user_id, host_id);
+        assert_eq!(run.user_id.as_str(), host_id.as_str());
         assert_eq!(run.track_time, 120_000);
         assert_eq!(run.lap1_time, 40_000);
         assert_eq!(run.username, "host");
@@ -941,9 +947,9 @@ mod tests {
     /// Helper: create a session, pick N tracks, return (session_id, race_ids).
     async fn setup_session_with_n_races(
         db: &DatabaseConnection,
-        host_id: &str,
+        host_id: &UserId,
         n: usize,
-    ) -> (String, Vec<String>) {
+    ) -> (SessionId, Vec<SessionRaceId>) {
         let session = sessions::create_session(db, host_id, "random")
             .await
             .expect("create session");

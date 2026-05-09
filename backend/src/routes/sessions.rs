@@ -6,7 +6,13 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, error::AppError, middleware::auth::AuthUser, services::sessions};
+use crate::{
+    AppState,
+    domain::{SessionId, SessionRaceId},
+    error::AppError,
+    middleware::auth::AuthUser,
+    services::sessions,
+};
 
 #[derive(Deserialize)]
 pub struct CreateSessionRequest {
@@ -25,7 +31,7 @@ pub async fn create_session(
 
 #[derive(Serialize)]
 pub struct MySessionResponse {
-    pub session_id: Option<String>,
+    pub session_id: Option<SessionId>,
 }
 
 /// GET /sessions/mine — get the user's current active session ID.
@@ -52,7 +58,8 @@ pub async fn get_session(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<sessions::SessionDetail>, AppError> {
-    let detail = sessions::get_session_detail(&state.db, &id, Some(&user.user_id)).await?;
+    let session_id = SessionId::new(id);
+    let detail = sessions::get_session_detail(&state.db, &session_id, Some(&user.user_id)).await?;
     Ok(Json(detail))
 }
 
@@ -62,7 +69,8 @@ pub async fn join_session(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    sessions::join_session(&state.db, &id, &user.user_id).await?;
+    let session_id = SessionId::new(id);
+    sessions::join_session(&state.db, &session_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -72,7 +80,8 @@ pub async fn leave_session(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    sessions::leave_session(&state.db, &id, &user.user_id).await?;
+    let session_id = SessionId::new(id);
+    sessions::leave_session(&state.db, &session_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -82,7 +91,8 @@ pub async fn next_track(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<sessions::SessionRaceInfo>), AppError> {
-    let race = sessions::next_track(&state.db, &id, &user.user_id).await?;
+    let session_id = SessionId::new(id);
+    let race = sessions::next_track(&state.db, &session_id, &user.user_id).await?;
     Ok((StatusCode::CREATED, Json(race)))
 }
 
@@ -92,7 +102,8 @@ pub async fn skip_turn(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<sessions::SessionRaceInfo>), AppError> {
-    let race = sessions::skip_turn(&state.db, &id, &user.user_id).await?;
+    let session_id = SessionId::new(id);
+    let race = sessions::skip_turn(&state.db, &session_id, &user.user_id).await?;
     Ok((StatusCode::CREATED, Json(race)))
 }
 
@@ -103,6 +114,8 @@ pub async fn skip_pending_race(
     State(state): State<AppState>,
     Path((session_id, race_id)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let session_id = SessionId::new(session_id);
+    let race_id = SessionRaceId::new(race_id);
     sessions::skip_pending_race(&state.db, &session_id, &race_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -113,6 +126,7 @@ pub async fn list_races(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<sessions::RaceInfo>>, AppError> {
-    let races = sessions::list_races(&state.db, &id).await?;
+    let session_id = SessionId::new(id);
+    let races = sessions::list_races(&state.db, &session_id).await?;
     Ok(Json(races))
 }

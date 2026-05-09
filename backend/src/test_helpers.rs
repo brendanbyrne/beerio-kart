@@ -14,6 +14,7 @@ use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, S
 use uuid::Uuid;
 
 use crate::{
+    domain::{SessionId, SessionRaceId, UserId},
     drink_type_id::drink_type_uuid,
     entities::{
         bodies, characters, cups, drink_types, gliders, session_participants,
@@ -38,7 +39,7 @@ pub async fn setup_db() -> DatabaseConnection {
 
 /// Insert a user with the given username and a fixed placeholder password
 /// hash. Returns the generated user ID.
-pub async fn create_user(db: &DatabaseConnection, username: &str) -> String {
+pub async fn create_user(db: &DatabaseConnection, username: &str) -> UserId {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().naive_utc();
     // Placeholder hash — tests don't verify passwords, but the column is NOT NULL.
@@ -60,7 +61,7 @@ pub async fn create_user(db: &DatabaseConnection, username: &str) -> String {
     .insert(db)
     .await
     .expect("insert user");
-    id
+    UserId::new(id)
 }
 
 /// Seed 3 cups × 2 tracks each (6 tracks total) for tests that exercise
@@ -102,12 +103,12 @@ pub async fn seed_tracks_for_test(db: &DatabaseConnection) {
 
 /// Insert a session with the given host and status. Returns the generated
 /// session ID.
-pub async fn insert_session(db: &DatabaseConnection, host_id: &str, status: &str) -> String {
+pub async fn insert_session(db: &DatabaseConnection, host_id: &UserId, status: &str) -> SessionId {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().naive_utc();
     sessions::ActiveModel {
         id: Set(id.clone()),
-        host_id: Set(host_id.to_string()),
+        host_id: Set(host_id.as_str().to_string()),
         ruleset: Set("random".to_string()),
         least_played_drink_category: Set(None),
         status: Set(status.to_string()),
@@ -117,22 +118,22 @@ pub async fn insert_session(db: &DatabaseConnection, host_id: &str, status: &str
     .insert(db)
     .await
     .expect("insert session");
-    id
+    SessionId::new(id)
 }
 
 /// Insert a participant into a session. Pass `None` for `left_at` to create
 /// an active (currently-in-session) participant.
 pub async fn insert_participant(
     db: &DatabaseConnection,
-    session_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    user_id: &UserId,
     left_at: Option<chrono::NaiveDateTime>,
 ) {
     let now = Utc::now().naive_utc();
     session_participants::ActiveModel {
         id: Set(Uuid::new_v4().to_string()),
-        session_id: Set(session_id.to_string()),
-        user_id: Set(user_id.to_string()),
+        session_id: Set(session_id.as_str().to_string()),
+        user_id: Set(user_id.as_str().to_string()),
         joined_at: Set(now),
         left_at: Set(left_at),
     }
@@ -146,15 +147,15 @@ pub async fn insert_participant(
 /// timestamps without going through `next_track`.
 pub async fn insert_session_race(
     db: &DatabaseConnection,
-    session_id: &str,
+    session_id: &SessionId,
     race_number: i32,
     track_id: i32,
     created_at: chrono::NaiveDateTime,
-) -> String {
+) -> SessionRaceId {
     let id = Uuid::new_v4().to_string();
     session_races::ActiveModel {
         id: Set(id.clone()),
-        session_id: Set(session_id.to_string()),
+        session_id: Set(session_id.as_str().to_string()),
         race_number: Set(race_number),
         track_id: Set(track_id),
         chosen_by: Set(None),
@@ -163,20 +164,20 @@ pub async fn insert_session_race(
     .insert(db)
     .await
     .expect("insert session race");
-    id
+    SessionRaceId::new(id)
 }
 
 /// Insert a `session_race_participations` row directly. Use this in tests
 /// that need fine-grained control over per-race presence and skip status.
 pub async fn insert_race_participation(
     db: &DatabaseConnection,
-    session_race_id: &str,
-    user_id: &str,
+    session_race_id: &SessionRaceId,
+    user_id: &UserId,
     skipped_at: Option<chrono::NaiveDateTime>,
 ) {
     session_race_participations::ActiveModel {
-        session_race_id: Set(session_race_id.to_string()),
-        user_id: Set(user_id.to_string()),
+        session_race_id: Set(session_race_id.as_str().to_string()),
+        user_id: Set(user_id.as_str().to_string()),
         created_at: Set(Utc::now().naive_utc()),
         skipped_at: Set(skipped_at),
     }
@@ -189,8 +190,8 @@ pub async fn insert_race_participation(
 /// this to simulate "user left N minutes ago" without sleeping.
 pub async fn backdate_participant(
     db: &DatabaseConnection,
-    session_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    user_id: &UserId,
     joined_at: Option<chrono::NaiveDateTime>,
     left_at: Option<chrono::NaiveDateTime>,
 ) {

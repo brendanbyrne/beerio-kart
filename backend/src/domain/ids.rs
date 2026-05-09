@@ -1,3 +1,4 @@
+use sea_orm::Value;
 use serde::{Deserialize, Serialize};
 
 /// Generate a string-backed newtype for an ID.
@@ -6,7 +7,9 @@ use serde::{Deserialize, Serialize};
 /// implements `Display`, `AsRef<str>`, `Deref<Target = str>`, and conversion
 /// from `String` / `&str`. `Deref` lets call sites treat the newtype as a
 /// `&str` for read-only operations (e.g. passing into SeaORM filters that
-/// expect `&str`).
+/// expect `&str`). `From<&Self> for sea_orm::Value` is provided so call
+/// sites can pass `&UserId` (etc.) directly to `Column::Foo.eq(...)` and
+/// `find_by_id(...)` without an explicit `.as_str()` conversion.
 macro_rules! string_id_newtype {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -56,6 +59,30 @@ macro_rules! string_id_newtype {
         impl From<&str> for $name {
             fn from(s: &str) -> Self {
                 Self(s.to_string())
+            }
+        }
+
+        impl From<&$name> for Value {
+            fn from(id: &$name) -> Self {
+                Value::from(id.0.as_str())
+            }
+        }
+
+        impl From<$name> for Value {
+            fn from(id: $name) -> Self {
+                Value::from(id.0)
+            }
+        }
+
+        impl From<$name> for String {
+            fn from(id: $name) -> Self {
+                id.0
+            }
+        }
+
+        impl From<&$name> for String {
+            fn from(id: &$name) -> Self {
+                id.0.clone()
             }
         }
     };
@@ -123,5 +150,22 @@ mod tests {
         set.insert(SessionRaceId::new("sr-1"));
         assert!(set.contains(&SessionRaceId::new("sr-1")));
         assert!(!set.contains(&SessionRaceId::new("sr-2")));
+    }
+
+    #[test]
+    fn into_sea_orm_value() {
+        // `&UserId` and `UserId` both convert into `sea_orm::Value` so that
+        // `Column::Foo.eq(...)` and `find_by_id(...)` accept newtype IDs
+        // directly. Verifies both ref and owned conversions land on the
+        // string variant.
+        let owned = UserId::new("u-1");
+        let ref_value: Value = (&owned).into();
+        assert_eq!(ref_value, Value::String(Some(Box::new("u-1".to_string()))));
+
+        let owned_value: Value = owned.into();
+        assert_eq!(
+            owned_value,
+            Value::String(Some(Box::new("u-1".to_string())))
+        );
     }
 }
