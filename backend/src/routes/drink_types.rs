@@ -81,7 +81,7 @@ pub async fn create_drink_type(
         name: Set(name),
         alcoholic: Set(req.alcoholic),
         created_at: Set(now),
-        created_by: Set(Some(user.user_id)),
+        created_by: Set(Some(user.user_id.into_string())),
     };
 
     let inserted = sea_orm::ActiveModelTrait::insert(model, &state.db).await?;

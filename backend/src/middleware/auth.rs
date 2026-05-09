@@ -1,6 +1,6 @@
 use axum::{extract::FromRequestParts, http::request::Parts};
 
-use crate::error::AppError;
+use crate::{domain::UserId, error::AppError};
 
 /// Extractor that validates the JWT from the `Authorization: Bearer <token>`
 /// header and makes the authenticated user's info available to handlers.
@@ -19,7 +19,7 @@ use crate::error::AppError;
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct AuthUser {
-    pub user_id: String,
+    pub user_id: UserId,
     pub username: String,
 }
 
@@ -52,7 +52,7 @@ impl FromRequestParts<crate::AppState> for AuthUser {
         }
 
         Ok(AuthUser {
-            user_id: claims.sub,
+            user_id: UserId::new(claims.sub),
             username: claims.username,
         })
     }
@@ -65,7 +65,7 @@ impl FromRequestParts<crate::AppState> for AuthUser {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct AdminUser {
-    pub user_id: String,
+    pub user_id: UserId,
     pub username: String,
 }
 
@@ -86,7 +86,7 @@ impl FromRequestParts<crate::AppState> for AdminUser {
             .as_ref()
             .ok_or_else(|| AppError::Forbidden("Admin access not configured".to_string()))?;
 
-        if auth_user.user_id != *admin_id {
+        if auth_user.user_id.as_str() != admin_id {
             return Err(AppError::Forbidden("Admin access required".to_string()));
         }
 

@@ -7,7 +7,10 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::{
-    domain::enums::{Ruleset, SessionStatus},
+    domain::{
+        SessionId, SessionRaceId, UserId,
+        enums::{Ruleset, SessionStatus},
+    },
     entities::{
         cups, runs, session_participants, session_race_participations, session_races, sessions,
         users,
@@ -27,7 +30,7 @@ struct ActiveParticipantRow {
 /// JOINs sessions to ensure closed sessions don't block the user.
 async fn check_not_in_any_session(
     db: &impl ConnectionTrait,
-    user_id: &str,
+    user_id: &UserId,
 ) -> Result<(), AppError> {
     let existing =
         ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
@@ -60,8 +63,8 @@ async fn check_not_in_any_session(
 /// Only considers active sessions (not closed/stale ones).
 pub async fn get_active_session_id(
     db: &DatabaseConnection,
-    user_id: &str,
-) -> Result<Option<String>, AppError> {
+    user_id: &UserId,
+) -> Result<Option<SessionId>, AppError> {
     let row = ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -78,14 +81,14 @@ pub async fn get_active_session_id(
     .one(db)
     .await?;
 
-    Ok(row.map(|r| r.session_id))
+    Ok(row.map(|r| SessionId::new(r.session_id)))
 }
 
 /// Create a new session. The creator becomes both the host and the first
 /// participant. Returns the full session detail.
 pub async fn create_session(
     db: &DatabaseConnection,
-    user_id: &str,
+    user_id: &UserId,
     ruleset: &str,
 ) -> Result<SessionDetail, AppError> {
     let parsed: Ruleset = ruleset.parse()?;
@@ -93,13 +96,13 @@ pub async fn create_session(
     check_not_in_any_session(db, user_id).await?;
 
     let now = Utc::now().naive_utc();
-    let session_id = Uuid::new_v4().to_string();
+    let session_id = SessionId::new(Uuid::new_v4().to_string());
 
     let txn = db.begin().await?;
 
     sessions::ActiveModel {
-        id: Set(session_id.clone()),
-        host_id: Set(user_id.to_string()),
+        id: Set(session_id.as_str().to_string()),
+        host_id: Set(user_id.as_str().to_string()),
         ruleset: Set(parsed.to_string()),
         least_played_drink_category: Set(None),
         status: Set(SessionStatus::Active.to_string()),
@@ -111,8 +114,8 @@ pub async fn create_session(
 
     session_participants::ActiveModel {
         id: Set(Uuid::new_v4().to_string()),
-        session_id: Set(session_id.clone()),
-        user_id: Set(user_id.to_string()),
+        session_id: Set(session_id.as_str().to_string()),
+        user_id: Set(user_id.as_str().to_string()),
         joined_at: Set(now),
         left_at: Set(None),
     }
@@ -127,7 +130,7 @@ pub async fn create_session(
 /// Summary info for listing active sessions.
 #[derive(serde::Serialize)]
 pub struct SessionSummary {
-    pub id: String,
+    pub id: SessionId,
     pub host_username: String,
     pub participant_count: i64,
     pub race_number: i64,
@@ -177,7 +180,7 @@ pub async fn list_active_sessions(
     Ok(rows
         .into_iter()
         .map(|r| SessionSummary {
-            id: r.id,
+            id: SessionId::new(r.id),
             host_username: r.host_username,
             participant_count: r.participant_count,
             race_number: r.race_count.max(1),
@@ -190,7 +193,7 @@ pub async fn list_active_sessions(
 /// Participant info for the detail response.
 #[derive(serde::Serialize)]
 pub struct ParticipantInfo {
-    pub user_id: String,
+    pub user_id: UserId,
     pub username: String,
     pub joined_at: DateTime<Utc>,
     pub left_at: Option<DateTime<Utc>>,
@@ -208,7 +211,7 @@ struct ParticipantRow {
 /// Submission info for a single participant in a race.
 #[derive(serde::Serialize, Clone)]
 pub struct RaceSubmission {
-    pub user_id: String,
+    pub user_id: UserId,
     pub username: String,
     pub track_time: i32,
     pub disqualified: bool,
@@ -226,7 +229,7 @@ struct SubmissionRow {
 /// Info about a single race in the session (returned on create / skip / poll).
 #[derive(serde::Serialize, Clone)]
 pub struct SessionRaceInfo {
-    pub id: String,
+    pub id: SessionRaceId,
     pub race_number: i32,
     pub track_id: i32,
     pub track_name: String,
@@ -239,7 +242,7 @@ pub struct SessionRaceInfo {
 /// Race info for the race history list.
 #[derive(serde::Serialize)]
 pub struct RaceInfo {
-    pub id: String,
+    pub id: SessionRaceId,
     pub race_number: i32,
     pub track_id: i32,
     pub track_name: String,
@@ -275,8 +278,8 @@ struct CurrentRaceRow {
 /// Full session detail for polling.
 #[derive(serde::Serialize)]
 pub struct SessionDetail {
-    pub id: String,
-    pub host_id: String,
+    pub id: SessionId,
+    pub host_id: UserId,
     pub host_username: String,
     pub ruleset: String,
     pub status: String,
@@ -297,7 +300,10 @@ pub struct SessionDetail {
 
 /// Look up the host's username. Returns `Internal` if the FK-referenced
 /// user row is missing (data corruption — FKs should prevent this).
-async fn load_host_username(db: &impl ConnectionTrait, host_id: &str) -> Result<String, AppError> {
+async fn load_host_username(
+    db: &impl ConnectionTrait,
+    host_id: &UserId,
+) -> Result<String, AppError> {
     users::Entity::find_by_id(host_id)
         .one(db)
         .await?
@@ -308,7 +314,7 @@ async fn load_host_username(db: &impl ConnectionTrait, host_id: &str) -> Result<
 /// Fetch all participants with usernames in a single JOIN query.
 async fn load_participants(
     db: &impl ConnectionTrait,
-    session_id: &str,
+    session_id: &SessionId,
 ) -> Result<Vec<ParticipantInfo>, AppError> {
     let rows = ParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -327,7 +333,7 @@ async fn load_participants(
     Ok(rows
         .into_iter()
         .map(|r| ParticipantInfo {
-            user_id: r.user_id,
+            user_id: UserId::new(r.user_id),
             username: r.username,
             joined_at: r.joined_at.and_utc(),
             left_at: r.left_at.map(|t| t.and_utc()),
@@ -339,7 +345,7 @@ async fn load_participants(
 /// no races have been created yet.
 async fn load_current_race_with_submissions(
     db: &impl ConnectionTrait,
-    session_id: &str,
+    session_id: &SessionId,
 ) -> Result<Option<SessionRaceInfo>, AppError> {
     let race_row = CurrentRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -378,7 +384,7 @@ async fn load_current_race_with_submissions(
     .await?
     .into_iter()
     .map(|s| RaceSubmission {
-        user_id: s.user_id,
+        user_id: UserId::new(s.user_id),
         username: s.username,
         track_time: s.track_time,
         disqualified: s.disqualified,
@@ -386,7 +392,7 @@ async fn load_current_race_with_submissions(
     .collect();
 
     Ok(Some(SessionRaceInfo {
-        id: row.id,
+        id: SessionRaceId::new(row.id),
         race_number: row.race_number,
         track_id: row.track_id,
         track_name: row.track_name,
@@ -400,7 +406,7 @@ async fn load_current_race_with_submissions(
 /// Fetch all races in a session with run counts, ordered by race_number ASC.
 async fn load_race_history(
     db: &impl ConnectionTrait,
-    session_id: &str,
+    session_id: &SessionId,
 ) -> Result<Vec<RaceInfo>, AppError> {
     let rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -424,7 +430,7 @@ async fn load_race_history(
     Ok(rows
         .into_iter()
         .map(|r| RaceInfo {
-            id: r.id,
+            id: SessionRaceId::new(r.id),
             race_number: r.race_number,
             track_id: r.track_id,
             track_name: r.track_name,
@@ -481,8 +487,8 @@ struct PendingRaceRow {
 /// fast.
 pub async fn get_pending_races(
     db: &impl ConnectionTrait,
-    session_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    user_id: &UserId,
 ) -> Result<Vec<SessionRaceInfo>, AppError> {
     let now = Utc::now().naive_utc();
     let grace_cutoff = now - chrono::Duration::minutes(REJOIN_GRACE_MINUTES);
@@ -520,7 +526,7 @@ pub async fn get_pending_races(
     Ok(rows
         .into_iter()
         .map(|r| SessionRaceInfo {
-            id: r.id,
+            id: SessionRaceId::new(r.id),
             race_number: r.race_number,
             track_id: r.track_id,
             track_name: r.track_name,
@@ -564,9 +570,9 @@ pub async fn get_pending_races(
 ///   `create_run` breaks (which also requires an active participant).
 pub async fn skip_pending_race(
     db: &DatabaseConnection,
-    session_id: &str,
-    session_race_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    session_race_id: &SessionRaceId,
+    user_id: &UserId,
 ) -> Result<(), AppError> {
     helpers::load_active_session(db, session_id)
         .await
@@ -588,7 +594,7 @@ pub async fn skip_pending_race(
     let race = session_races::Entity::find_by_id(session_race_id)
         .one(db)
         .await?;
-    let Some(race) = race.filter(|r| r.session_id == session_id) else {
+    let Some(race) = race.filter(|r| r.session_id == session_id.as_str()) else {
         return Err(AppError::NotFound(
             "Race not found in this session".to_string(),
         ));
@@ -646,15 +652,16 @@ pub async fn skip_pending_race(
 /// when they don't care about pending state.
 pub async fn get_session_detail(
     db: &DatabaseConnection,
-    session_id: &str,
-    requesting_user_id: Option<&str>,
+    session_id: &SessionId,
+    requesting_user_id: Option<&UserId>,
 ) -> Result<SessionDetail, AppError> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
         .await?
         .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
-    let host_username = load_host_username(db, &session.host_id).await?;
+    let host_id = UserId::new(session.host_id);
+    let host_username = load_host_username(db, &host_id).await?;
     let participants = load_participants(db, session_id).await?;
     let current_race = load_current_race_with_submissions(db, session_id).await?;
     let races = load_race_history(db, session_id).await?;
@@ -671,8 +678,8 @@ pub async fn get_session_detail(
     let race_number = races.last().map(|r| r.race_number as usize).unwrap_or(1);
 
     Ok(SessionDetail {
-        id: session.id,
-        host_id: session.host_id,
+        id: SessionId::new(session.id),
+        host_id,
         host_username,
         ruleset: session.ruleset,
         status: session.status,
@@ -706,8 +713,8 @@ pub const REJOIN_GRACE_MINUTES: i64 = 5;
 ///   (`session_races.created_at >= session_participants.joined_at`).
 pub async fn join_session(
     db: &DatabaseConnection,
-    session_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    user_id: &UserId,
 ) -> Result<(), AppError> {
     helpers::load_active_session(db, session_id)
         .await
@@ -733,8 +740,8 @@ pub async fn join_session(
         None => {
             session_participants::ActiveModel {
                 id: Set(Uuid::new_v4().to_string()),
-                session_id: Set(session_id.to_string()),
-                user_id: Set(user_id.to_string()),
+                session_id: Set(session_id.as_str().to_string()),
+                user_id: Set(user_id.as_str().to_string()),
                 joined_at: Set(now),
                 left_at: Set(None),
             }
@@ -781,7 +788,7 @@ pub async fn join_session(
 #[derive(Debug, PartialEq, Eq)]
 enum HostDisposition {
     /// Host role transferred to the given user ID.
-    TransferredTo(String),
+    TransferredTo(UserId),
     /// No active participants remain — session should close.
     SessionClosed,
     /// The leaver wasn't the host and participants remain — no change needed.
@@ -807,8 +814,8 @@ enum HostDisposition {
 /// present participant.
 async fn transfer_host_or_close(
     txn: &impl ConnectionTrait,
-    session_id: &str,
-    leaving_user_id: &str,
+    session_id: &SessionId,
+    leaving_user_id: &UserId,
     is_host_leaving: bool,
 ) -> Result<HostDisposition, AppError> {
     if is_host_leaving {
@@ -824,7 +831,9 @@ async fn transfer_host_or_close(
             .await?;
 
         match next_host {
-            Some(new_host) => Ok(HostDisposition::TransferredTo(new_host.user_id)),
+            Some(new_host) => Ok(HostDisposition::TransferredTo(UserId::new(
+                new_host.user_id,
+            ))),
             None => Ok(HostDisposition::SessionClosed),
         }
     } else {
@@ -848,8 +857,8 @@ async fn transfer_host_or_close(
 /// Leave a session. Sets left_at and handles host transfer.
 pub async fn leave_session(
     db: &DatabaseConnection,
-    session_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    user_id: &UserId,
 ) -> Result<(), AppError> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
@@ -869,13 +878,13 @@ pub async fn leave_session(
     active_participant.left_at = Set(Some(now));
     active_participant.update(&txn).await?;
 
-    let mut active_session: sessions::ActiveModel = session.clone().into();
-    let disposition =
-        transfer_host_or_close(&txn, session_id, user_id, session.host_id == user_id).await?;
+    let is_host_leaving = session.host_id.as_str() == user_id.as_str();
+    let mut active_session: sessions::ActiveModel = session.into();
+    let disposition = transfer_host_or_close(&txn, session_id, user_id, is_host_leaving).await?;
 
     match disposition {
         HostDisposition::TransferredTo(new_host_id) => {
-            active_session.host_id = Set(new_host_id);
+            active_session.host_id = Set(new_host_id.into_string());
         }
         HostDisposition::SessionClosed => {
             active_session.status = Set(SessionStatus::Closed.to_string());
@@ -896,8 +905,8 @@ pub async fn leave_session(
 /// If all tracks have been used, resets the pool.
 pub async fn next_track(
     db: &DatabaseConnection,
-    session_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    user_id: &UserId,
 ) -> Result<SessionRaceInfo, AppError> {
     use crate::services::session_context::SessionContext;
 
@@ -915,14 +924,14 @@ pub async fn next_track(
     let chosen = helpers::pick_random_track(db, &used_track_ids, &[]).await?;
 
     let now = Utc::now().naive_utc();
-    let race_id = Uuid::new_v4().to_string();
+    let race_id = SessionRaceId::new(Uuid::new_v4().to_string());
     let new_race_number = race_count + 1;
 
     let txn = db.begin().await?;
 
     session_races::ActiveModel {
-        id: Set(race_id.clone()),
-        session_id: Set(session_id.to_string()),
+        id: Set(race_id.as_str().to_string()),
+        session_id: Set(session_id.as_str().to_string()),
         race_number: Set(new_race_number),
         track_id: Set(chosen.id),
         chosen_by: Set(None),
@@ -962,8 +971,8 @@ pub async fn next_track(
 /// excluding the skipped track from the pool so it can't come back.
 pub async fn skip_turn(
     db: &DatabaseConnection,
-    session_id: &str,
-    _user_id: &str,
+    session_id: &SessionId,
+    _user_id: &UserId,
 ) -> Result<SessionRaceInfo, AppError> {
     helpers::load_active_session(db, session_id).await?;
 
@@ -1001,7 +1010,7 @@ pub async fn skip_turn(
     let chosen = helpers::pick_random_track(db, &exclude_ids, &[skipped_track_id]).await?;
 
     let now = Utc::now().naive_utc();
-    let race_id = Uuid::new_v4().to_string();
+    let race_id = SessionRaceId::new(Uuid::new_v4().to_string());
 
     // Delete old race + insert new one + snapshot present users in a single
     // transaction. The old race's `session_race_participations` rows cascade
@@ -1012,8 +1021,8 @@ pub async fn skip_turn(
     current_race.delete(&txn).await?;
 
     session_races::ActiveModel {
-        id: Set(race_id.clone()),
-        session_id: Set(session_id.to_string()),
+        id: Set(race_id.as_str().to_string()),
+        session_id: Set(session_id.as_str().to_string()),
         race_number: Set(keep_race_number),
         track_id: Set(chosen.id),
         chosen_by: Set(None),
@@ -1048,7 +1057,7 @@ pub async fn skip_turn(
 /// List all races in a session, ordered by race_number ASC.
 pub async fn list_races(
     db: &DatabaseConnection,
-    session_id: &str,
+    session_id: &SessionId,
 ) -> Result<Vec<RaceInfo>, AppError> {
     // Verify session exists
     sessions::Entity::find_by_id(session_id)
@@ -1078,7 +1087,7 @@ pub async fn list_races(
     Ok(rows
         .into_iter()
         .map(|r| RaceInfo {
-            id: r.id,
+            id: SessionRaceId::new(r.id),
             race_number: r.race_number,
             track_id: r.track_id,
             track_name: r.track_name,
@@ -1156,7 +1165,9 @@ mod tests {
     #[tokio::test]
     async fn test_load_host_username_missing_user_returns_internal() {
         let db = setup_db().await;
-        let err = load_host_username(&db, "nonexistent-id").await.unwrap_err();
+        let err = load_host_username(&db, &UserId::new("nonexistent-id"))
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppError::Internal(_)));
     }
 
@@ -1245,7 +1256,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(updated.host_id, user2_id);
+        assert_eq!(updated.host_id, user2_id.as_str());
         assert_eq!(updated.status, "active");
     }
 
@@ -1776,7 +1787,7 @@ mod tests {
             1,
             "only the still-present host should be snapshotted"
         );
-        assert_eq!(parts[0].user_id, host_id);
+        assert_eq!(parts[0].user_id, host_id.as_str());
     }
 
     #[tokio::test]
@@ -1800,7 +1811,7 @@ mod tests {
 
         session_races::ActiveModel {
             id: Set(race_id.clone()),
-            session_id: Set(session_id.clone()),
+            session_id: Set(session_id.as_str().to_string()),
             race_number: Set(1),
             track_id: Set(1),
             chosen_by: Set(None),
@@ -1881,8 +1892,8 @@ mod tests {
             .expect("seed_game_data inserts Test Beer");
         runs::ActiveModel {
             id: Set(Uuid::new_v4().to_string()),
-            user_id: Set(host_id.clone()),
-            session_race_id: Set(race_id.clone()),
+            user_id: Set(host_id.as_str().to_string()),
+            session_race_id: Set(race_id.as_str().to_string()),
             track_id: Set(1),
             character_id: Set(1),
             body_id: Set(1),
@@ -2354,7 +2365,7 @@ mod tests {
         let session = create_session(&db, &host_id, "random").await.unwrap();
 
         // No race exists for this session.
-        let bogus_race_id = Uuid::new_v4().to_string();
+        let bogus_race_id = SessionRaceId::new(Uuid::new_v4().to_string());
         let err = skip_pending_race(&db, &session.id, &bogus_race_id, &host_id)
             .await
             .unwrap_err();
@@ -2386,8 +2397,8 @@ mod tests {
             .expect("seed_game_data inserts Test Beer");
         runs::ActiveModel {
             id: Set(Uuid::new_v4().to_string()),
-            user_id: Set(host_id.clone()),
-            session_race_id: Set(race.id.clone()),
+            user_id: Set(host_id.as_str().to_string()),
+            session_race_id: Set(race.id.as_str().to_string()),
             track_id: Set(race.track_id),
             character_id: Set(1),
             body_id: Set(1),

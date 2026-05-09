@@ -11,7 +11,7 @@ use sea_orm::{
 };
 
 use crate::{
-    domain::enums::SessionStatus,
+    domain::{SessionId, SessionRaceId, UserId, enums::SessionStatus},
     entities::{session_participants, session_race_participations, sessions, tracks},
     error::AppError,
 };
@@ -22,7 +22,7 @@ use crate::{
 /// - `Conflict` if the session exists but is closed.
 pub async fn load_active_session<C: ConnectionTrait>(
     db: &C,
-    session_id: &str,
+    session_id: &SessionId,
 ) -> Result<sessions::Model, AppError> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
@@ -40,8 +40,8 @@ pub async fn load_active_session<C: ConnectionTrait>(
 /// `Forbidden` if the user has no active participant row for this session.
 pub async fn require_active_participant<C: ConnectionTrait>(
     db: &C,
-    session_id: &str,
-    user_id: &str,
+    session_id: &SessionId,
+    user_id: &UserId,
 ) -> Result<session_participants::Model, AppError> {
     session_participants::Entity::find()
         .filter(
@@ -68,8 +68,8 @@ pub async fn require_active_participant<C: ConnectionTrait>(
 /// transaction rolls back, leaving no orphan race or partial snapshot.
 pub async fn insert_race_participations<C: ConnectionTrait>(
     txn: &C,
-    session_id: &str,
-    session_race_id: &str,
+    session_id: &SessionId,
+    session_race_id: &SessionRaceId,
 ) -> Result<(), AppError> {
     let now = Utc::now().naive_utc();
 
@@ -93,7 +93,7 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
     let rows = present
         .into_iter()
         .map(|p| session_race_participations::ActiveModel {
-            session_race_id: Set(session_race_id.to_string()),
+            session_race_id: Set(session_race_id.as_str().to_string()),
             user_id: Set(p.user_id),
             created_at: Set(now),
             skipped_at: Set(None),
@@ -108,7 +108,10 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
 
 /// Bump the session's `last_activity_at` column to now. Single `UPDATE`,
 /// no prior read required.
-pub async fn touch_session<C: ConnectionTrait>(db: &C, session_id: &str) -> Result<(), AppError> {
+pub async fn touch_session<C: ConnectionTrait>(
+    db: &C,
+    session_id: &SessionId,
+) -> Result<(), AppError> {
     let now = Utc::now().naive_utc();
     sessions::Entity::update_many()
         .col_expr(sessions::Column::LastActivityAt, Expr::value(now))
@@ -210,14 +213,14 @@ mod tests {
         let session_id = insert_session(&db, &host, "active").await;
 
         let model = load_active_session(&db, &session_id).await.unwrap();
-        assert_eq!(model.id, session_id);
+        assert_eq!(model.id, session_id.as_str());
         assert_eq!(model.status, "active");
     }
 
     #[tokio::test]
     async fn load_active_session_missing_is_not_found() {
         let db = setup_db().await;
-        let err = load_active_session(&db, "does-not-exist")
+        let err = load_active_session(&db, &SessionId::new("does-not-exist"))
             .await
             .unwrap_err();
         assert!(matches!(err, AppError::NotFound(_)));
@@ -245,7 +248,7 @@ mod tests {
         let row = require_active_participant(&db, &session_id, &user)
             .await
             .unwrap();
-        assert_eq!(row.user_id, user);
+        assert_eq!(row.user_id, user.as_str());
         assert!(row.left_at.is_none());
     }
 

@@ -6,7 +6,13 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{AppState, error::AppError, middleware::auth::AuthUser, services::runs};
+use crate::{
+    AppState,
+    domain::{RunId, SessionRaceId, UserId},
+    error::AppError,
+    middleware::auth::AuthUser,
+    services::runs,
+};
 
 /// POST /runs — create a run.
 pub async fn create_run(
@@ -32,8 +38,8 @@ pub async fn list_runs(
     Query(query): Query<ListRunsQuery>,
 ) -> Result<Json<Vec<runs::RunDetail>>, AppError> {
     let filters = runs::RunFilters {
-        session_race_id: query.session_race_id,
-        user_id: query.user_id,
+        session_race_id: query.session_race_id.map(SessionRaceId::new),
+        user_id: query.user_id.map(UserId::new),
         track_id: query.track_id,
     };
     let results = runs::list_runs(&state.db, filters).await?;
@@ -55,7 +61,8 @@ pub async fn get_run(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<runs::RunDetail>, AppError> {
-    let detail = runs::get_run(&state.db, &id).await?;
+    let run_id = RunId::new(id);
+    let detail = runs::get_run(&state.db, &run_id).await?;
     Ok(Json(detail))
 }
 
@@ -65,6 +72,7 @@ pub async fn delete_run(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    runs::delete_run(&state.db, &id, &user.user_id).await?;
+    let run_id = RunId::new(id);
+    runs::delete_run(&state.db, &run_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

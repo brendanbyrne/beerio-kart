@@ -2,7 +2,7 @@ use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::race_setup::RaceSetupUpdate,
+    domain::{UserId, race_setup::RaceSetupUpdate},
     entities::{bodies, characters, drink_types, gliders, users, wheels},
     error::AppError,
     services::helpers,
@@ -19,7 +19,7 @@ pub struct DrinkTypeInfo {
 
 #[derive(Serialize)]
 pub struct UserDetailProfile {
-    pub id: String,
+    pub id: UserId,
     pub username: String,
     pub preferred_character_id: Option<i32>,
     pub preferred_body_id: Option<i32>,
@@ -61,11 +61,11 @@ where
 /// Only the user themselves can update their own profile.
 pub async fn update_profile(
     db: &DatabaseConnection,
-    actor_user_id: &str,
-    target_user_id: &str,
+    actor_user_id: &UserId,
+    target_user_id: &UserId,
     req: UpdateProfileRequest,
 ) -> Result<UserDetailProfile, AppError> {
-    if actor_user_id != target_user_id {
+    if actor_user_id.as_str() != target_user_id.as_str() {
         return Err(AppError::Forbidden(
             "You can only update your own profile".to_string(),
         ));
@@ -133,7 +133,7 @@ pub async fn build_detail_profile(
     };
 
     Ok(UserDetailProfile {
-        id: user.id,
+        id: UserId::new(user.id),
         username: user.username,
         preferred_character_id: user.preferred_character_id,
         preferred_body_id: user.preferred_body_id,
@@ -180,11 +180,12 @@ mod tests {
     #[tokio::test]
     async fn test_update_profile_user_not_found() {
         let db = setup_db().await;
+        let nonexistent = UserId::new("nonexistent");
 
         let result = update_profile(
             &db,
-            "nonexistent",
-            "nonexistent",
+            &nonexistent,
+            &nonexistent,
             UpdateProfileRequest {
                 preferred_character_id: None,
                 preferred_body_id: None,

@@ -7,6 +7,7 @@
 use sea_orm::ConnectionTrait;
 
 use crate::{
+    domain::{SessionId, UserId},
     entities::{session_participants, sessions},
     error::AppError,
     services::helpers,
@@ -21,15 +22,15 @@ impl SessionContext {
     /// Load the session by ID and require it to be in the `Active` state.
     pub async fn load_active<C: ConnectionTrait>(
         db: &C,
-        session_id: &str,
+        session_id: &SessionId,
     ) -> Result<Self, AppError> {
         let session = helpers::load_active_session(db, session_id).await?;
         Ok(Self { session })
     }
 
     /// Require that `user_id` is the host of this session.
-    pub fn require_host(&self, user_id: &str) -> Result<(), AppError> {
-        if self.session.host_id != user_id {
+    pub fn require_host(&self, user_id: &UserId) -> Result<(), AppError> {
+        if self.session.host_id.as_str() != user_id.as_str() {
             return Err(AppError::Forbidden("Only the host can do that".into()));
         }
         Ok(())
@@ -39,9 +40,10 @@ impl SessionContext {
     pub async fn require_participant<C: ConnectionTrait>(
         &self,
         db: &C,
-        user_id: &str,
+        user_id: &UserId,
     ) -> Result<session_participants::Model, AppError> {
-        helpers::require_active_participant(db, &self.session.id, user_id).await
+        let session_id = SessionId::new(self.session.id.clone());
+        helpers::require_active_participant(db, &session_id, user_id).await
     }
 
     /// Bump `last_activity_at` to now in both the DB and this struct.
@@ -49,7 +51,8 @@ impl SessionContext {
     /// the in-memory field so callers that read it post-touch see the
     /// updated value.
     pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), AppError> {
-        helpers::touch_session(db, &self.session.id).await?;
+        let session_id = SessionId::new(self.session.id.clone());
+        helpers::touch_session(db, &session_id).await?;
         self.session.last_activity_at = chrono::Utc::now().naive_utc();
         Ok(())
     }
@@ -69,14 +72,14 @@ mod tests {
         let session_id = insert_session(&db, &host, "active").await;
 
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
-        assert_eq!(ctx.session.id, session_id);
-        assert_eq!(ctx.session.host_id, host);
+        assert_eq!(ctx.session.id, session_id.as_str());
+        assert_eq!(ctx.session.host_id, host.as_str());
     }
 
     #[tokio::test]
     async fn load_active_missing_propagates_not_found() {
         let db = setup_db().await;
-        let err = SessionContext::load_active(&db, "missing")
+        let err = SessionContext::load_active(&db, &SessionId::new("missing"))
             .await
             .unwrap_err();
         assert!(matches!(err, AppError::NotFound(_)));
@@ -126,7 +129,7 @@ mod tests {
 
         // Happy path: host is a participant.
         let row = ctx.require_participant(&db, &host).await.unwrap();
-        assert_eq!(row.user_id, host);
+        assert_eq!(row.user_id, host.as_str());
 
         // Forbidden path: another user isn't.
         let outsider = create_user(&db, "outsider").await;

@@ -8,7 +8,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, Query
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AppState, entities::users, error::AppError, middleware::auth::AuthUser,
+    AppState, domain::UserId, entities::users, error::AppError, middleware::auth::AuthUser,
     services::auth as auth_service,
 };
 
@@ -45,7 +45,7 @@ pub struct RefreshResponse {
 
 #[derive(Serialize)]
 pub struct UserInfo {
-    pub id: String,
+    pub id: UserId,
     pub username: String,
 }
 
@@ -150,7 +150,7 @@ pub async fn register(
         Json(AuthResponse {
             access_token,
             user: UserInfo {
-                id: user_id,
+                id: UserId::new(user_id),
                 username: username.to_string(),
             },
         }),
@@ -213,7 +213,7 @@ pub async fn login(
         Json(AuthResponse {
             access_token,
             user: UserInfo {
-                id: user.id,
+                id: UserId::new(user.id),
                 username: user.username,
             },
         }),

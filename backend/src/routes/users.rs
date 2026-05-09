@@ -7,7 +7,7 @@ use sea_orm::EntityTrait;
 use serde::Serialize;
 
 use crate::{
-    AppState, entities::users, error::AppError, middleware::auth::AuthUser,
+    AppState, domain::UserId, entities::users, error::AppError, middleware::auth::AuthUser,
     services::users as user_service,
 };
 
@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Serialize)]
 pub struct UserPublicProfile {
-    pub id: String,
+    pub id: UserId,
     pub username: String,
     pub preferred_character_id: Option<i32>,
     pub preferred_body_id: Option<i32>,
@@ -36,7 +36,7 @@ pub async fn list_users(
         all_users
             .into_iter()
             .map(|u| UserPublicProfile {
-                id: u.id,
+                id: UserId::new(u.id),
                 username: u.username,
                 preferred_character_id: u.preferred_character_id,
                 preferred_body_id: u.preferred_body_id,
@@ -69,6 +69,8 @@ pub async fn update_user(
     Path(id): Path<String>,
     Json(req): Json<user_service::UpdateProfileRequest>,
 ) -> Result<Json<user_service::UserDetailProfile>, AppError> {
-    let profile = user_service::update_profile(&state.db, &auth_user.user_id, &id, req).await?;
+    let target_user_id = UserId::new(id);
+    let profile =
+        user_service::update_profile(&state.db, &auth_user.user_id, &target_user_id, req).await?;
     Ok(Json(profile))
 }
