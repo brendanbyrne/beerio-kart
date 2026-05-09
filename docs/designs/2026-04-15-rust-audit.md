@@ -139,6 +139,8 @@ Examples where the HTTP status feels off:
 
 Re-classify the above under this rule. "Session closed" errors become 409.
 
+**Divergence noted (2026-05-09):** `leave_session` kept `BadRequest` for "Not currently in this session" rather than re-classifying to `Conflict`. Reasoning is captured inline at [`backend/src/services/sessions.rs:859-863`](../../backend/src/services/sessions.rs#L859-L863): `require_active_participant` returns `Forbidden` (an authorization guard), but trying to leave a session you aren't in is bad input from the client (wrong session named) rather than a state clash on the server. `Conflict` would imply "valid input but clashes with server state," which doesn't fit. The other call sites in the list above were re-classified per the rule.
+
 - [x] Approved
 - [ ] Needs discussion
 - [ ] Skip
@@ -670,3 +672,10 @@ If most of this is approved, I'd suggest splitting into three PRs for digestibil
 **PR 1: "Low-level primitives"** — Sections 1.2 (enums), 2.1 (load_active_session), 2.2 (require_participant), 2.3 (touch_session), 2.6 (test helpers), 1.4 (timestamp helpers). Pure additions; existing call sites unchanged. Foundation for the others.
 
 **PR 2: "Apply primitives, collapse duplication"** — Rewrite `join_session`, `leave_session`, `next_track`, `skip_turn`, `create_run`, `delete_run` to use the primitives from PR 1. Apply 2.4 (FK helpers), 2.5 (pick_random_track), 3.1 (decompose get_session_detail), 3.2 (decompose create_run), 3.3 (
+
+---
+
+## Document history
+
+- 2026-05-05 — Audit content (authored 2026-04-15) migrated into `docs/designs/` as part of PR 1 (docs restructure foundation, commit `31f90bd`).
+- 2026-05-09 — Added §1.5 "Divergence noted" subsection recording that `leave_session::BadRequest` is a deliberate departure from the rule, with a cross-reference to the inline rationale at [`backend/src/services/sessions.rs:859-863`](../../backend/src/services/sessions.rs#L859-L863). Per Issue [#81](https://github.com/brendanbyrne/beerio-kart/issues/81).
