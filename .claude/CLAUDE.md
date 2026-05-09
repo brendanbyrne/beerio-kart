@@ -9,10 +9,12 @@ Two handoff channels enable async task passing between assistants. The writer cr
 
 Handoff files live under `.agents/handoffs/`. The directory is gitignored except for `.agents/handoffs/README.md`, which documents the format and lifecycle for humans browsing the repo.
 
-- **`.agents/handoffs/cowork-handoff.md`** — Cowork → Claude Code. Check before starting work. Contains task instructions from the architecture/design assistant. Claude Code deletes after completing the work.
-- **`.agents/handoffs/claude-code-handoff.md`** — Claude Code → Cowork. Write this when you have questions, research requests, or design decisions for Cowork. Brendan or the next Claude Code session deletes after Cowork acknowledges in chat — Cowork's sandbox blocks `unlink()` repo-wide, so Cowork can't clean up its own inbox.
+Files are named for the **recipient**, not the writer. So Cowork writes the file Claude Code reads, and vice versa.
 
-For task-specific handoffs that shouldn't collide with the canonical filenames, use a dated variant: `cowork-handoff-<YYYY-MM-DD>-<slug>.md` or `claude-code-handoff-<YYYY-MM-DD>-<slug>.md`.
+- **`.agents/handoffs/claude-code.md`** — for Claude Code (Cowork writes). Check before starting work. Contains task instructions from the architecture/design assistant. Claude Code deletes after completing the work.
+- **`.agents/handoffs/cowork.md`** — for Cowork (Claude Code writes). Write this when you have questions, research requests, or design decisions for Cowork. Brendan or the next Claude Code session deletes after Cowork acknowledges in chat — Cowork's sandbox blocks `unlink()` repo-wide, so Cowork can't clean up its own inbox.
+
+For task-specific handoffs that shouldn't collide with the canonical filenames, use a dated variant: `claude-code-<YYYY-MM-DD>-<slug>.md` or `cowork-<YYYY-MM-DD>-<slug>.md`.
 
 **Anything intended for the other assistant to act on — task specs, code review findings, bug reports, design decisions, answers to their questions — MUST be written to the appropriate handoff file.** Delivering it only in chat means the other assistant won't see it. If you find yourself composing a substantive response that the other assistant needs, stop and write it to the handoff file instead.
 
@@ -96,7 +98,7 @@ For Issue lifecycle, branch naming (`<issue_number>/<short-slug>`), commit messa
 **Coordination between assistants:**
 
 - Both assistants work on the same checkout — no push/pull needed to see each other's changes.
-- **Cowork** cannot run git at all (its sandbox mount blocks `unlink`). When Cowork wants a change committed, it edits the working tree and notes the intended commit in `.agents/handoffs/cowork-handoff.md` or chat; Brendan or Claude Code then stages, commits, and pushes.
+- **Cowork** cannot run git at all (its sandbox mount blocks `unlink`). When Cowork wants a change committed, it edits the working tree and notes the intended commit in `.agents/handoffs/claude-code.md` or chat; Brendan or Claude Code then stages, commits, and pushes.
 - **Claude Code** must `git push` after making changes so the remote stays current.
 - Both should check `git status` before starting work to avoid conflicts.
 - If both need to edit the same file, coordinate through the user (Brendan).

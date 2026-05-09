@@ -12,7 +12,7 @@ This file is loaded automatically when Claude works in `docs/`. It captures conv
 | Long-form technical investigation that informs designs but doesn't propose a decision | `research/<topic>.md` |
 | A phase's narrative goals and success criteria | `roadmap.md` |
 | A unit of executable work for Claude Code | A GitHub Issue (not a file) |
-| Non-task communication between Cowork and Claude Code | `.agents/handoffs/cowork-handoff.md` or `.agents/handoffs/claude-code-handoff.md` |
+| Non-task communication between Cowork and Claude Code | `.agents/handoffs/claude-code.md` (for Claude Code) or `.agents/handoffs/cowork.md` (for Cowork) |
 | PR review feedback | A GitHub PR comment, line-anchored where possible (not a file) |
 | Project workflow convention (Issue lifecycle, branch naming, statuses, triage) | `project-workflow.md` |
 

@@ -21,7 +21,7 @@ beerio-kart/
 │   │   └── claude-code.md         #   Claude Code's session memory
 │   └── handoffs/                  # Inter-agent transient comms (gitignored except README)
 │       ├── README.md              #   Handoff convention + lifecycle
-│       └── *.md                   #   cowork-handoff.md, claude-code-handoff.md (transient)
+│       └── *.md                   #   claude-code.md, cowork.md (transient; named for recipient)
 │
 ├── .github/
 │   ├── ISSUE_TEMPLATE/            # bug.md, feature.md

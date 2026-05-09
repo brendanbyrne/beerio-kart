@@ -4,17 +4,17 @@ This directory holds short-lived task specs and questions that pass between Cowo
 
 ## The convention
 
-Two channels:
+Two channels. **Files are named for the recipient, not the writer** — `cowork.md` is the file Cowork reads; Claude Code writes it.
 
-- **`cowork-handoff.md`** — Cowork → Claude Code. Cowork writes; Claude Code reads, acts on it, and deletes it.
-- **`claude-code-handoff.md`** — Claude Code → Cowork. Claude Code writes; Cowork reads and acknowledges in chat. Brendan or the next Claude Code session deletes it (Cowork's sandbox blocks `unlink()` repo-wide, so Cowork can't clean up its own inbox).
+- **`claude-code.md`** — for Claude Code (Cowork writes). Cowork writes; Claude Code reads, acts on it, and deletes it.
+- **`cowork.md`** — for Cowork (Claude Code writes). Claude Code writes; Cowork reads and acknowledges in chat. Brendan or the next Claude Code session deletes it (Cowork's sandbox blocks `unlink()` repo-wide, so Cowork can't clean up its own inbox).
 
 **The writer creates the file; the file's existence is the signal that there is work to do.** No file means no work.
 
 For task-specific handoffs that shouldn't collide with the canonical filenames (e.g. multiple parallel work items), use a dated slug:
 
-- `cowork-handoff-<YYYY-MM-DD>-<slug>.md`
-- `claude-code-handoff-<YYYY-MM-DD>-<slug>.md`
+- `claude-code-<YYYY-MM-DD>-<slug>.md`
+- `cowork-<YYYY-MM-DD>-<slug>.md`
 
 ## What goes here
 
@@ -26,7 +26,7 @@ If you find yourself composing a substantive response in chat that the other ass
 
 ## What does NOT go here
 
-- **Self-notes / session state.** Those go in `.agents/memory/cowork.md` (Cowork) or `.agents/memory/claude-code.md` (Claude Code). Self-notes are persistent memory you keep for your own future sessions; handoffs are one-way coordination channels to the *other* assistant. Mixing them breaks the existence-as-signal rule.
+- **Self-notes / session state.** Those go in `.agents/memory/cowork.md` (Cowork) or `.agents/memory/claude-code.md` (Claude Code). Note that the basenames intentionally match the handoff filenames — both `.agents/memory/cowork.md` and `.agents/handoffs/cowork.md` are *for* Cowork, just one is from itself and the other is from Claude Code. Self-notes are persistent memory you keep for your own future sessions; handoffs are one-way coordination channels to the *other* assistant. Mixing them breaks the existence-as-signal rule.
 - **Anything intended for git history.** This directory is gitignored except for this README — handoffs are by definition transient and shouldn't pollute the log.
 
 ## Don't prescribe branch names
@@ -41,7 +41,7 @@ If you genuinely need to constrain the slug (e.g., the same Issue is being split
 
 - **Cowork → Claude Code** is the easy direction. Cowork writes the file (via the normal Write tool — `.agents/` is not in Cowork's protected zone). Claude Code reads it, applies the changes, commits, opens a PR, and `rm`s the handoff file as part of the PR. One round trip.
 - **Claude Code → Cowork** is messier because Cowork can't delete files. The flow:
-  1. Claude Code writes `claude-code-handoff.md` and pushes (or just leaves it on the working tree, since it's gitignored).
+  1. Claude Code writes `cowork.md` and pushes (or just leaves it on the working tree, since it's gitignored).
   2. Cowork reads it on next session start and addresses it in chat.
   3. Cowork tells Brendan it's been addressed and asks for the file to be deleted, OR notes in `.agents/memory/cowork.md` that the next Claude Code session should `rm` it.
   4. Brendan or Claude Code deletes the file.
@@ -60,3 +60,4 @@ There's also a Cowork tool-layer constraint that made the older `docs/handoffs/`
 - 2026-05-05 — Added "Don't prescribe branch names" subsection. Cowork's first two handoffs (CLAUDE.md milestone-naming, PR 1 foundation) suggested branch names that contradicted `docs/workflow.md` § PR conventions; Claude Code followed the (wrong) suggestions both times. Convention is now to omit branch suggestions from handoffs entirely.
 - 2026-05-08 — Updated the "Don't prescribe branch names" subsection's `workflow.md` references → `project-workflow.md` (operational doc renamed for clarity).
 - 2026-05-08 — Moved from `docs/handoffs/README.md` to `.agents/handoffs/README.md`. Path references throughout updated (`cowork-handoff.md` etc. now live under `.agents/handoffs/`). Self-notes pointer updated from `.claude/cowork-notes.md` → `.agents/memory/cowork.md`. "Why `docs/handoffs/` and not `.claude/`" section rewritten as "Why `.agents/` and not `.claude/`" — same fundamental constraint, but the framing is now "deliberate home for high-churn state" rather than "workaround for the tool-layer block." Closes part of [#79](https://github.com/brendanbyrne/beerio-kart/issues/79).
+- 2026-05-09 — Renamed handoff files to be addressed to the recipient instead of the writer, and dropped the `-handoff` suffix: `cowork-handoff.md` → `claude-code.md`; `claude-code-handoff.md` → `cowork.md`. Dated variants follow the same pattern (`claude-code-<YYYY-MM-DD>-<slug>.md` / `cowork-<YYYY-MM-DD>-<slug>.md`). Side-effect: handoff basenames now match the corresponding `.agents/memory/` file's basename, since both are "for" the same recipient — the directory disambiguates writer (memory = self, handoff = other assistant).

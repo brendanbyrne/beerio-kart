@@ -30,7 +30,7 @@ You don't have direct GitHub access. Instead, the user provides the changes via 
 - `.claude/CLAUDE.md` (for project preferences)
 - Related files that the changes interact with (e.g., if a route handler changed, check the service layer it calls)
 
-**Handoff file.** Claude Code may leave a summary in `.claude/claude-code-handoff.md` describing changes it made and any design questions. Check this file at the start of every review.
+**Handoff file.** Claude Code may leave a summary in `.agents/handoffs/cowork.md` describing changes it made and any design questions. Check this file at the start of every review.
 
 When you receive a diff, always read docs/design.md and the changed source files before forming opinions. The diff alone lacks context.
 
@@ -106,7 +106,7 @@ If the review reveals that docs/design.md is outdated or that a design decision 
 
 ### Handoff to Claude Code (when needed)
 
-If the design review surfaces issues that need code changes, write a clear summary to `.claude/cowork-handoff.md` describing what needs to change and why. This is how you communicate action items back to Claude Code.
+If the design review surfaces issues that need code changes, write a clear summary to `.agents/handoffs/claude-code.md` describing what needs to change and why. This is how you communicate action items back to Claude Code.
 
 ## Review Etiquette
 
