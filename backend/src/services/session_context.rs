@@ -13,9 +13,14 @@ use crate::{
     services::helpers,
 };
 
+/// `session_id` mirrors `session.id` as a typed `SessionId` so the helper
+/// methods can borrow `&self.session_id` instead of allocating a fresh wrapper
+/// on every call. Both fields hold the same UUID; the typed copy is the one
+/// callers borrow when they need a `&SessionId`.
 #[derive(Debug, Clone)]
 pub struct SessionContext {
     pub session: sessions::Model,
+    pub session_id: SessionId,
 }
 
 impl SessionContext {
@@ -25,7 +30,11 @@ impl SessionContext {
         session_id: &SessionId,
     ) -> Result<Self, AppError> {
         let session = helpers::load_active_session(db, session_id).await?;
-        Ok(Self { session })
+        let session_id = SessionId::new(session.id.clone());
+        Ok(Self {
+            session,
+            session_id,
+        })
     }
 
     /// Require that `user_id` is the host of this session.
@@ -42,8 +51,7 @@ impl SessionContext {
         db: &C,
         user_id: &UserId,
     ) -> Result<session_participants::Model, AppError> {
-        let session_id = SessionId::new(self.session.id.clone());
-        helpers::require_active_participant(db, &session_id, user_id).await
+        helpers::require_active_participant(db, &self.session_id, user_id).await
     }
 
     /// Bump `last_activity_at` to now in both the DB and this struct.
@@ -51,8 +59,7 @@ impl SessionContext {
     /// the in-memory field so callers that read it post-touch see the
     /// updated value.
     pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), AppError> {
-        let session_id = SessionId::new(self.session.id.clone());
-        helpers::touch_session(db, &session_id).await?;
+        helpers::touch_session(db, &self.session_id).await?;
         self.session.last_activity_at = chrono::Utc::now().naive_utc();
         Ok(())
     }
