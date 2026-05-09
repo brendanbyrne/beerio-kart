@@ -157,7 +157,7 @@ pub async fn create_run(
     body: CreateRunRequest,
 ) -> Result<RunDetail, AppError> {
     let session_race = validate_run_request(db, user_id, &body).await?;
-    let run_id = insert_run(db, user_id, &body, &session_race).await?;
+    let run_id = insert_run(db, user_id, body, &session_race).await?;
     get_run(db, &run_id).await
 }
 
@@ -277,7 +277,7 @@ async fn validate_run_request(
 async fn insert_run(
     db: &DatabaseConnection,
     user_id: &UserId,
-    body: &CreateRunRequest,
+    body: CreateRunRequest,
     session_race: &session_races::Model,
 ) -> Result<RunId, AppError> {
     let now = Utc::now().naive_utc();
@@ -288,7 +288,7 @@ async fn insert_run(
     runs::ActiveModel {
         id: Set(run_id.as_str().to_string()),
         user_id: Set(user_id.as_str().to_string()),
-        session_race_id: Set(body.session_race_id.clone()),
+        session_race_id: Set(body.session_race_id),
         track_id: Set(session_race.track_id),
         character_id: Set(body.character_id),
         body_id: Set(body.body_id),
@@ -298,7 +298,7 @@ async fn insert_run(
         lap1_time: Set(body.lap1_time),
         lap2_time: Set(body.lap2_time),
         lap3_time: Set(body.lap3_time),
-        drink_type_id: Set(body.drink_type_id.clone()),
+        drink_type_id: Set(body.drink_type_id),
         disqualified: Set(body.disqualified),
         photo_path: Set(None),
         created_at: Set(now),
