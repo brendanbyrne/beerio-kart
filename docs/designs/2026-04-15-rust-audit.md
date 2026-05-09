@@ -463,6 +463,8 @@ async fn validate_run_request(
 
 Then `create_run` becomes ~30 lines: validate → insert → touch_session → return.
 
+**Adoption status (2026-05-09):** Extracted `validate_run_request` and `insert_run` from `create_run`. The orchestrator is now 4 lines (validate → insert → fetch). The validation interior was kept cohesive (one helper, not seven) — fragmenting each gate into its own function would hide the validation surface behind names and add parameter-threading noise without buying reuse, since none of the gates have a second caller. Note that the audit's predicted ~30 lines doesn't match reality because two pending-races validation gates were added post-audit (skip mutual-exclusion and ordered-submit guard); `validate_run_request` covers all gates, including the post-audit ones. Per Issue [#83](https://github.com/brendanbyrne/beerio-kart/issues/83).
+
 - [x] Approved
 - [ ] Needs discussion
 - [ ] Skip
@@ -682,3 +684,4 @@ If most of this is approved, I'd suggest splitting into three PRs for digestibil
 - 2026-05-05 — Audit content (authored 2026-04-15) migrated into `docs/designs/` as part of PR 1 (docs restructure foundation, commit `31f90bd`).
 - 2026-05-09 — Added §1.5 "Divergence noted" subsection recording that `leave_session::BadRequest` is a deliberate departure from the rule, with a cross-reference to the inline rationale at [`backend/src/services/sessions.rs:859-863`](../../backend/src/services/sessions.rs#L859-L863). Per Issue [#81](https://github.com/brendanbyrne/beerio-kart/issues/81).
 - 2026-05-09 — Recorded §4.2 adoption status: the four ID newtypes (`UserId`, `SessionId`, `RunId`, `SessionRaceId`) are now plumbed through service signatures, middleware (`AuthUser` / `AdminUser`), route adapters, response DTOs, and test helpers. Per Issue [#82](https://github.com/brendanbyrne/beerio-kart/issues/82).
+- 2026-05-09 — Recorded §3.2 adoption status: `create_run` decomposed into a 4-line orchestrator over `validate_run_request` and `insert_run`. Per Issue [#83](https://github.com/brendanbyrne/beerio-kart/issues/83).

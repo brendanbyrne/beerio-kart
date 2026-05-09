@@ -148,15 +148,40 @@ fn validate_time_fields(body: &CreateRunRequest) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Create a run for a session race. Validates all inputs before inserting.
+/// Create a run for a session race. Top-level orchestrator: validate, insert,
+/// fetch. The validation surface and the transactional insert each live in
+/// their own helper below.
 pub async fn create_run(
     db: &DatabaseConnection,
     user_id: &UserId,
     body: CreateRunRequest,
 ) -> Result<RunDetail, AppError> {
-    validate_time_fields(&body)?;
+    let session_race = validate_run_request(db, user_id, &body).await?;
+    let run_id = insert_run(db, user_id, &body, &session_race).await?;
+    get_run(db, &run_id).await
+}
 
-    // Validate session_race exists and belongs to an active session
+/// Run every gate that must pass before a run can be inserted. Returns the
+/// loaded `session_race` so the caller doesn't re-fetch it.
+///
+/// Gates run in this order:
+/// 1. Time-field arithmetic (lap times sum to track time, all within range).
+/// 2. `session_race` exists.
+/// 3. The session is still active.
+/// 4. The user is an active participant in that session.
+/// 5. The user hasn't already submitted a run for this race.
+/// 6. The user hasn't explicitly skipped this race (mutual exclusion with
+///    submit, per docs/design.md "Pending Race Tracking" → "Submission rules").
+/// 7. The user has no older pending race blocking this submission
+///    (ordered-submit guard, same source).
+/// 8. All FK references (character/body/wheel/glider/drink_type) exist.
+async fn validate_run_request(
+    db: &DatabaseConnection,
+    user_id: &UserId,
+    body: &CreateRunRequest,
+) -> Result<session_races::Model, AppError> {
+    validate_time_fields(body)?;
+
     let session_race = session_races::Entity::find_by_id(&body.session_race_id)
         .one(db)
         .await?
@@ -243,6 +268,18 @@ pub async fn create_run(
     helpers::require_exists::<drink_types::Entity, _>(db, body.drink_type_id.clone(), "drink_type")
         .await?;
 
+    Ok(session_race)
+}
+
+/// Insert the run row and bump the session's last_activity_at, atomically.
+/// Returns the new run's ID. Caller is expected to have already validated
+/// the request via `validate_run_request`.
+async fn insert_run(
+    db: &DatabaseConnection,
+    user_id: &UserId,
+    body: &CreateRunRequest,
+    session_race: &session_races::Model,
+) -> Result<RunId, AppError> {
     let now = Utc::now().naive_utc();
     let run_id = RunId::new(Uuid::new_v4().to_string());
 
@@ -261,7 +298,7 @@ pub async fn create_run(
         lap1_time: Set(body.lap1_time),
         lap2_time: Set(body.lap2_time),
         lap3_time: Set(body.lap3_time),
-        drink_type_id: Set(body.drink_type_id),
+        drink_type_id: Set(body.drink_type_id.clone()),
         disqualified: Set(body.disqualified),
         photo_path: Set(None),
         created_at: Set(now),
@@ -270,11 +307,12 @@ pub async fn create_run(
     .insert(&txn)
     .await?;
 
+    let session_id = SessionId::new(session_race.session_id.clone());
     helpers::touch_session(&txn, &session_id).await?;
 
     txn.commit().await?;
 
-    get_run(db, &run_id).await
+    Ok(run_id)
 }
 
 /// Fetch a single run by ID with JOINed username and drink_type_name.
