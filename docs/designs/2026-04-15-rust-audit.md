@@ -139,7 +139,7 @@ Examples where the HTTP status feels off:
 
 Re-classify the above under this rule. "Session closed" errors become 409.
 
-**Divergence noted (2026-05-09):** `leave_session` kept `BadRequest` for "Not currently in this session" rather than re-classifying to `Conflict`. Reasoning is captured inline at [`backend/src/services/sessions.rs:859-863`](../../backend/src/services/sessions.rs#L859-L863): `require_active_participant` returns `Forbidden` (an authorization guard), but trying to leave a session you aren't in is bad input from the client (wrong session named) rather than a state clash on the server. `Conflict` would imply "valid input but clashes with server state," which doesn't fit. The other call sites in the list above were re-classified per the rule.
+**Divergence noted (2026-05-09):** `leave_session` kept `BadRequest` for "Not currently in this session" rather than re-classifying to `Conflict` or `NotFound`. Reasoning is captured inline at [`backend/src/services/sessions.rs:859-863`](../../backend/src/services/sessions.rs#L859-L863): `require_active_participant` returns `Forbidden` (an authorization guard), but trying to leave a session you aren't in is bad input from the client (wrong session named) rather than a state clash on the server. `Conflict` would imply "valid input but clashes with server state," which doesn't fit. `NotFound` would also be ambiguous — the session resource exists; only the participation doesn't. The other call sites in the list above were re-classified per the rule.
 
 - [x] Approved
 - [ ] Needs discussion
