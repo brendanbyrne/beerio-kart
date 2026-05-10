@@ -43,7 +43,7 @@ PRs are grouped into *phases* by theme. Phases are loosely ordered by what unloc
 - **Dependencies:** PR-A1 (so lints can guide the audit).
 - **Risk:** Low — read-only.
 - **Verification:** Audit file exists; every standards-doc section has at least one matching audit entry (or "all conforming"); plan is updated.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] Audit completed 2026-04-15 ([`docs/designs/2026-04-15-rust-audit.md`](./designs/2026-04-15-rust-audit.md)).
 
 ---
 
@@ -110,7 +110,7 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 - **Dependencies:** PR-B1 (so the variant-aware `From<DbErr>` is in place before the refactor).
 - **Risk:** Low. Mostly mechanical; the test suite catches regressions.
 - **Verification:** All existing tests pass; error responses look identical to clients.
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #105 merged 2026-05-10.
 
 ### PR-C2: Reshape `AppError::Internal` to attach call-site context
 
@@ -126,7 +126,7 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 - **Risk:** Medium. Touches many call sites. Mostly mechanical, but enough breadth that bundling with another phase isn't appealing.
 - **Verification:** All existing tests pass with the test signature update. Spot-check that `Internal` log lines from a real failing endpoint now read like `"Internal: loading user: Database error: <DbErr>"` rather than just `"Database error: <DbErr>"`.
 - **Tracking:** Issue [#106](https://github.com/brendanbyrne/beerio-kart/issues/106).
-- **Sign-off:** [ ]
+- **Sign-off:** [x] PR #107 merged 2026-05-10.
 
 ---
 
@@ -482,3 +482,6 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-08 — Repaired two broken `reviews/design/` markdown links in document history entries (lines 461, 465). Old `../reviews/design/...` paths now point at `./designs/...` per the PR 1 migration. Closes part of Issue #42. PR 5 of the docs restructure.
 - 2026-05-08 — Updated PR-I1 scope: "Findings get written to `reviews/pr/`" → "Findings get posted as GitHub PR review comments per [`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §8.8." `reviews/pr/` was retired in the docs restructure; live-prose references should match the new convention. Closes part of [#89](https://github.com/brendanbyrne/beerio-kart/issues/89).
 - 2026-05-09 — Added PR-C2 (`AppError::Internal` reshape to carry call-site context per `rust.md` § 1). Surfaced and scoped-out during PR #105 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR. Issue [#106](https://github.com/brendanbyrne/beerio-kart/issues/106) tracks the work.
+- 2026-05-10 — Marked PR-A2 sign-off complete (audit completed 2026-04-15; deliverable is [`docs/designs/2026-04-15-rust-audit.md`](./designs/2026-04-15-rust-audit.md)).
+- 2026-05-10 — Marked PR-C1 sign-off complete (merged 2026-05-10 as PR #105).
+- 2026-05-10 — Marked PR-C2 sign-off complete (merged 2026-05-10 as PR #107).
