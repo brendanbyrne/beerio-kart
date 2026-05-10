@@ -32,7 +32,7 @@ fn make_config(admin_user_id: Option<&str>) -> Arc<AppConfig> {
         jwt_secret: TEST_SECRET.to_string(),
         jwt_access_expiry_minutes: 15,
         jwt_refresh_expiry_days: 7,
-        admin_user_id: admin_user_id.map(|s| s.to_string()),
+        admin_user_id: admin_user_id.map(ToString::to_string),
         cookie_secure: false,
     })
 }

@@ -499,6 +499,7 @@ pub async fn get_run_defaults(
 mod tests {
     use super::*;
     use crate::{
+        entities::sessions as sessions_entity,
         services::sessions,
         test_helpers::{create_user, seed_game_data, setup_db},
     };
@@ -806,7 +807,6 @@ mod tests {
             .ok();
 
         // Force-close in case leave order was wrong
-        use crate::entities::sessions as sessions_entity;
         let s = sessions_entity::Entity::find_by_id(&session_id)
             .one(&db)
             .await

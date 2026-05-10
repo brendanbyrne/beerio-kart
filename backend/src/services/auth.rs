@@ -163,6 +163,7 @@ pub fn validate_refresh_token(
 }
 
 /// Build the `Set-Cookie` header value for a refresh token.
+#[must_use]
 pub fn refresh_cookie(token: &str, max_age_seconds: i64, config: &AppConfig) -> String {
     let secure = if config.cookie_secure { "Secure; " } else { "" };
     format!(
@@ -171,6 +172,7 @@ pub fn refresh_cookie(token: &str, max_age_seconds: i64, config: &AppConfig) -> 
 }
 
 /// Build a `Set-Cookie` header value that clears the refresh token cookie.
+#[must_use]
 pub fn clear_refresh_cookie(config: &AppConfig) -> String {
     refresh_cookie("", 0, config)
 }

@@ -102,7 +102,7 @@ mod tests {
         let id = UserId::new("abc");
         assert_eq!(id.as_str(), "abc");
         assert_eq!(id.to_string(), "abc");
-        assert_eq!(id.clone().into_string(), "abc".to_string());
+        assert_eq!(id.into_string(), "abc".to_string());
     }
 
     #[test]
