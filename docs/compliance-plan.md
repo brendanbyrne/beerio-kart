@@ -485,3 +485,5 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-10 — Marked PR-A2 sign-off complete (audit completed 2026-04-15; deliverable is [`docs/designs/2026-04-15-rust-audit.md`](./designs/2026-04-15-rust-audit.md)).
 - 2026-05-10 — Marked PR-C1 sign-off complete (merged 2026-05-10 as PR #105).
 - 2026-05-10 — Marked PR-C2 sign-off complete (merged 2026-05-10 as PR #107).
+- 2026-05-10 — PR-H1+ (a) Issue [#101](https://github.com/brendanbyrne/beerio-kart/issues/101) closed via PR #108 (`unwrap_used`/`expect_used` allows removed from non-test code; `main()` now returns `anyhow::Result<()>`).
+- 2026-05-10 — PR-H1+ (b) Issue [#102](https://github.com/brendanbyrne/beerio-kart/issues/102) verified clean without code changes. PR-A1 (#24) never added module-level allows for `clippy::needless_pass_by_value` or `clippy::large_types_passed_by_value` (verified by `gh pr diff 24` and `grep -rn "allow.*clippy" backend/src`); both lints are already covered as warnings via the workspace `pedantic = "warn"` setting and the codebase has zero violations against either. Issue body's premise about removing PR-A1-introduced allows was stale.
