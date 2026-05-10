@@ -74,7 +74,8 @@ Cowork can read and write GitHub data — issues, pull requests, project board i
 **What the MCP cannot do, regardless of which assistant calls it:**
 
 - **Run `git`.** The MCP only talks to GitHub's API. Branch creation, commits, pushes, and merges remain Claude Code's job.
-- **Create or edit project custom fields, status field options (board columns), views, or built-in workflows.** GitHub's API does not expose these — they are configured in the project Settings UI only.
+- **Create or modify the project's built-in workflows** (auto-add, auto-close, auto-archive). GitHub's API does not expose these — they are Settings-UI-only.
+- Custom fields, single-select option lists, and views *can* be created/edited via API — see [`docs/project-field-ids.md`](../docs/project-field-ids.md) for which path (GraphQL vs. Composio REST shim) works for which field type, and known REST-shim 500s.
 - **Set Assignees, Labels, Milestone, or Repository via the project field mutation.** Those are properties of the underlying issue/PR; use the issue/PR mutations instead.
 
 **What Claude Code can do via `gh`:** see [`docs/project-workflow.md`](../docs/project-workflow.md) § Claude Code's autonomy in moving Issue status for the token scopes, the `updateProjectV2ItemFieldValue` mutation, and the `INSUFFICIENT_SCOPES` recovery.

@@ -46,6 +46,43 @@ The Backlog option ID (`f75ad846`) was originally named "Todo"; it was renamed i
 
 Convention: **Medium is the default** for new Issues. The API exposes no "default" flag on a field option — the default is enforced by the project's auto-add workflow (configurable in the Settings UI), not the field schema itself. If you set Priority via the API on a freshly-added item, set it explicitly to `ae0843f9` rather than relying on auto-population.
 
+## Iteration field
+
+| Field | Value |
+|---|---|
+| Field name | `Iteration` |
+| Field node ID | `PVTIF_lAHOAA6jO84BWue2zhScvcQ` |
+| Duration | 14 days (per iteration) |
+| Start day | Monday (`startDay = 1`) |
+
+| Option | Title | Start date | Iteration ID |
+|---|---|---|---|
+| Iter 1 | Audit close + C1 (thiserror) | 2026-05-11 | `f114485e` |
+| Iter 2 | H1 lint cleanup (high-signal) | 2026-05-25 | `11db1a9f` |
+| Iter 3 | H1 lint cleanup (style) | 2026-06-08 | `1471cca6` |
+| Iter 4 | Star kickoff (build chore + schema + lifecycle) | 2026-06-22 | `d77264fd` |
+| Iter 5 | Star session APIs + UI | 2026-07-06 | `9263cfd3` |
+| Iter 6 | Star run recording + photos | 2026-07-20 | `47ed1d7c` |
+
+Iteration IDs are stable as long as the iteration's slot in the configuration list isn't renumbered. **Editing the iteration list via `updateProjectV2Field` rotates the IDs of every iteration**, even ones whose start date and duration didn't change — the input type `ProjectV2Iteration` has no `id` field, so the API treats every entry as new. If you regenerate iterations, refresh this table and re-set the iteration value on every project item that referenced an old ID.
+
+REST creation via Composio (`GITHUB_ADD_FIELD_TO_USER_PROJECT` with `data_type: iteration`) returns 500 — the underlying `POST /users/.../projectsV2/N/fields` REST endpoint doesn't exist for iteration fields. The working path is `GITHUB_RUN_GRAPH_QL_QUERY` calling `createProjectV2Field` / `updateProjectV2Field` mutations directly. Updating supports partial overwrite (set `iterationConfiguration` to overwrite the full iteration list; other field properties stay).
+
+## Roadmap view
+
+| Field | Value |
+|---|---|
+| View name | `Roadmap` |
+| View number | `6` |
+| View node ID | `PVTV_lAHOAA6jO84BWue2zgKSLrw` |
+| View numeric ID | `43134652` |
+| Layout | `roadmap` |
+| URL | https://github.com/users/brendanbyrne/projects/3/views/6 |
+
+Created via `GITHUB_CREATE_VIEW_FOR_USER_PROJECT` (REST shim — works for views, unlike for iteration fields). Initial visible_fields: Title, Assignees, Status, Linked PRs, Sub-issues progress (the Iteration field anchors the timeline axis automatically since it's the only iteration field on the project).
+
+The GraphQL API does not expose mutations to manage views (no `createProjectV2View` / `updateProjectV2View`); Composio's REST shim is the only programmatic path. Settings-UI-only operations: changing the view's filter expression, toggling fields, changing the timeline axis field, sort order.
+
 ## Other built-in fields
 
 These rarely need to be set via the API (most are populated automatically by GitHub when an issue/PR is added), but listed for completeness.
@@ -127,3 +164,4 @@ GITHUB_CLEAR_PROJECT_V2_ITEM_FIELD_VALUE
 
 - 2026-05-05 — Initial capture after first successful Composio MCP connection. Project was created with default fields only (Board template).
 - 2026-05-05 — Renamed Todo → Backlog (option ID `f75ad846` preserved). Added Ready (`1619f959`) as a new Status option to support the Cowork-queues / Claude-Code-pulls workflow. Removed In Review (never created — workflow ultimately decided to track Issues only and rely on GitHub's native Pulls tab for PR-review state). Added Priority field (`PVTSSF_lAHOAA6jO84BWue2zhSAv-I`) with Low / Medium / High options. PR auto-add workflow disabled in Project Settings (board now tracks Issues only). All changes refreshed via `GITHUB_LIST_PROJECT_FIELDS_FOR_USER`.
+- 2026-05-09 — Added the Iteration field (`PVTIF_lAHOAA6jO84BWue2zhScvcQ`) and Roadmap view (#6, `PVTV_lAHOAA6jO84BWue2zgKSLrw`) per the Roadmap experiment. 6 iterations of 14 days each starting 2026-05-11 cover audit close, the C1 + H1+ Quality Pass, and Star kickoff through run recording. Backfilled iteration values on all 32 then-open Issues. The Iteration field section above also corrects two stale claims in this file's prose: (1) `data_type=iteration` via `GITHUB_ADD_FIELD_TO_USER_PROJECT` actually 500s — the GraphQL `createProjectV2Field` mutation works; (2) views CAN be created programmatically via Composio's `GITHUB_CREATE_VIEW_FOR_USER_PROJECT` REST shim, contrary to docs/CLAUDE.md's "Settings-UI-only" assertion (which is correct for fields' option lists and for the auto-add/auto-close workflows, but not for view creation or iteration fields).
