@@ -309,7 +309,7 @@ async fn load_host_username(
         .await?
         .map(|u| u.username)
         .ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!("Host user not found for host_id {host_id}"))
+            AppError::Internal(anyhow::anyhow!("host user not found for host_id {host_id}"))
         })
 }
 
@@ -953,7 +953,7 @@ pub async fn next_track(
         .await?
         .ok_or_else(|| {
             AppError::Internal(anyhow::anyhow!(
-                "Cup not found for cup_id {}",
+                "cup not found for cup_id {}",
                 chosen.cup_id
             ))
         })?
@@ -1048,7 +1048,7 @@ pub async fn skip_turn(
         .await?
         .ok_or_else(|| {
             AppError::Internal(anyhow::anyhow!(
-                "Cup not found for cup_id {}",
+                "cup not found for cup_id {}",
                 chosen.cup_id
             ))
         })?
