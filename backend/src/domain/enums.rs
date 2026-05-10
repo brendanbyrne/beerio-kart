@@ -39,7 +39,7 @@ impl FromStr for SessionStatus {
             "active" => Ok(Self::Active),
             "closed" => Ok(Self::Closed),
             other => Err(AppError::Internal(anyhow::anyhow!(
-                "unknown session status: {other}"
+                "Unknown session status: {other}"
             ))),
         }
     }

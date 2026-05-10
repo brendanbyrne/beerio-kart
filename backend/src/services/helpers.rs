@@ -159,7 +159,7 @@ pub async fn pick_random_track<C: ConnectionTrait>(
 ) -> Result<tracks::Model, AppError> {
     let all_tracks = tracks::Entity::find().all(db).await?;
     if all_tracks.is_empty() {
-        return Err(AppError::Internal(anyhow::anyhow!("no tracks configured")));
+        return Err(AppError::Internal(anyhow::anyhow!("No tracks configured")));
     }
 
     let available: Vec<&tracks::Model> = all_tracks
@@ -188,9 +188,7 @@ pub async fn pick_random_track<C: ConnectionTrait>(
         pool.choose(&mut rng).copied().cloned()
     };
 
-    chosen.ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("pick_random_track: empty pool after reset"))
-    })
+    chosen.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Empty track pool after reset")))
 }
 
 #[cfg(test)]
