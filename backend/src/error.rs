@@ -76,13 +76,10 @@ impl IntoResponse for AppError {
 }
 
 fn format_error_chain(err: &(dyn std::error::Error + 'static)) -> String {
-    let mut parts = vec![err.to_string()];
-    let mut source = err.source();
-    while let Some(e) = source {
-        parts.push(e.to_string());
-        source = e.source();
-    }
-    parts.join(": ")
+    std::iter::successors(Some(err), |e| e.source())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ")
 }
 
 // ── From impls for common error types ──────────────────────────────
