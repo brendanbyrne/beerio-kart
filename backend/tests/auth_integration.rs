@@ -84,7 +84,7 @@ fn extract_refresh_cookie(response: &axum_test::TestResponse) -> Option<String> 
         .split(';')
         .next()?
         .strip_prefix("refresh_token=")
-        .map(|s| s.to_string())
+        .map(ToString::to_string)
 }
 
 // ── Existing tests (updated for new response format) ────────────────

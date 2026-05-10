@@ -51,7 +51,7 @@ impl FromRequestParts<crate::AppState> for AuthUser {
             return Err(AppError::Unauthorized("Invalid token type".to_string()));
         }
 
-        Ok(AuthUser {
+        Ok(Self {
             user_id: UserId::new(claims.sub),
             username: claims.username,
         })
@@ -90,7 +90,7 @@ impl FromRequestParts<crate::AppState> for AdminUser {
             return Err(AppError::Forbidden("Admin access required".to_string()));
         }
 
-        Ok(AdminUser {
+        Ok(Self {
             user_id: auth_user.user_id,
             username: auth_user.username,
         })

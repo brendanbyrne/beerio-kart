@@ -15,12 +15,12 @@ use beerio_kart::{
     ARGON2_MAX_CONCURRENT, AppState,
     config::AppConfig,
     drink_type_id::drink_type_uuid,
-    entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels},
+    entities::{bodies, characters, cups, drink_types, gliders, sessions, tracks, wheels},
     routes,
 };
 use chrono::Utc;
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, EntityTrait, Set};
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
@@ -207,7 +207,7 @@ async fn register_and_get_token(server: &TestServer, username: &str) -> (String,
 async fn test_full_session_lifecycle() {
     let (server, _db) = setup_test_app().await;
     let (token_host, _host_id) = register_and_get_token(&server, "host").await;
-    let (token_user2, _user2_id) = register_and_get_token(&server, "user2").await;
+    let (token_user2, user2_id) = register_and_get_token(&server, "user2").await;
 
     // 1. Create session
     let res = server
@@ -254,7 +254,7 @@ async fn test_full_session_lifecycle() {
         .add_header(AUTH_HEADER, auth_value(&token_user2))
         .await;
     let detail: Value = res.json();
-    assert_eq!(detail["host_id"], _user2_id);
+    assert_eq!(detail["host_id"], user2_id);
     assert_eq!(detail["status"], "active");
 
     // 5. Last participant leaves — session closes
@@ -480,8 +480,6 @@ async fn test_stale_session_cleanup() {
 
     // Manually set last_activity_at to 2 hours ago
     let two_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(2)).naive_utc();
-    use beerio_kart::entities::sessions;
-    use sea_orm::EntityTrait;
     let session_model = sessions::Entity::find_by_id(&session_id)
         .one(&db)
         .await

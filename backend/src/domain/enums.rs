@@ -17,7 +17,8 @@ pub enum SessionStatus {
 }
 
 impl SessionStatus {
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
             Self::Closed => "closed",
@@ -54,7 +55,8 @@ pub enum Ruleset {
 }
 
 impl Ruleset {
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Random => "random",
         }

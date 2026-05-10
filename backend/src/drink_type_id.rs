@@ -8,6 +8,7 @@ const DRINK_TYPE_NAMESPACE: Uuid = Uuid::from_bytes([
 
 /// Compute a deterministic UUID for a drink type name (case-insensitive).
 /// `uuid_v5(DRINK_TYPE_NAMESPACE, UPPERCASE(name))`
+#[must_use]
 pub fn drink_type_uuid(name: &str) -> String {
     Uuid::new_v5(&DRINK_TYPE_NAMESPACE, name.to_uppercase().as_bytes()).to_string()
 }

@@ -677,7 +677,7 @@ pub async fn get_session_detail(
     // 1-indexed and gapless: `next_track` appends monotonically, and
     // `skip_turn` replaces in-place (preserves race_number). No deletion
     // path exists. Under this invariant, last().race_number == COUNT(*).
-    let race_number = races.last().map(|r| r.race_number as usize).unwrap_or(1);
+    let race_number = races.last().map_or(1, |r| r.race_number as usize);
 
     Ok(SessionDetail {
         id: SessionId::new(session.id),

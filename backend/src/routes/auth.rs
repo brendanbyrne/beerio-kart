@@ -77,7 +77,7 @@ fn extract_refresh_cookie(headers: &HeaderMap) -> Option<String> {
         .split(';')
         .find_map(|pair| {
             let pair = pair.trim();
-            pair.strip_prefix("refresh_token=").map(|v| v.to_string())
+            pair.strip_prefix("refresh_token=").map(ToString::to_string)
         })
 }
 
@@ -167,26 +167,23 @@ pub async fn login(
 ) -> Result<impl IntoResponse, AppError> {
     let username = body.username.trim();
 
-    let user = match users::Entity::find()
+    let Some(user) = users::Entity::find()
         .filter(users::Column::Username.eq(username))
         .one(&state.db)
         .await?
-    {
-        Some(u) => u,
-        None => {
-            // Hash a dummy password so the timing is similar to the "wrong password"
-            // path. Prevents username enumeration via response-time analysis.
-            let _ = auth_service::verify_password(
-                &state.argon2_limit,
-                "dummy".to_string(),
-                "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-                    .to_string(),
-            )
-            .await;
-            return Err(AppError::Unauthorized(
-                "Invalid username or password".into(),
-            ));
-        }
+    else {
+        // Hash a dummy password so the timing is similar to the "wrong password"
+        // path. Prevents username enumeration via response-time analysis.
+        let _ = auth_service::verify_password(
+            &state.argon2_limit,
+            "dummy".to_string(),
+            "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                .to_string(),
+        )
+        .await;
+        return Err(AppError::Unauthorized(
+            "Invalid username or password".into(),
+        ));
     };
 
     // Verify password (offloaded to the blocking pool, capped by argon2_limit)

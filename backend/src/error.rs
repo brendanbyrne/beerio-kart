@@ -59,12 +59,12 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, user_message) = match &self {
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
-            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
-            AppError::Internal(_) | AppError::Token(_) | AppError::Hash(_) => {
+            Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            Self::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
+            Self::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
+            Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            Self::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            Self::Internal(_) | Self::Token(_) | Self::Hash(_) => {
                 error!("{}", format_error_chain(&self));
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -101,11 +101,11 @@ impl From<sea_orm::DbErr> for AppError {
     fn from(e: sea_orm::DbErr) -> Self {
         use sea_orm::{DbErr, SqlErr};
         match &e {
-            DbErr::RecordNotFound(msg) => AppError::NotFound(msg.clone()),
+            DbErr::RecordNotFound(msg) => Self::NotFound(msg.clone()),
             _ => match e.sql_err() {
-                Some(SqlErr::UniqueConstraintViolation(m)) => AppError::Conflict(m),
-                Some(SqlErr::ForeignKeyConstraintViolation(m)) => AppError::BadRequest(m),
-                _ => AppError::Internal(anyhow::Error::new(e).context("Database error")),
+                Some(SqlErr::UniqueConstraintViolation(m)) => Self::Conflict(m),
+                Some(SqlErr::ForeignKeyConstraintViolation(m)) => Self::BadRequest(m),
+                _ => Self::Internal(anyhow::Error::new(e).context("Database error")),
             },
         }
     }
