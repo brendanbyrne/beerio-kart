@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use thiserror::Error;
 use tracing::error;
 
 #[derive(Serialize)]
@@ -16,21 +17,35 @@ struct ErrorBody {
 /// Implements Axum's `IntoResponse`, so handlers can return
 /// `Result<impl IntoResponse, AppError>` and use `?` directly
 /// instead of writing match arms for every fallible call.
-#[derive(Debug)]
+#[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum AppError {
     /// 400 — validation failures, malformed input
+    #[error("{0}")]
     BadRequest(String),
     /// 401 — wrong credentials, expired/missing token
+    #[error("{0}")]
     Unauthorized(String),
     /// 403 — action not permitted for this user
+    #[error("{0}")]
     Forbidden(String),
     /// 404 — resource not found
+    #[error("{0}")]
     NotFound(String),
     /// 409 — state conflict (e.g. closed session) or uniqueness violation (e.g. duplicate username)
+    #[error("{0}")]
     Conflict(String),
     /// 500 — unexpected internal failures (DB, crypto, etc.)
     /// The String is a log-only message; the user sees "Internal server error".
+    #[error("{0}")]
     Internal(String),
+    /// 500 — JWT encode/decode failure. User-visible response is "Internal server error";
+    /// the wrapped error is logged via the source chain at the response boundary.
+    #[error("Token error")]
+    Token(#[from] jsonwebtoken::errors::Error),
+    /// 500 — password hashing/verification failure. Same response semantics as `Token`.
+    #[error("Password hashing error")]
+    Hash(#[from] argon2::password_hash::Error),
 }
 
 impl IntoResponse for AppError {
@@ -41,8 +56,8 @@ impl IntoResponse for AppError {
             AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
-            AppError::Internal(log_msg) => {
-                error!("{log_msg}");
+            AppError::Internal(_) | AppError::Token(_) | AppError::Hash(_) => {
+                error!("{}", format_error_chain(&self));
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal server error".to_string(),
@@ -60,7 +75,22 @@ impl IntoResponse for AppError {
     }
 }
 
+fn format_error_chain(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut parts = vec![err.to_string()];
+    let mut source = err.source();
+    while let Some(e) = source {
+        parts.push(e.to_string());
+        source = e.source();
+    }
+    parts.join(": ")
+}
+
 // ── From impls for common error types ──────────────────────────────
+//
+// The `Token` and `Hash` variants get their `From` impls from `#[from]` on the
+// variant. `DbErr` needs hand-written discrimination — different `DbErr`
+// variants map to different `AppError` variants (404 / 409 / 400 / 500), which
+// `#[from]` can't express.
 
 impl From<sea_orm::DbErr> for AppError {
     fn from(e: sea_orm::DbErr) -> Self {
@@ -76,20 +106,10 @@ impl From<sea_orm::DbErr> for AppError {
     }
 }
 
-impl From<jsonwebtoken::errors::Error> for AppError {
-    fn from(e: jsonwebtoken::errors::Error) -> Self {
-        AppError::Internal(format!("Token error: {e}"))
-    }
-}
-
-impl From<argon2::password_hash::Error> for AppError {
-    fn from(e: argon2::password_hash::Error) -> Self {
-        AppError::Internal(format!("Password hashing error: {e}"))
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::error::Error as _;
+
     use sea_orm::{ActiveModelTrait, DbErr, Set};
 
     use super::*;
@@ -179,5 +199,50 @@ mod tests {
             AppError::BadRequest(_) => {}
             other => panic!("expected BadRequest, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_jwt_error_maps_to_token_variant_with_source() {
+        let jwt_err =
+            jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken);
+        let app_err: AppError = jwt_err.into();
+        match &app_err {
+            AppError::Token(_) => {}
+            other => panic!("expected Token, got {other:?}"),
+        }
+        // The wrapped error must be reachable via the source chain so the
+        // `IntoResponse` log gets the underlying jwt detail, not just "Token error".
+        assert!(
+            app_err.source().is_some(),
+            "Token variant should expose its source"
+        );
+    }
+
+    #[test]
+    fn test_argon2_error_maps_to_hash_variant_with_source() {
+        let app_err: AppError = argon2::password_hash::Error::Password.into();
+        match &app_err {
+            AppError::Hash(_) => {}
+            other => panic!("expected Hash, got {other:?}"),
+        }
+        assert!(
+            app_err.source().is_some(),
+            "Hash variant should expose its source"
+        );
+    }
+
+    #[test]
+    fn test_format_error_chain_joins_sources() {
+        let jwt_err =
+            jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken);
+        let app_err: AppError = jwt_err.into();
+        let chain = format_error_chain(&app_err);
+        // First segment is the variant's Display ("Token error"); the second is
+        // the wrapped jwt error's Display, joined by ": ".
+        assert!(chain.starts_with("Token error: "), "got: {chain}");
+        assert!(
+            chain.contains("InvalidToken") || chain.contains("invalid"),
+            "got: {chain}"
+        );
     }
 }
