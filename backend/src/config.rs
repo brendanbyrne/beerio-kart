@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use anyhow::Context;
+
 /// Shared application configuration loaded from environment variables.
 ///
 /// Wrapped in `Arc` and stored in Axum's state so all handlers can access it
@@ -23,12 +25,11 @@ pub struct AppConfig {
 impl AppConfig {
     /// Load configuration from environment variables.
     ///
-    /// Panics if `JWT_SECRET` is not set — this is intentional. Running without
-    /// a signing key would silently produce unsigned or weak tokens.
-    #[allow(clippy::expect_used)] // Startup config; panic-on-missing is the right behavior.
-    pub fn from_env() -> Arc<Self> {
+    /// Errors if `JWT_SECRET` is not set — running without a signing key would
+    /// silently produce unsigned or weak tokens.
+    pub fn from_env() -> anyhow::Result<Arc<Self>> {
         let jwt_secret = std::env::var("JWT_SECRET")
-            .expect("JWT_SECRET must be set — it's the signing key for auth tokens");
+            .context("JWT_SECRET must be set — it's the signing key for auth tokens")?;
 
         let jwt_access_expiry_minutes = std::env::var("JWT_ACCESS_EXPIRY_MINUTES")
             .ok()
@@ -47,12 +48,12 @@ impl AppConfig {
             .and_then(|v| v.parse().ok())
             .unwrap_or(true);
 
-        Arc::new(Self {
+        Ok(Arc::new(Self {
             jwt_secret,
             jwt_access_expiry_minutes,
             jwt_refresh_expiry_days,
             admin_user_id,
             cookie_secure,
-        })
+        }))
     }
 }

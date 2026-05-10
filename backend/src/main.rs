@@ -1,11 +1,8 @@
-// Startup code — panic-on-misconfiguration is intentional (CLAUDE.md "what
-// doesn't need tests" carve-out for one-time startup code).
-#![allow(clippy::expect_used, clippy::unwrap_used)]
-
 mod seed;
 
 use std::{sync::Arc, time::Duration};
 
+use anyhow::Context;
 use axum::{
     Json, Router,
     routing::{get, post, put},
@@ -26,7 +23,7 @@ struct HelloResponse {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     // Load .env file if present (non-fatal if missing)
     dotenvy::dotenv().ok();
 
@@ -42,25 +39,25 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:../data/db/beerio-kart.db?mode=rwc".to_string());
 
-    // Load config from env vars (panics if JWT_SECRET is missing)
-    let config = AppConfig::from_env();
+    // Load config from env vars (errors if JWT_SECRET is missing)
+    let config = AppConfig::from_env()?;
 
     // Build the SQLx pool with per-connection PRAGMAs (foreign_keys, busy_timeout,
     // synchronous, journal_mode), then wrap as a SeaORM DatabaseConnection. See
     // src/db.rs for the rationale and seaorm.md § 8 for the rule.
     let db = db::connect(&database_url)
         .await
-        .expect("Failed to connect to database");
+        .context("Connecting to database")?;
 
     // Run all pending migrations. On a fresh database this creates every table.
     Migrator::up(&db, None)
         .await
-        .expect("Failed to run database migrations");
+        .context("Running database migrations")?;
 
     // Seed static game data (characters, tracks, cups, etc.) from JSON files.
     // Only inserts into empty tables — safe to call on every startup.
     tracing::info!("Seeding static data...");
-    seed::run(&db).await.expect("Failed to seed database");
+    seed::run(&db).await.context("Seeding database")?;
     tracing::info!("Seeding complete");
 
     let state = AppState {
@@ -175,9 +172,15 @@ async fn main() {
         }
     });
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+        .await
+        .context("Binding TCP listener on 0.0.0.0:3000")?;
     tracing::info!("Listening on http://localhost:3000");
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .await
+        .context("HTTP server returned an error")?;
+
+    Ok(())
 }
 
 async fn hello() -> Json<HelloResponse> {
