@@ -112,6 +112,22 @@ These are real bugs the standard would prevent in new code, surfaced during rese
 - **Verification:** All existing tests pass; error responses look identical to clients.
 - **Sign-off:** [ ]
 
+### PR-C2: Reshape `AppError::Internal` to attach call-site context
+
+- **Scope:**
+  - Pick one of the two shapes from `rust.md` § 1: `Internal { source: Box<dyn std::error::Error + Send + Sync + 'static>, context: &'static str }`, or `Internal(#[from] anyhow::Error)` with `.context(...)` at service boundaries.
+  - Update `From<sea_orm::DbErr>` so the `Internal` fallback carries context; this likely means turning `From` into named constructors like `AppError::internal_db("loading user", e)` since `From` impls can't know context.
+  - `IntoResponse` already walks `error.source()` (landed in PR-C1), so a structural source-bearing variant Just Works on the log side; verify the chain reads naturally.
+  - Update existing tests for the new `Internal` shape (`test_unrecognized_dberr_maps_to_internal` will need a small adjustment).
+  - Update [`docs/design.md`](./design.md) § Observability → Error response pattern to reflect the new variant shape and the context-attachment rule.
+- **Standards refs:** `rust.md` § 1 (third bullet on attaching context to `Internal`).
+- **Effort:** M. Mostly mechanical, but the call-site rewrites are widespread (every service that produces `Internal` from a `?` via `From<DbErr>`).
+- **Dependencies:** PR-C1 (#105) — the thiserror foundation must be in place. Compatible with #84 (driver-string sanitization in `From<DbErr>`); whichever lands first, the other rebases.
+- **Risk:** Medium. Touches many call sites. Mostly mechanical, but enough breadth that bundling with another phase isn't appealing.
+- **Verification:** All existing tests pass with the test signature update. Spot-check that `Internal` log lines from a real failing endpoint now read like `"Internal: loading user: Database error: <DbErr>"` rather than just `"Database error: <DbErr>"`.
+- **Tracking:** Issue [#106](https://github.com/brendanbyrne/beerio-kart/issues/106).
+- **Sign-off:** [ ]
+
 ---
 
 ## Stream D — Type-driven design
@@ -465,3 +481,4 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-05 — Renamed `Phase A`–`Phase J` to `Stream A`–`Stream J` throughout to free the `Phase` namespace for build phases only, per the cup-name milestone convention adopted in the design record's 2026-05-05 amendment ([`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12.5 #2).
 - 2026-05-08 — Repaired two broken `reviews/design/` markdown links in document history entries (lines 461, 465). Old `../reviews/design/...` paths now point at `./designs/...` per the PR 1 migration. Closes part of Issue #42. PR 5 of the docs restructure.
 - 2026-05-08 — Updated PR-I1 scope: "Findings get written to `reviews/pr/`" → "Findings get posted as GitHub PR review comments per [`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §8.8." `reviews/pr/` was retired in the docs restructure; live-prose references should match the new convention. Closes part of [#89](https://github.com/brendanbyrne/beerio-kart/issues/89).
+- 2026-05-09 — Added PR-C2 (`AppError::Internal` reshape to carry call-site context per `rust.md` § 1). Surfaced and scoped-out during PR #105 review; tracked here so the gap doesn't get rediscovered and re-dismissed each PR. Issue [#106](https://github.com/brendanbyrne/beerio-kart/issues/106) tracks the work.
