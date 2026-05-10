@@ -417,15 +417,15 @@ pub async fn delete_run(
     let session_race = session_races::Entity::find_by_id(&run.session_race_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Session race not found for run")))?;
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("session race not found for run")))?;
 
     let session_id = SessionId::new(session_race.session_id.clone());
     // FK guarantees the session exists; NotFound here signals data corruption.
     helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
-            AppError::NotFound(_) => {
-                AppError::Internal(anyhow::anyhow!("Session not found for run"))
+            AppError::NotFound(msg) => {
+                AppError::Internal(anyhow::anyhow!("session not found for run: {msg}"))
             }
             AppError::Conflict(_) => {
                 AppError::Conflict("Cannot delete run from a closed session".to_string())

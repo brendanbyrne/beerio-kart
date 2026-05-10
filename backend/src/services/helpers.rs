@@ -159,7 +159,7 @@ pub async fn pick_random_track<C: ConnectionTrait>(
 ) -> Result<tracks::Model, AppError> {
     let all_tracks = tracks::Entity::find().all(db).await?;
     if all_tracks.is_empty() {
-        return Err(AppError::Internal(anyhow::anyhow!("No tracks configured")));
+        return Err(AppError::Internal(anyhow::anyhow!("no tracks configured")));
     }
 
     let available: Vec<&tracks::Model> = all_tracks
