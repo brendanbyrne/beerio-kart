@@ -339,7 +339,7 @@ The project targets edition 2024 (Rust 1.85+). Edition 2024 is the latest stable
 
 - **Rule:** `unwrap()` policy:
   - **Tests, `build.rs`, examples:** unrestricted.
-  - **`main.rs` startup:** `expect("static config invariant: ...")` is fine — failure aborts startup, which is the desired behavior for misconfiguration.
+  - **`main.rs` startup:** prefer `fn main() -> anyhow::Result<()>` with `?` and `.context("...")` over `.expect(...)`/`.unwrap()`. Both abort on misconfiguration, but the anyhow form yields an error chain via `Display`/`source()` (richer than a panic message) and stays clippy-clean without per-file `#[allow(clippy::expect_used)]`. This is the binary-glue half of § 1's `anyhow` (binary) / `thiserror` (library) split. `expect("static config invariant: ...")` remains acceptable for genuinely-infallible call sites where wiring through `Result` would be all noise (rare in practice).
   - **Handlers, services, library code:** banned. Use `?` or explicit `match`.
   - **Source:** <https://burntsushi.net/unwrap/>
 
@@ -527,3 +527,4 @@ Anyone modifying Rust code in this repo should have read at least the first thre
 - 2026-05-04 — Clarified § 8 unwrap/expect rule for test modules vs integration test files: lib code uses `cfg_attr(test, allow(...))`, files under `tests/` use bare `#![allow(...)]` since `cfg(test)` is unconditionally true there. Surfaced during PR-A1 (#24) review.
 - 2026-05-08 — Repaired the broken Rust stdlib doc URL on the `NonZeroI32` rule: `struct.NonZeroI32.html` → `type.NonZeroI32.html` (the type became a type alias for `NonZero<i32>` in Rust 1.79, so the old struct page no longer exists). PR 5 of the docs restructure (plan deviation — surfaced when lychee `fail: true` flipped on).
 - 2026-05-09 — Added § 1 rule on capital-first error messages with no trailing punctuation. Codifies the convention already in force across the 30+ `AppError::{BadRequest,Unauthorized,Forbidden,NotFound,Conflict}` call sites and extends it to anyhow contexts and `anyhow!` synthetic messages (a deliberate divergence from anyhow's lowercase-context docs convention). Surfaced during PR #107 (PR-C2) review.
+- 2026-05-10 — Updated § 11's `main.rs` startup sub-rule to prefer `fn main() -> anyhow::Result<()>` + `?` + `.context(...)` over `.expect(...)`/`.unwrap()`. The previous wording predated PR-A1's lint config and PR-C2's anyhow foundation; with both in place, the anyhow form is clippy-clean without per-file allows and yields a richer error chain. `expect(...)` retained as the rare-case fallback for genuinely-infallible sites. Surfaced during PR #108 (PR-H1+ a) review; tracking Issue [#109](https://github.com/brendanbyrne/beerio-kart/issues/109).
