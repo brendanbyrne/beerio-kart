@@ -38,7 +38,7 @@ impl FromStr for SessionStatus {
         match s {
             "active" => Ok(Self::Active),
             "closed" => Ok(Self::Closed),
-            other => Err(AppError::Internal(format!(
+            other => Err(AppError::Internal(anyhow::anyhow!(
                 "Unknown session status: {other}"
             ))),
         }
@@ -97,8 +97,8 @@ mod tests {
     #[test]
     fn session_status_unknown_is_internal_error() {
         let err = SessionStatus::from_str("nonsense").unwrap_err();
-        match err {
-            AppError::Internal(msg) => assert!(msg.contains("nonsense")),
+        match &err {
+            AppError::Internal(inner) => assert!(inner.to_string().contains("nonsense")),
             other => panic!("expected Internal, got {other:?}"),
         }
     }

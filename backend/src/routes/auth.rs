@@ -61,9 +61,9 @@ fn make_refresh_headers(
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
-        cookie
-            .parse()
-            .map_err(|_| AppError::Internal("Failed to build Set-Cookie header".to_string()))?,
+        cookie.parse().map_err(|e| {
+            AppError::Internal(anyhow::Error::new(e).context("Failed to build Set-Cookie header"))
+        })?,
     );
     Ok(headers)
 }
@@ -284,7 +284,9 @@ pub async fn logout(
     let db_user = users::Entity::find_by_id(&user.user_id)
         .one(&state.db)
         .await?
-        .ok_or_else(|| AppError::Internal("Authenticated user not found in database".into()))?;
+        .ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("Authenticated user not found in database"))
+        })?;
 
     // Increment version to invalidate all existing refresh tokens
     let new_version = db_user.refresh_token_version + 1;
@@ -299,9 +301,9 @@ pub async fn logout(
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
-        cookie
-            .parse()
-            .map_err(|_| AppError::Internal("Failed to build Set-Cookie header".to_string()))?,
+        cookie.parse().map_err(|e| {
+            AppError::Internal(anyhow::Error::new(e).context("Failed to build Set-Cookie header"))
+        })?,
     );
 
     Ok((headers, StatusCode::OK))

@@ -81,14 +81,15 @@ All route handlers return `Result<impl IntoResponse, AppError>` where `AppError`
 | `Forbidden(msg)` | 403 | The provided `msg` |
 | `NotFound(msg)` | 404 | The provided `msg` |
 | `Conflict(msg)` | 409 | The provided `msg` |
-| `Internal(log_msg)` | 500 | Generic `"Internal server error"` |
+| `Internal(anyhow_err)` | 500 | Generic `"Internal server error"` |
 | `Token(jwt_err)` | 500 | Generic `"Internal server error"` |
 | `Hash(hash_err)` | 500 | Generic `"Internal server error"` |
 
 **Key behaviors:**
 - The 500-class variants (`Internal`, `Token`, `Hash`) log the real error chain via `tracing::error!` (walking `error.source()`) but return a generic message to the client — internal details are never exposed.
+- `Internal` wraps an `anyhow::Error` (via `#[from]`). Construct source-bearing internals as `anyhow::Error::new(e).context("loading user")` and synthetic ones (invariant violations, missing seed data) as `anyhow::anyhow!("Cup not found for cup_id {id}")`. The `.context(...)` static-string layer answers *what we were doing*; the wrapped source's `Display` answers *what failed concretely*. The boundary log walks the full chain.
 - `Token` and `Hash` are typed wrappers (with `#[from]`) around `jsonwebtoken::errors::Error` and `argon2::password_hash::Error` respectively, so `?` works directly on token operations and password hashing. The wrapped error is reachable via `error.source()` so the boundary log captures the underlying detail.
-- `From<sea_orm::DbErr>` is variant-aware: `RecordNotFound` → `NotFound` (404), `SqlErr::UniqueConstraintViolation` → `Conflict` (409), `SqlErr::ForeignKeyConstraintViolation` → `BadRequest` (400), everything else → `Internal` (500). This preserves error semantics that a blanket-Internal mapping would otherwise hide.
+- `From<sea_orm::DbErr>` is variant-aware: `RecordNotFound` → `NotFound` (404), `SqlErr::UniqueConstraintViolation` → `Conflict` (409), `SqlErr::ForeignKeyConstraintViolation` → `BadRequest` (400), everything else → `Internal` (500) wrapped with the static context `"database error"`. This preserves error semantics that a blanket-Internal mapping would otherwise hide. (Note: the fallback context is generic; sites that want richer call-site context use `.map_err(|e| AppError::Internal(anyhow::Error::new(e).context("…")))` instead of `?`.)
 - `AppError` is `#[non_exhaustive]`: the compiler enforces a wildcard arm in any external matcher so adding a future variant (e.g., `Timeout`, `RateLimited`) doesn't break callers.
 - Client-facing errors (`BadRequest`, `Unauthorized`, etc.) are always constructed explicitly — they require human judgment about the appropriate status code and message.
 
@@ -159,6 +160,7 @@ See [`decisions/`](./decisions/) — each prior bullet has been distilled into a
 - 2026-05-05 — Replaced the Resolved Decisions bullet list with a pointer to `docs/decisions/`. Each prior bullet distilled into a MADR file (0002–0034). PR 2 of the docs restructure.
 - 2026-05-06 — Replaced the Build Plan section with a one-paragraph pointer to `roadmap.md` (created in this PR). Phase narratives moved to roadmap.md per cup; the 20 unchecked Phase 3 / Milestone Star bullets were filed as GitHub Issues (#46, #47, #49, #50, #51, #54, #56, #58, #59, #61, #62, #63, #64, #65, #66, #67, #70, #71, #72, #73) under Milestone Star. PR 3 of the docs restructure.
 - 2026-05-09 — Updated the AppError variants table and Key behaviors bullets to reflect the thiserror migration: added `Token` and `Hash` rows; clarified that the 500-class log path now walks `error.source()` for the full chain; noted `#[non_exhaustive]`. PR #105.
+- 2026-05-09 — Reshaped `Internal` from `String` to `anyhow::Error` (PR-C2). Updated the variants table row and the Key behaviors bullet describing `Internal` construction patterns (`.context(...)` for source-bearing, `anyhow::anyhow!(...)` for synthetic). Noted that the `From<DbErr>` fallback uses a generic `"database error"` context and that callers wanting richer context use `.map_err(...)` rather than `?`. PR #<TBD>.
 - 2026-05-06 — Removed the `## Backlog` section. The three random ideas (player invite emails, username change, send-emails / account recovery) moved to `docs/roadmap.md` § Random ideas. The fourth (concurrent `next_track` race condition) was filed as Issue #75 under Milestone Star with `enhancement` label.
 - 2026-05-06 — Replaced § "API Surface" with a pointer to `api-contract.md` § 1. Replaced § "User Workflows" and § "UI Screens" with pointers to `user-workflows.md`. Two minor editorial changes carried in the moves (Workflow 1.4 "Phase 3" → "Milestone Star"; § 2 preamble adds Pixel 9 Pro reference). PR 4 of the docs restructure.
 - 2026-05-08 — Removed the Project Structure section entirely (heading + body, ~99 lines of repo tree). The tree now lives only in the rebuilt repo-root `README.md`. Diverges from PR 4's stub-pointer pattern (User Workflows / API Surface / UI Screens kept their headings) — design.md is for architecture, repo tree is bootstrap content. PR 5 of the docs restructure.

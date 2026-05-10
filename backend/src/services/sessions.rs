@@ -308,7 +308,9 @@ async fn load_host_username(
         .one(db)
         .await?
         .map(|u| u.username)
-        .ok_or_else(|| AppError::Internal(format!("Host user not found for host_id {host_id}")))
+        .ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("Host user not found for host_id {host_id}"))
+        })
 }
 
 /// Fetch all participants with usernames in a single JOIN query.
@@ -949,7 +951,12 @@ pub async fn next_track(
     let cup = cups::Entity::find_by_id(chosen.cup_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::Internal(format!("Cup not found for cup_id {}", chosen.cup_id)))?
+        .ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!(
+                "Cup not found for cup_id {}",
+                chosen.cup_id
+            ))
+        })?
         .name;
 
     Ok(SessionRaceInfo {
@@ -1039,7 +1046,12 @@ pub async fn skip_turn(
     let cup = cups::Entity::find_by_id(chosen.cup_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::Internal(format!("Cup not found for cup_id {}", chosen.cup_id)))?
+        .ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!(
+                "Cup not found for cup_id {}",
+                chosen.cup_id
+            ))
+        })?
         .name;
 
     Ok(SessionRaceInfo {
