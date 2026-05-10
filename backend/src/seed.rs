@@ -33,7 +33,7 @@ struct SeedTrack {
 
 /// Load seed data into empty tables. Skips tables that already have rows.
 /// All inserts for a given table happen inside a single transaction.
-pub async fn run(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     seed_simple_table::<cups::Entity, cups::ActiveModel>(
         db,
         "cups",
@@ -84,7 +84,7 @@ async fn seed_simple_table<E, A>(
     db: &DatabaseConnection,
     table_name: &str,
     json_data: &str,
-) -> Result<(), Box<dyn std::error::Error>>
+) -> anyhow::Result<()>
 where
     E: EntityTrait,
     A: ActiveModelBehavior<Entity = E> + From<SimpleActiveModel> + Send,
@@ -142,7 +142,7 @@ macro_rules! impl_simple_seed {
 
 impl_simple_seed!(characters, bodies, wheels, gliders, cups);
 
-async fn seed_tracks(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
+async fn seed_tracks(db: &DatabaseConnection) -> anyhow::Result<()> {
     let existing = tracks::Entity::find().one(db).await?;
     if existing.is_some() {
         tracing::debug!("tracks: already seeded, skipping");
@@ -164,11 +164,12 @@ async fn seed_tracks(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::
 
     for track in &items {
         if !cup_ids.contains(&track.cup_id) {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "Track '{}' (id={}) references cup_id={} which doesn't exist",
-                track.name, track.id, track.cup_id
-            )
-            .into());
+                track.name,
+                track.id,
+                track.cup_id
+            ));
         }
     }
 
@@ -196,7 +197,7 @@ struct SeedDrinkType {
     alcoholic: bool,
 }
 
-async fn seed_drink_types(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
+async fn seed_drink_types(db: &DatabaseConnection) -> anyhow::Result<()> {
     let existing = drink_types::Entity::find().one(db).await?;
     if existing.is_some() {
         tracing::debug!("drink_types: already seeded, skipping");
