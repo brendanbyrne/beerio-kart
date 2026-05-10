@@ -53,7 +53,7 @@ pub struct RefreshClaims {
 /// `coding-standards/tokio.md` § 2 and § 12).
 pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<String, AppError> {
     let _permit = limiter.acquire().await.map_err(|e| {
-        AppError::Internal(anyhow::Error::new(e).context("argon2 semaphore closed"))
+        AppError::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed"))
     })?;
     tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(&mut rand_core::OsRng);
@@ -63,7 +63,7 @@ pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<Stri
             .map_err(AppError::from)
     })
     .await
-    .map_err(|e| AppError::Internal(anyhow::Error::new(e).context("argon2 hash task panicked")))?
+    .map_err(|e| AppError::Internal(anyhow::Error::new(e).context("Argon2 hash task panicked")))?
 }
 
 /// Verify a plaintext password against a stored Argon2id hash.
@@ -76,7 +76,7 @@ pub async fn verify_password(
     hash: String,
 ) -> Result<bool, AppError> {
     let _permit = limiter.acquire().await.map_err(|e| {
-        AppError::Internal(anyhow::Error::new(e).context("argon2 semaphore closed"))
+        AppError::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed"))
     })?;
     tokio::task::spawn_blocking(move || {
         let parsed = PasswordHash::new(&hash).map_err(AppError::from)?;
@@ -85,7 +85,7 @@ pub async fn verify_password(
             .is_ok())
     })
     .await
-    .map_err(|e| AppError::Internal(anyhow::Error::new(e).context("argon2 verify task panicked")))?
+    .map_err(|e| AppError::Internal(anyhow::Error::new(e).context("Argon2 verify task panicked")))?
 }
 
 /// Create a short-lived access token for the given user.

@@ -40,9 +40,11 @@ pub enum AppError {
     /// underlying source error; the user sees "Internal server error".
     ///
     /// Construct source-bearing internals as
-    /// `anyhow::Error::new(e).context("loading user")` and synthetic ones as
-    /// `anyhow::anyhow!("invariant violation: {detail}")`. The `IntoResponse`
-    /// log path walks the full `error.source()` chain.
+    /// `anyhow::Error::new(e).context("Loading user")` and synthetic ones as
+    /// `anyhow::anyhow!("Invariant violation: {detail}")`. The `IntoResponse`
+    /// log path walks the full `error.source()` chain. Per `rust.md` § 1,
+    /// context strings start with a capital letter and have no trailing
+    /// punctuation.
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
     /// 500 — JWT encode/decode failure. User-visible response is "Internal server error";
@@ -103,7 +105,7 @@ impl From<sea_orm::DbErr> for AppError {
             _ => match e.sql_err() {
                 Some(SqlErr::UniqueConstraintViolation(m)) => AppError::Conflict(m),
                 Some(SqlErr::ForeignKeyConstraintViolation(m)) => AppError::BadRequest(m),
-                _ => AppError::Internal(anyhow::Error::new(e).context("database error")),
+                _ => AppError::Internal(anyhow::Error::new(e).context("Database error")),
             },
         }
     }
@@ -138,10 +140,10 @@ mod tests {
             AppError::Internal(_) => {}
             other => panic!("expected Internal, got {other:?}"),
         }
-        // The static "database error" context is the topmost layer, the original
+        // The static "Database error" context is the topmost layer, the original
         // DbErr message is reachable via the source chain.
         let chain = format_error_chain(&err);
-        assert!(chain.contains("database error"), "got: {chain}");
+        assert!(chain.contains("Database error"), "got: {chain}");
         assert!(chain.contains("something went wrong"), "got: {chain}");
     }
 
@@ -258,14 +260,14 @@ mod tests {
     fn test_internal_synthetic_anyhow_round_trips() {
         // Synthetic Internal — no underlying error, just a runtime-formatted
         // message via anyhow::anyhow!. The chain should contain the message.
-        let app_err: AppError = anyhow::anyhow!("invariant violation: {}", "stale state").into();
+        let app_err: AppError = anyhow::anyhow!("Invariant violation: {}", "stale state").into();
         match &app_err {
             AppError::Internal(_) => {}
             other => panic!("expected Internal, got {other:?}"),
         }
         let chain = format_error_chain(&app_err);
         assert!(
-            chain.contains("invariant violation: stale state"),
+            chain.contains("Invariant violation: stale state"),
             "got: {chain}"
         );
     }
@@ -276,9 +278,9 @@ mod tests {
         // The chain walk should show the static context first, then the source's
         // Display. This is the shape produced by the From<DbErr> fallback.
         let inner = std::io::Error::other("disk gone");
-        let app_err: AppError = anyhow::Error::new(inner).context("writing snapshot").into();
+        let app_err: AppError = anyhow::Error::new(inner).context("Writing snapshot").into();
         let chain = format_error_chain(&app_err);
-        assert!(chain.contains("writing snapshot"), "got: {chain}");
+        assert!(chain.contains("Writing snapshot"), "got: {chain}");
         assert!(chain.contains("disk gone"), "got: {chain}");
     }
 }
