@@ -33,14 +33,19 @@ impl Config {
         let jwt_secret = std::env::var("JWT_SECRET")
             .context("JWT_SECRET must be set — it's the signing key for auth tokens")?;
 
+        // Token expiry fields are i64 to match chrono::TimeDelta's argument
+        // type. A zero or negative expiry would mint already-expired tokens,
+        // so reject those at load time rather than silently shipping them.
         let jwt_access_expiry_minutes = std::env::var("JWT_ACCESS_EXPIRY_MINUTES")
             .ok()
-            .and_then(|v| v.parse().ok())
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|&v| v > 0)
             .unwrap_or(15);
 
         let jwt_refresh_expiry_days = std::env::var("JWT_REFRESH_EXPIRY_DAYS")
             .ok()
-            .and_then(|v| v.parse().ok())
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|&v| v > 0)
             .unwrap_or(7);
 
         let admin_user_id = std::env::var("ADMIN_USER_ID").ok();
