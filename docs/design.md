@@ -76,11 +76,11 @@ All route handlers return `Result<impl IntoResponse, error::Error>` where `error
 
 | Variant | HTTP Status | User-facing message |
 |---------|-------------|---------------------|
-| `BadRequest(msg)` | 400 | The provided `msg` |
+| `BadRequest { client, detail }` | 400 | The `client` field |
 | `Unauthorized(msg)` | 401 | The provided `msg` |
 | `Forbidden(msg)` | 403 | The provided `msg` |
 | `NotFound(msg)` | 404 | The provided `msg` |
-| `Conflict(msg)` | 409 | The provided `msg` |
+| `Conflict { client, detail }` | 409 | The `client` field |
 | `Internal(anyhow_err)` | 500 | Generic `"Internal server error"` |
 | `Token(jwt_err)` | 500 | Generic `"Internal server error"` |
 | `Hash(hash_err)` | 500 | Generic `"Internal server error"` |
@@ -92,6 +92,7 @@ All route handlers return `Result<impl IntoResponse, error::Error>` where `error
 - `From<sea_orm::DbErr>` is variant-aware: `RecordNotFound` → `NotFound` (404), `SqlErr::UniqueConstraintViolation` → `Conflict` (409), `SqlErr::ForeignKeyConstraintViolation` → `BadRequest` (400), everything else → `Internal` (500) wrapped with the static context `"Database error"`. This preserves error semantics that a blanket-Internal mapping would otherwise hide. (Note: the fallback context is generic; sites that want richer call-site context use `.map_err(|e| error::Error::Internal(anyhow::Error::new(e).context("…")))` instead of `?`.)
 - `error::Error` is `#[non_exhaustive]`: the compiler enforces a wildcard arm in any external matcher so adding a future variant (e.g., `Timeout`, `RateLimited`) doesn't break callers.
 - Client-facing errors (`BadRequest`, `Unauthorized`, etc.) are always constructed explicitly — they require human judgment about the appropriate status code and message.
+- `BadRequest` and `Conflict` are struct variants `{ client: String, detail: Option<String> }`. `client` is what the response body carries; `detail` (when `Some`) is logged via `tracing::warn!` at the `IntoResponse` boundary and never reaches the wire. The split exists so the `From<sea_orm::DbErr>` path can preserve the raw driver string (e.g., `"UNIQUE constraint failed: users.username"`) for operators without leaking schema details to clients. The common construction path is `error::Error::conflict("...")` / `error::Error::bad_request("...")` (no detail); the struct-literal form is used when a caller has driver-string detail worth logging — currently only inside `From<DbErr>`. Service-layer pre-checks remain the canonical way to get a *specific* 409/400 message; the generic safety-net text from `From<DbErr>` fires only when a pre-check is missed or loses a TOCTOU race. See Issue [#84](https://github.com/brendanbyrne/beerio-kart/issues/84) for the leak inventory and alternatives considered.
 
 **Response format:** All errors return JSON: `{ "error": "<message>" }`
 
@@ -165,3 +166,4 @@ See [`decisions/`](./decisions/) — each prior bullet has been distilled into a
 - 2026-05-09 — Updated the AppError variants table and Key behaviors bullets to reflect the thiserror migration: added `Token` and `Hash` rows; clarified that the 500-class log path now walks `error.source()` for the full chain; noted `#[non_exhaustive]`. PR #105.
 - 2026-05-09 — Reshaped `Internal` from `String` to `anyhow::Error` (PR-C2). Updated the variants table row and the Key behaviors bullet describing `Internal` construction patterns (`.context(...)` for source-bearing, `anyhow::anyhow!(...)` for synthetic). Noted that the `From<DbErr>` fallback uses a generic `"Database error"` context and that callers wanting richer context use `.map_err(...)` rather than `?`. PR #107.
 - 2026-05-10 — Renamed `AppError` → `error::Error` (and `AppConfig` → `config::Config`, `AuthUser` → `auth::User`, `AuthResponse` → `auth::Response`, `RaceSetupUpdate` → `race_setup::Update`, plus the `list_<resource>` route/service functions → `list`) per the module-name-repetition cleanup in PR-H1+ (d). Live-prose references in this section updated; historical PR notes preserve the old names. PR #103 sequence.
+- 2026-05-11 — Restructured `BadRequest` and `Conflict` from `String`-payload tuple variants to struct variants `{ client, detail }`. Added a Key behaviors bullet describing the client/detail split: `client` is the wire-facing sanitized message; `detail` (when `Some`) is logged via `tracing::warn!` at the `IntoResponse` boundary. The `From<sea_orm::DbErr>` mapping now stashes the raw driver string (e.g., `"UNIQUE constraint failed: users.username"`) in `detail` and returns a generic `client` text so schema details don't leak into the response body. Closes Issue [#84](https://github.com/brendanbyrne/beerio-kart/issues/84).

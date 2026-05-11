@@ -20,9 +20,16 @@ struct ErrorBody {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
-    /// 400 — validation failures, malformed input
-    #[error("{0}")]
-    BadRequest(String),
+    /// 400 — validation failures, malformed input. `client` is the sanitized
+    /// user-facing message; `detail` is internal-only context (e.g., a raw
+    /// `DbErr` driver string) that is logged at the `IntoResponse` boundary
+    /// and never returned to the client. Construct the no-detail common case
+    /// via `Error::bad_request("...")`.
+    #[error("{client}")]
+    BadRequest {
+        client: String,
+        detail: Option<String>,
+    },
     /// 401 — wrong credentials, expired/missing token
     #[error("{0}")]
     Unauthorized(String),
@@ -32,9 +39,14 @@ pub enum Error {
     /// 404 — resource not found
     #[error("{0}")]
     NotFound(String),
-    /// 409 — state conflict (e.g. closed session) or uniqueness violation (e.g. duplicate username)
-    #[error("{0}")]
-    Conflict(String),
+    /// 409 — state conflict (e.g. closed session) or uniqueness violation
+    /// (e.g. duplicate username). Same `client` / `detail` shape as
+    /// `BadRequest`; construct via `Error::conflict("...")` for the common case.
+    #[error("{client}")]
+    Conflict {
+        client: String,
+        detail: Option<String>,
+    },
     /// 500 — unexpected internal failures (DB, invariant violations, etc.).
     /// The wrapped `anyhow::Error` carries the call-site context plus any
     /// underlying source error; the user sees "Internal server error".
@@ -56,14 +68,44 @@ pub enum Error {
     Hash(#[from] argon2::password_hash::Error),
 }
 
+impl Error {
+    /// Build a `Conflict` with no internal detail. Use the `Conflict { client, detail }`
+    /// struct-literal form when you have driver-string detail worth logging.
+    pub fn conflict(msg: impl Into<String>) -> Self {
+        Self::Conflict {
+            client: msg.into(),
+            detail: None,
+        }
+    }
+
+    /// Build a `BadRequest` with no internal detail. Use the struct-literal form
+    /// when you have driver-string detail worth logging.
+    pub fn bad_request(msg: impl Into<String>) -> Self {
+        Self::BadRequest {
+            client: msg.into(),
+            detail: None,
+        }
+    }
+}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, user_message) = match &self {
-            Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            Self::BadRequest { client, detail } => {
+                if let Some(d) = detail {
+                    tracing::warn!(detail = %d, "BadRequest: {client}");
+                }
+                (StatusCode::BAD_REQUEST, client.clone())
+            }
             Self::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             Self::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            Self::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            Self::Conflict { client, detail } => {
+                if let Some(d) = detail {
+                    tracing::warn!(detail = %d, "Conflict: {client}");
+                }
+                (StatusCode::CONFLICT, client.clone())
+            }
             Self::Internal(_) | Self::Token(_) | Self::Hash(_) => {
                 error!("{}", format_error_chain(&self));
                 (
@@ -103,8 +145,18 @@ impl From<sea_orm::DbErr> for Error {
         match &e {
             DbErr::RecordNotFound(msg) => Self::NotFound(msg.clone()),
             _ => match e.sql_err() {
-                Some(SqlErr::UniqueConstraintViolation(m)) => Self::Conflict(m),
-                Some(SqlErr::ForeignKeyConstraintViolation(m)) => Self::BadRequest(m),
+                // Driver strings like "UNIQUE constraint failed: users.username" leak
+                // schema details. Stash them in `detail` (log-only) and return a
+                // generic message to the client. Service-layer pre-checks remain the
+                // way to get a *specific* 409/400 message — this is the safety net.
+                Some(SqlErr::UniqueConstraintViolation(m)) => Self::Conflict {
+                    client: "Resource already exists".into(),
+                    detail: Some(m),
+                },
+                Some(SqlErr::ForeignKeyConstraintViolation(m)) => Self::BadRequest {
+                    client: "Referenced record does not exist".into(),
+                    detail: Some(m),
+                },
                 _ => Self::Internal(anyhow::Error::new(e).context("Database error")),
             },
         }
@@ -175,7 +227,16 @@ mod tests {
         let dberr = result.expect_err("duplicate username should fail");
         let app_err: Error = dberr.into();
         match app_err {
-            Error::Conflict(_) => {}
+            Error::Conflict { client, detail } => {
+                // The client-facing message is the sanitized generic; the raw
+                // driver detail is stashed for the log-only path.
+                assert_eq!(client, "Resource already exists");
+                let d = detail.expect("driver detail should be captured for logs");
+                assert!(
+                    d.contains("UNIQUE") || d.contains("unique"),
+                    "expected driver detail to mention UNIQUE, got: {d}"
+                );
+            }
             other => panic!("expected Conflict, got {other:?}"),
         }
     }
@@ -206,7 +267,14 @@ mod tests {
         let dberr = result.expect_err("missing FK should fail");
         let app_err: Error = dberr.into();
         match app_err {
-            Error::BadRequest(_) => {}
+            Error::BadRequest { client, detail } => {
+                assert_eq!(client, "Referenced record does not exist");
+                let d = detail.expect("driver detail should be captured for logs");
+                assert!(
+                    d.to_ascii_uppercase().contains("FOREIGN KEY"),
+                    "expected driver detail to mention FOREIGN KEY, got: {d}"
+                );
+            }
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }
@@ -282,5 +350,142 @@ mod tests {
         let chain = format_error_chain(&app_err);
         assert!(chain.contains("Writing snapshot"), "got: {chain}");
         assert!(chain.contains("disk gone"), "got: {chain}");
+    }
+
+    // ── Helper constructors ────────────────────────────────────────────
+
+    #[test]
+    fn test_conflict_helper_sets_no_detail() {
+        let err = Error::conflict("Username already taken");
+        match err {
+            Error::Conflict { client, detail } => {
+                assert_eq!(client, "Username already taken");
+                assert!(detail.is_none());
+            }
+            other => panic!("expected Conflict, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_bad_request_helper_sets_no_detail() {
+        let err = Error::bad_request("Invalid input");
+        match err {
+            Error::BadRequest { client, detail } => {
+                assert_eq!(client, "Invalid input");
+                assert!(detail.is_none());
+            }
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    // ── Response-body sanitization ─────────────────────────────────────
+    //
+    // These tests are the regression-blocker for Issue #84: the response body
+    // must contain only the sanitized `client` text, never the raw `detail`
+    // (which is allowed to contain table/column names from the DB driver).
+
+    #[tokio::test]
+    async fn test_conflict_response_body_omits_driver_detail() {
+        let err = Error::Conflict {
+            client: "Resource already exists".into(),
+            detail: Some("UNIQUE constraint failed: users.email".into()),
+        };
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body collect");
+        let body = std::str::from_utf8(&bytes).expect("utf-8 body");
+        assert!(
+            !body.contains("UNIQUE"),
+            "response leaked driver detail: {body}"
+        );
+        assert!(
+            !body.contains("users.email"),
+            "response leaked schema name: {body}"
+        );
+        assert!(
+            body.contains("Resource already exists"),
+            "response missing client text: {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bad_request_response_body_omits_driver_detail() {
+        let err = Error::BadRequest {
+            client: "Referenced record does not exist".into(),
+            detail: Some("FOREIGN KEY constraint failed".into()),
+        };
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body collect");
+        let body = std::str::from_utf8(&bytes).expect("utf-8 body");
+        assert!(
+            !body.contains("FOREIGN KEY"),
+            "response leaked driver detail: {body}"
+        );
+        assert!(
+            body.contains("Referenced record does not exist"),
+            "response missing client text: {body}"
+        );
+    }
+
+    // ── Tracing capture: detail must still reach logs ─────────────────
+    //
+    // The companion to the response-body tests above. The whole point of
+    // keeping the driver detail in the `detail` field is to preserve it for
+    // operators — losing it entirely would have been simpler but lost
+    // debuggability. If this test starts failing, the warn! call site or the
+    // `detail` plumbing has regressed.
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_conflict_with_detail_emits_warn_with_driver_detail() {
+        let err = Error::Conflict {
+            client: "Resource already exists".into(),
+            detail: Some("UNIQUE constraint failed: users.email".into()),
+        };
+        let _resp = err.into_response();
+        assert!(
+            logs_contain("UNIQUE constraint failed: users.email"),
+            "driver detail missing from captured logs"
+        );
+        assert!(
+            logs_contain("Conflict: Resource already exists"),
+            "warn message missing from captured logs"
+        );
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_bad_request_with_detail_emits_warn_with_driver_detail() {
+        let err = Error::BadRequest {
+            client: "Referenced record does not exist".into(),
+            detail: Some("FOREIGN KEY constraint failed".into()),
+        };
+        let _resp = err.into_response();
+        assert!(
+            logs_contain("FOREIGN KEY constraint failed"),
+            "driver detail missing from captured logs"
+        );
+        assert!(
+            logs_contain("BadRequest: Referenced record does not exist"),
+            "warn message missing from captured logs"
+        );
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_conflict_without_detail_emits_no_warn() {
+        // The helper-constructed common case has no detail; the warn! call
+        // is gated on Some(_), so nothing should land in the log buffer.
+        let err = Error::conflict("Username already taken");
+        let _resp = err.into_response();
+        assert!(
+            !logs_contain("Conflict:"),
+            "no-detail Conflict should not emit a warn"
+        );
     }
 }

@@ -246,7 +246,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(Error::BadRequest(_))));
+        assert!(matches!(result, Err(Error::BadRequest { .. })));
     }
 
     #[tokio::test]
@@ -269,7 +269,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(Error::BadRequest(_))));
+        assert!(matches!(result, Err(Error::BadRequest { .. })));
     }
 
     #[tokio::test]
@@ -292,7 +292,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(Error::BadRequest(_))));
+        assert!(matches!(result, Err(Error::BadRequest { .. })));
     }
 
     #[tokio::test]

@@ -75,7 +75,7 @@ impl FromStr for Ruleset {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "random" => Ok(Self::Random),
-            other => Err(Error::BadRequest(format!("Invalid ruleset: '{other}'"))),
+            other => Err(Error::bad_request(format!("Invalid ruleset: '{other}'"))),
         }
     }
 }
@@ -133,7 +133,7 @@ mod tests {
         // deliberately different from SessionStatus, which is read from the DB.
         let err = Ruleset::from_str("spiral").unwrap_err();
         match err {
-            Error::BadRequest(msg) => assert!(msg.contains("spiral")),
+            Error::BadRequest { client, .. } => assert!(client.contains("spiral")),
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }

@@ -29,7 +29,7 @@ pub async fn load_active_session<C: ConnectionTrait>(
         .await?
         .ok_or_else(|| Error::NotFound("Session not found".into()))?;
     if session.status != SessionStatus::Active.as_str() {
-        return Err(Error::Conflict("Session is not active".into()));
+        return Err(Error::conflict("Session is not active"));
     }
     Ok(session)
 }
@@ -137,7 +137,7 @@ where
     C: ConnectionTrait,
 {
     if E::find_by_id(id).one(db).await?.is_none() {
-        return Err(Error::BadRequest(format!("Invalid {entity_label}_id")));
+        return Err(Error::bad_request(format!("Invalid {entity_label}_id")));
     }
     Ok(())
 }
@@ -233,7 +233,7 @@ mod tests {
         let session_id = insert_session(&db, &host, "closed").await;
 
         let err = load_active_session(&db, &session_id).await.unwrap_err();
-        assert!(matches!(err, Error::Conflict(_)));
+        assert!(matches!(err, Error::Conflict { .. }));
     }
 
     // --- require_active_participant ---
@@ -339,7 +339,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            Error::BadRequest(msg) => assert_eq!(msg, "Invalid character_id"),
+            Error::BadRequest { client, .. } => assert_eq!(client, "Invalid character_id"),
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }

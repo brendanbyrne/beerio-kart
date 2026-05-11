@@ -56,13 +56,11 @@ pub async fn create_drink_type(
 ) -> Result<Json<DrinkTypeResponse>, Error> {
     let name = req.name.trim().to_string();
     if name.is_empty() {
-        return Err(Error::BadRequest(
-            "Drink type name cannot be empty".to_string(),
-        ));
+        return Err(Error::bad_request("Drink type name cannot be empty"));
     }
     if name.len() > 200 {
-        return Err(Error::BadRequest(
-            "Drink type name must be 200 characters or fewer".to_string(),
+        return Err(Error::bad_request(
+            "Drink type name must be 200 characters or fewer",
         ));
     }
 

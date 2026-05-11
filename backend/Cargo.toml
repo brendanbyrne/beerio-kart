@@ -73,3 +73,7 @@ workspace = true
 axum-test = "19.1.1"
 cookie = "0.18"
 tower = "0.5.3"
+# Captures `tracing` events inside a test and exposes `logs_contain(...)`. Used by
+# error.rs tests to assert the client/detail split: driver-string detail must
+# reach `tracing::warn!` but must not reach the response body. See Issue #84.
+tracing-test = "0.2"
