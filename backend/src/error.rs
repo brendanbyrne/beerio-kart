@@ -93,7 +93,7 @@ impl IntoResponse for Error {
         let (status, user_message) = match &self {
             Self::BadRequest { client, detail } => {
                 if let Some(d) = detail {
-                    tracing::warn!(detail = %d, "BadRequest: {client}");
+                    tracing::warn!(detail = %d, client = %client, "BadRequest");
                 }
                 (StatusCode::BAD_REQUEST, client.clone())
             }
@@ -102,7 +102,7 @@ impl IntoResponse for Error {
             Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             Self::Conflict { client, detail } => {
                 if let Some(d) = detail {
-                    tracing::warn!(detail = %d, "Conflict: {client}");
+                    tracing::warn!(detail = %d, client = %client, "Conflict");
                 }
                 (StatusCode::CONFLICT, client.clone())
             }
@@ -453,7 +453,11 @@ mod tests {
             "driver detail missing from captured logs"
         );
         assert!(
-            logs_contain("Conflict: Resource already exists"),
+            logs_contain("client=Resource already exists"),
+            "client field missing from captured logs"
+        );
+        assert!(
+            logs_contain("Conflict"),
             "warn message missing from captured logs"
         );
     }
@@ -471,7 +475,11 @@ mod tests {
             "driver detail missing from captured logs"
         );
         assert!(
-            logs_contain("BadRequest: Referenced record does not exist"),
+            logs_contain("client=Referenced record does not exist"),
+            "client field missing from captured logs"
+        );
+        assert!(
+            logs_contain("BadRequest"),
             "warn message missing from captured logs"
         );
     }
@@ -484,8 +492,21 @@ mod tests {
         let err = Error::conflict("Username already taken");
         let _resp = err.into_response();
         assert!(
-            !logs_contain("Conflict:"),
+            !logs_contain("Conflict"),
             "no-detail Conflict should not emit a warn"
+        );
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_bad_request_without_detail_emits_no_warn() {
+        // Symmetric with test_conflict_without_detail_emits_no_warn — the
+        // helper-built no-detail case must not emit a warn for either arm.
+        let err = Error::bad_request("Invalid input");
+        let _resp = err.into_response();
+        assert!(
+            !logs_contain("BadRequest"),
+            "no-detail BadRequest should not emit a warn"
         );
     }
 }
