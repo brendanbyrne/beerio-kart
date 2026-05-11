@@ -182,7 +182,7 @@ pub async fn create_run(
 ///    (ordered-submit guard, same source).
 /// 8. All FK references (`character/body/wheel/glider/drink_type`) exist.
 async fn validate_run_request(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: &UserId,
     body: &CreateRunRequest,
 ) -> Result<session_races::Model, Error> {
@@ -321,7 +321,7 @@ async fn insert_run(
 ///
 /// Returns `NotFound` if no run with that ID exists; `Internal` for
 /// unexpected DB failures.
-pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetail, Error> {
+pub async fn get_run(db: &impl ConnectionTrait, run_id: &RunId) -> Result<RunDetail, Error> {
     let row = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -350,7 +350,7 @@ pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetai
 ///
 /// Returns `Internal` for unexpected DB failures.
 pub async fn list_runs(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     filters: RunFilters,
 ) -> Result<Vec<RunDetail>, Error> {
     let mut conditions = Vec::new();
@@ -466,7 +466,7 @@ pub async fn delete_run(
 ///
 /// Returns `Internal` for unexpected DB failures.
 pub async fn get_run_defaults(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: &UserId,
 ) -> Result<RunDefaults, Error> {
     // Try most recent run
