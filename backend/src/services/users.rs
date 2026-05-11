@@ -1,4 +1,4 @@
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -67,7 +67,7 @@ where
 /// a partial set (not all-or-nothing) or any of the character / body / wheel
 /// / glider / drink-type IDs doesn't exist; `Internal` for DB failures.
 pub async fn update_profile(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     actor_user_id: &UserId,
     target_user_id: &UserId,
     req: UpdateProfileRequest,
@@ -128,7 +128,7 @@ pub async fn update_profile(
 ///
 /// Returns `Internal` for unexpected DB failures.
 pub async fn build_detail_profile(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user: users::Model,
 ) -> Result<UserDetailProfile, Error> {
     let drink_type = if let Some(ref dt_id) = user.preferred_drink_type_id {
