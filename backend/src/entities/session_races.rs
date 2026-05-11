@@ -2,7 +2,7 @@
 //!
 //! `chosen_by` is the user who picked this race's track. It exists as a
 //! nullable FK column (preserved for audit/UX), but no caller currently
-//! traverses that direction through SeaORM, so no `Relation` variant is
+//! traverses that direction through `SeaORM`, so no `Relation` variant is
 //! declared for it. Adding one (e.g. `Chooser` with `belongs_to = users`)
 //! would require keeping its name distinct from any direct variant on the
 //! `users` side pointing here — see `seaorm.md` § 11.

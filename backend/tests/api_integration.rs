@@ -29,7 +29,7 @@ fn test_config() -> Arc<Config> {
     })
 }
 
-/// Create a fresh in-memory SQLite database with all migrations applied and
+/// Create a fresh in-memory `SQLite` database with all migrations applied and
 /// static data seeded. Returns the test server and the underlying DB connection
 /// for direct queries in tests.
 async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
@@ -249,7 +249,7 @@ fn auth_value(token: &str) -> HeaderValue {
     HeaderValue::from_str(&format!("Bearer {token}")).unwrap()
 }
 
-/// Register a user and return (access_token, user_id).
+/// Register a user and return (`access_token`, `user_id`).
 async fn register_and_get_token(server: &TestServer, username: &str) -> (String, String) {
     let res = server
         .post("/api/v1/auth/register")

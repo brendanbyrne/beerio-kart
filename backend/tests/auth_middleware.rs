@@ -22,7 +22,7 @@ async fn auth_handler(user: User) -> axum::Json<Value> {
     axum::Json(serde_json::json!({ "user_id": user.user_id }))
 }
 
-/// Minimal handler that requires AdminUser.
+/// Minimal handler that requires `AdminUser`.
 async fn admin_handler(admin: AdminUser) -> axum::Json<Value> {
     axum::Json(serde_json::json!({ "admin_id": admin.user_id }))
 }

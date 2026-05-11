@@ -86,7 +86,13 @@ fn extract_refresh_cookie(headers: &HeaderMap) -> Option<String> {
 /// POST /api/v1/auth/register
 ///
 /// Creates a new user account. Returns an access token in the response body
-/// and sets a refresh token as an HttpOnly cookie.
+/// and sets a refresh token as an `HttpOnly` cookie.
+///
+/// # Errors
+///
+/// Returns `BadRequest` if the username is empty / >30 chars or the password
+/// is <8 / >128 chars; `Conflict` if the username is taken; `Internal` for
+/// password-hash, token-issue, or DB failures.
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
@@ -156,7 +162,13 @@ pub async fn register(
 /// POST /api/v1/auth/login
 ///
 /// Authenticates with username + password. Returns an access token in the
-/// response body and sets a refresh token as an HttpOnly cookie.
+/// response body and sets a refresh token as an `HttpOnly` cookie.
+///
+/// # Errors
+///
+/// Returns `Unauthorized` if the username doesn't exist or the password is
+/// wrong (both surfaced as the same generic message to prevent username
+/// enumeration); `Internal` for password-verify, token-issue, or DB failures.
 pub async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
@@ -211,13 +223,20 @@ pub async fn login(
 
 /// POST /api/v1/auth/refresh
 ///
-/// Reads the refresh token from the HttpOnly cookie (NOT from the request body
+/// Reads the refresh token from the `HttpOnly` cookie (NOT from the request body
 /// or Authorization header). If valid and the `refresh_token_version` matches
 /// the DB, returns a new access token and rotates the refresh cookie.
 ///
 /// "Rotation" means issuing a fresh refresh JWT with a fresh expiry on every
 /// successful refresh. This extends the session window without bumping the
 /// version (which would invalidate other devices).
+///
+/// # Errors
+///
+/// Returns `Unauthorized` if the refresh cookie is missing, the JWT fails
+/// validation, the token type is not `refresh`, the user no longer exists,
+/// or the token's `refresh_token_version` doesn't match the DB (revoked via
+/// logout or password change). `Internal` for token-issue or DB failures.
 pub async fn refresh(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -263,6 +282,11 @@ pub async fn refresh(
 /// Requires authentication. Increments `refresh_token_version` in the database,
 /// which invalidates ALL refresh tokens for this user across all devices.
 /// Also clears the refresh cookie on the current browser.
+///
+/// # Errors
+///
+/// Returns `Internal` if the authenticated user no longer exists in the DB
+/// (invariant violation), or for DB / cookie-build failures.
 pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, Error> {
     // Look up user to get current version
     let db_user = users::Entity::find_by_id(&user.user_id)
@@ -298,6 +322,13 @@ pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl In
 /// Requires authentication. Validates the current password, updates the hash,
 /// and increments `refresh_token_version` to force re-login on all other devices.
 /// Returns new tokens for the current session so the user stays logged in.
+///
+/// # Errors
+///
+/// Returns `BadRequest` if the new password is <8 / >128 chars; `NotFound`
+/// if the authenticated user no longer exists; `Unauthorized` if the current
+/// password is wrong; `Internal` for password-hash, token-issue, or DB
+/// failures.
 pub async fn change_password(
     State(state): State<AppState>,
     user: User,

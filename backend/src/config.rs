@@ -14,7 +14,7 @@ pub struct Config {
     /// because `chrono::TimeDelta::minutes` takes `i64`.
     pub jwt_access_expiry_minutes: i64,
     /// How long refresh tokens are valid (days). Longer-lived because they're
-    /// stored in an HttpOnly cookie (no JavaScript access) and can be revoked
+    /// stored in an `HttpOnly` cookie (no JavaScript access) and can be revoked
     /// by bumping `refresh_token_version` in the database. Stored as `i64`
     /// because `chrono::TimeDelta::days` takes `i64`.
     pub jwt_refresh_expiry_days: i64,
@@ -27,8 +27,11 @@ pub struct Config {
 impl Config {
     /// Load configuration from environment variables.
     ///
-    /// Errors if `JWT_SECRET` is not set — running without a signing key would
-    /// silently produce unsigned or weak tokens.
+    /// # Errors
+    ///
+    /// Returns `Err` if `JWT_SECRET` is unset (no signing key means unsigned
+    /// or weak tokens), or if `JWT_ACCESS_EXPIRY_MINUTES` / `JWT_REFRESH_EXPIRY_DAYS`
+    /// is set to a non-positive value or fails to parse as an `i64`.
     pub fn from_env() -> anyhow::Result<Arc<Self>> {
         let jwt_secret = std::env::var("JWT_SECRET")
             .context("JWT_SECRET must be set — it's the signing key for auth tokens")?;

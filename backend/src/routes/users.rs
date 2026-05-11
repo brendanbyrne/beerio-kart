@@ -27,6 +27,11 @@ pub struct UserPublicProfile {
 
 // ── Handlers ────────────────────────────────────────────────────────
 
+/// GET /api/v1/users — list users (public profile shape).
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_users(
     _user: User,
     State(state): State<AppState>,
@@ -49,6 +54,12 @@ pub async fn list_users(
     ))
 }
 
+/// GET /api/v1/users/:id — get a user's detail profile.
+///
+/// # Errors
+///
+/// Returns `NotFound` if `id` doesn't match a user; propagates the errors
+/// of [`user_service::build_detail_profile`] for DB failures.
 pub async fn get_user(
     _user: User,
     State(state): State<AppState>,
@@ -63,6 +74,13 @@ pub async fn get_user(
     Ok(Json(profile))
 }
 
+/// PATCH /api/v1/users/:id — update a user's profile fields.
+///
+/// # Errors
+///
+/// Propagates the errors of [`user_service::update_profile`]: `Forbidden`
+/// if a user tries to modify another user, `NotFound` if the target user
+/// doesn't exist, `BadRequest` for invalid race-setup or drink-type IDs.
 pub async fn update_user(
     auth_user: User,
     State(state): State<AppState>,

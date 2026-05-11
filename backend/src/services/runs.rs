@@ -117,8 +117,8 @@ pub struct RunFilters {
     pub track_id: Option<i32>,
 }
 
-/// Validate time fields on a run submission: track_time range, lap times
-/// positive and within range, and lap sum equals track_time.
+/// Validate time fields on a run submission: `track_time` range, lap times
+/// positive and within range, and lap sum equals `track_time`.
 fn validate_time_fields(body: &CreateRunRequest) -> Result<(), Error> {
     if body.track_time <= 0 || body.track_time > MAX_TRACK_TIME_MS {
         return Err(Error::bad_request(format!(
@@ -149,6 +149,14 @@ fn validate_time_fields(body: &CreateRunRequest) -> Result<(), Error> {
 /// Create a run for a session race. Top-level orchestrator: validate, insert,
 /// fetch. The validation surface and the transactional insert each live in
 /// their own helper below.
+///
+/// # Errors
+///
+/// Returns `BadRequest` for invalid time fields or unknown FK references;
+/// `NotFound` if the session race doesn't exist; `Conflict` if the session
+/// is closed, the user already submitted, the user skipped the race, or an
+/// older pending race blocks the submission; `Forbidden` if the user is not
+/// an active participant; `Internal` for unexpected DB failures.
 pub async fn create_run(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -172,7 +180,7 @@ pub async fn create_run(
 ///    submit, per docs/design.md "Pending Race Tracking" → "Submission rules").
 /// 7. The user has no older pending race blocking this submission
 ///    (ordered-submit guard, same source).
-/// 8. All FK references (character/body/wheel/glider/drink_type) exist.
+/// 8. All FK references (`character/body/wheel/glider/drink_type`) exist.
 async fn validate_run_request(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -263,7 +271,7 @@ async fn validate_run_request(
     Ok(session_race)
 }
 
-/// Insert the run row and bump the session's last_activity_at, atomically.
+/// Insert the run row and bump the session's `last_activity_at`, atomically.
 /// Returns the new run's ID. Caller is expected to have already validated
 /// the request via `validate_run_request`.
 async fn insert_run(
@@ -307,7 +315,12 @@ async fn insert_run(
     Ok(run_id)
 }
 
-/// Fetch a single run by ID with JOINed username and drink_type_name.
+/// Fetch a single run by ID with `JOINed` username and `drink_type_name`.
+///
+/// # Errors
+///
+/// Returns `NotFound` if no run with that ID exists; `Internal` for
+/// unexpected DB failures.
 pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetail, Error> {
     let row = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -331,7 +344,11 @@ pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetai
     Ok(row.into())
 }
 
-/// List runs with optional filters, ordered by track_time ASC.
+/// List runs with optional filters, ordered by `track_time` ASC.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_runs(
     db: &DatabaseConnection,
     filters: RunFilters,
@@ -389,6 +406,13 @@ pub async fn list_runs(
 }
 
 /// Delete a run. Only the run's owner can delete, and the session must be active.
+///
+/// # Errors
+///
+/// Returns `NotFound` if no run with that ID exists; `Forbidden` if the
+/// caller is not the run's owner; `Conflict` if the run's session is closed;
+/// `Internal` for unexpected DB failures or data-corruption invariants (e.g.,
+/// missing session for an existing run).
 pub async fn delete_run(
     db: &DatabaseConnection,
     run_id: &RunId,
@@ -435,7 +459,12 @@ pub async fn delete_run(
 }
 
 /// Get run defaults for pre-filling the run entry form.
+///
 /// Cascade: previous run → user preferences → none.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn get_run_defaults(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -592,7 +621,7 @@ mod tests {
         }
     }
 
-    /// Helper: create session, pick a track, return (session_id, session_race_id)
+    /// Helper: create session, pick a track, return (`session_id`, `session_race_id`)
     async fn setup_session_with_race(
         db: &DatabaseConnection,
         host_id: &UserId,
@@ -974,7 +1003,7 @@ mod tests {
 
     // ── Ordered-submit guard (PR 3D-2) ────────────────────────────────────
 
-    /// Helper: create a session, pick N tracks, return (session_id, race_ids).
+    /// Helper: create a session, pick N tracks, return (`session_id`, `race_ids`).
     async fn setup_session_with_n_races(
         db: &DatabaseConnection,
         host_id: &UserId,

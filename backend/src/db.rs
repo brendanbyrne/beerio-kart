@@ -1,12 +1,12 @@
 //! Database connection setup.
 //!
-//! Per `seaorm.md` § 8: SQLite enforces `journal_mode` at the database-file
+//! Per `seaorm.md` § 8: `SQLite` enforces `journal_mode` at the database-file
 //! level (sticky) but `busy_timeout`, `synchronous`, and `foreign_keys` are
 //! per-connection — they reset on every new connection in the pool. The
 //! pre-PR-B2 startup pattern of `Database::connect(url)` followed by a single
 //! `PRAGMA foreign_keys = ON` only configured the connection that served that
 //! statement; subsequent pool connections opened later had FKs disabled. This
-//! module fixes that by building the SQLx pool with `SqliteConnectOptions`
+//! module fixes that by building the `SQLx` pool with `SqliteConnectOptions`
 //! (which applies the per-connection PRAGMAs at connection setup time) and
 //! wrapping it with `SqlxSqliteConnector`.
 
@@ -18,10 +18,16 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
 };
 
-/// Connect to the SQLite database with per-connection PRAGMAs applied.
+/// Connect to the `SQLite` database with per-connection PRAGMAs applied.
 ///
 /// Returns a `DatabaseConnection` whose every pool connection has WAL mode,
-/// synchronous=Normal, busy_timeout=5s, and foreign keys enforced.
+/// synchronous=Normal, `busy_timeout=5s`, and foreign keys enforced.
+///
+/// # Errors
+///
+/// Returns `DbErr` if `url` fails to parse as a `SQLite` connection string,
+/// the pool can't be created (e.g., file permission errors for a file-backed
+/// `SQLite`), or the initial connection handshake fails.
 pub async fn connect(url: &str) -> Result<DatabaseConnection, DbErr> {
     let sqlx_opts = SqliteConnectOptions::from_str(url)
         .map_err(|e| DbErr::Conn(RuntimeErr::SqlxError(e)))?
@@ -54,7 +60,7 @@ mod tests {
     use crate::entities::users;
 
     /// Drives a connection through the new `connect()` path against an in-memory
-    /// SQLite database. `cache=shared` makes the same DB visible to every pool
+    /// `SQLite` database. `cache=shared` makes the same DB visible to every pool
     /// connection (otherwise each connection gets its own ephemeral DB and
     /// migrations applied on one wouldn't be visible on the next).
     async fn shared_memory_db() -> DatabaseConnection {

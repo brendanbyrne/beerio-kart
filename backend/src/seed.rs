@@ -78,7 +78,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Seed a table that has the simple (id, name, image_path) schema.
+/// Seed a table that has the simple (id, name, `image_path`) schema.
 /// Skips if the table already has data.
 async fn seed_simple_table<E, A>(
     db: &DatabaseConnection,
@@ -115,7 +115,7 @@ where
     Ok(())
 }
 
-/// Intermediate struct for converting JSON data into any simple ActiveModel.
+/// Intermediate struct for converting JSON data into any simple `ActiveModel`.
 /// Each simple entity (characters, bodies, wheels, gliders, cups) implements
 /// From<SimpleActiveModel> via the macro below.
 struct SimpleActiveModel {

@@ -61,6 +61,10 @@ async fn check_not_in_any_session(
 
 /// Returns the session ID the user is currently active in, or None.
 /// Only considers active sessions (not closed/stale ones).
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn get_active_session_id(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -86,6 +90,12 @@ pub async fn get_active_session_id(
 
 /// Create a new session. The creator becomes both the host and the first
 /// participant. Returns the full session detail.
+///
+/// # Errors
+///
+/// Returns `BadRequest` if `ruleset` doesn't parse as a known `Ruleset`;
+/// `Conflict` if the user is already in another active session; `Internal`
+/// for unexpected DB failures.
 pub async fn create_session(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -149,8 +159,12 @@ struct SessionSummaryRow {
     last_activity_at: NaiveDateTime,
 }
 
-/// List active sessions sorted by last_activity_at DESC.
+/// List active sessions sorted by `last_activity_at` DESC.
 /// Uses a single JOIN query instead of N+1 queries.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_active_sessions(db: &DatabaseConnection) -> Result<Vec<SessionSummary>, Error> {
     let rows = SessionSummaryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -400,7 +414,7 @@ async fn load_current_race_with_submissions(
     }))
 }
 
-/// Fetch all races in a session with run counts, ordered by race_number ASC.
+/// Fetch all races in a session with run counts, ordered by `race_number` ASC.
 async fn load_race_history(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
@@ -482,6 +496,10 @@ struct PendingRaceRow {
 /// race shell here; per-race submissions belong to the current/history views,
 /// not the pending list. This avoids an N+1 query and keeps the polling path
 /// fast.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures on the JOIN query.
 pub async fn get_pending_races(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
@@ -565,6 +583,12 @@ pub async fn get_pending_races(
 ///   session. A user who left (even within their grace window) must rejoin
 ///   before they can act on pending races; otherwise the symmetry with
 ///   `create_run` breaks (which also requires an active participant).
+///
+/// # Errors
+///
+/// Returns the variants enumerated in the doc above, plus `NotFound` if the
+/// race or session-race-participation row doesn't exist, and `Internal` for
+/// unexpected DB failures.
 pub async fn skip_pending_race(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -645,6 +669,11 @@ pub async fn skip_pending_race(
 /// per-user `your_pending` list. Anonymous callers aren't supported by the
 /// route layer, so this is always `Some` in production; tests pass `None`
 /// when they don't care about pending state.
+///
+/// # Errors
+///
+/// Returns `NotFound` if no session with that ID exists; `Internal` for
+/// unexpected DB failures on any of the helper queries.
 pub async fn get_session_detail(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -696,11 +725,12 @@ pub async fn get_session_detail(
     })
 }
 
-/// Grace window for "rejoin without losing pre-leave pending races." Within
-/// this window of `left_at`, rejoining preserves `joined_at` (and therefore
-/// preserves access to pre-leave pending races, per the §3 grace semantics).
-/// After this window, `joined_at` is reset to NOW(), forfeiting any pre-gap
-/// pending records.
+/// Grace window for "rejoin without losing pre-leave pending races."
+///
+/// Within this window of `left_at`, rejoining preserves `joined_at` (and
+/// therefore preserves access to pre-leave pending races, per the §3 grace
+/// semantics). After this window, `joined_at` is reset to `NOW()`, forfeiting
+/// any pre-gap pending records.
 pub const REJOIN_GRACE_MINUTES: i64 = 5;
 
 /// Join (or rejoin) a session. **Single mutable row per (session, user)** —
@@ -714,6 +744,12 @@ pub const REJOIN_GRACE_MINUTES: i64 = 5;
 ///   `joined_at = NOW()`. Pre-gap pending records remain in the DB for
 ///   history but are filtered out by the pending-races query
 ///   (`session_races.created_at >= session_participants.joined_at`).
+///
+/// # Errors
+///
+/// Returns `NotFound` if the session doesn't exist; `Conflict` if the
+/// session is closed or the user is already in another active session;
+/// `Internal` for unexpected DB failures.
 pub async fn join_session(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -857,7 +893,14 @@ async fn transfer_host_or_close(
     }
 }
 
-/// Leave a session. Sets left_at and handles host transfer.
+/// Leave a session. Sets `left_at` and handles host transfer.
+///
+/// # Errors
+///
+/// Returns `NotFound` if the session doesn't exist; `BadRequest` if the
+/// user is not currently in the session; `Internal` for unexpected DB
+/// failures or invariant violations (e.g., last-active-participant flow
+/// failing to find any remaining participant to promote).
 pub async fn leave_session(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -906,6 +949,12 @@ pub async fn leave_session(
 /// Pick the next track for a session. Host-only.
 /// Randomly selects from tracks not yet used in this session.
 /// If all tracks have been used, resets the pool.
+///
+/// # Errors
+///
+/// Returns `NotFound` if the session doesn't exist; `Conflict` if the
+/// session is closed; `Forbidden` if `user_id` isn't the host; `Internal`
+/// for unexpected DB failures or an empty `tracks` table.
 pub async fn next_track(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -977,11 +1026,20 @@ pub async fn next_track(
     })
 }
 
-/// Re-roll the current track. Any participant can trigger this
-/// (per docs/design.md — "any participant can pass the chooser's turn").
-/// Only valid if the most recent race has no runs submitted.
-/// Deletes the current race and picks a new one in a single transaction,
-/// excluding the skipped track from the pool so it can't come back.
+/// Re-roll the current track.
+///
+/// Any participant can trigger this (per docs/design.md — "any participant
+/// can pass the chooser's turn"). Only valid if the most recent race has no
+/// runs submitted. Deletes the current race and picks a new one in a single
+/// transaction, excluding the skipped track from the pool so it can't come
+/// back.
+///
+/// # Errors
+///
+/// Returns `NotFound` if the session doesn't exist; `Conflict` if the
+/// session is closed; `BadRequest` if there is no track to skip; `Conflict`
+/// if any runs were already submitted for the current race; `Internal` for
+/// unexpected DB failures.
 pub async fn skip_turn(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -1070,7 +1128,12 @@ pub async fn skip_turn(
     })
 }
 
-/// List all races in a session, ordered by race_number ASC.
+/// List all races in a session, ordered by `race_number` ASC.
+///
+/// # Errors
+///
+/// Returns `NotFound` if the session doesn't exist; `Internal` for
+/// unexpected DB failures.
 pub async fn list_races(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -1115,9 +1178,15 @@ pub async fn list_races(
 }
 
 /// Close sessions that have had no activity for over an hour.
+///
 /// Also marks all remaining active participants as left, preventing
 /// users from being soft-locked out of creating/joining new sessions.
 /// Returns the number of sessions closed.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures on any of the SELECT or
+/// UPDATE statements that drive the cleanup.
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error> {
     let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).naive_utc();
 

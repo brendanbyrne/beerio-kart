@@ -13,7 +13,7 @@
 //! `users` ↔ `session_participants` relation reflects that a user accumulates
 //! one row per session they've ever joined (many rows across many sessions),
 //! even though within any single session there's only ever one row per user.
-//! Marking `user_id` `unique` here would coerce SeaORM into `has_one` and
+//! Marking `user_id` `unique` here would coerce `SeaORM` into `has_one` and
 //! break loading of a user's full participation history.
 
 use sea_orm::entity::prelude::*;
