@@ -8,7 +8,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, Query
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AppState, domain::UserId, entities::users, error::AppError, middleware::auth::AuthUser,
+    AppState, domain::UserId, entities::users, error::Error, middleware::auth::User,
     services::auth as auth_service,
 };
 
@@ -33,7 +33,7 @@ pub struct ChangePasswordRequest {
 }
 
 #[derive(Serialize)]
-pub struct AuthResponse {
+pub struct Response {
     pub access_token: String,
     pub user: UserInfo,
 }
@@ -54,15 +54,15 @@ pub struct UserInfo {
 /// Build response headers that set the refresh token cookie.
 fn make_refresh_headers(
     refresh_token: &str,
-    config: &crate::config::AppConfig,
-) -> Result<HeaderMap, AppError> {
-    let max_age_seconds = config.jwt_refresh_expiry_days as i64 * 86400;
+    config: &crate::config::Config,
+) -> Result<HeaderMap, Error> {
+    let max_age_seconds = config.jwt_refresh_expiry_days * 86400;
     let cookie = auth_service::refresh_cookie(refresh_token, max_age_seconds, config);
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
         cookie.parse().map_err(|e| {
-            AppError::Internal(anyhow::Error::new(e).context("Failed to build Set-Cookie header"))
+            Error::Internal(anyhow::Error::new(e).context("Failed to build Set-Cookie header"))
         })?,
     );
     Ok(headers)
@@ -90,16 +90,14 @@ fn extract_refresh_cookie(headers: &HeaderMap) -> Option<String> {
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoResponse, Error> {
     let username = body.username.trim();
     if username.is_empty() || username.chars().count() > 30 {
-        return Err(AppError::BadRequest(
-            "Username must be 1-30 characters".into(),
-        ));
+        return Err(Error::BadRequest("Username must be 1-30 characters".into()));
     }
 
     if body.password.len() < 8 || body.password.len() > 128 {
-        return Err(AppError::BadRequest(
+        return Err(Error::BadRequest(
             "Password must be 8-128 characters".into(),
         ));
     }
@@ -111,7 +109,7 @@ pub async fn register(
         .await?;
 
     if existing.is_some() {
-        return Err(AppError::Conflict("Username already taken".into()));
+        return Err(Error::Conflict("Username already taken".into()));
     }
 
     // Hash password (offloaded to the blocking pool, capped by argon2_limit)
@@ -147,7 +145,7 @@ pub async fn register(
     Ok((
         StatusCode::CREATED,
         headers,
-        Json(AuthResponse {
+        Json(Response {
             access_token,
             user: UserInfo {
                 id: UserId::new(user_id),
@@ -164,7 +162,7 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoResponse, Error> {
     let username = body.username.trim();
 
     let Some(user) = users::Entity::find()
@@ -181,9 +179,7 @@ pub async fn login(
                 .to_string(),
         )
         .await;
-        return Err(AppError::Unauthorized(
-            "Invalid username or password".into(),
-        ));
+        return Err(Error::Unauthorized("Invalid username or password".into()));
     };
 
     // Verify password (offloaded to the blocking pool, capped by argon2_limit)
@@ -194,9 +190,7 @@ pub async fn login(
     )
     .await?;
     if !password_ok {
-        return Err(AppError::Unauthorized(
-            "Invalid username or password".into(),
-        ));
+        return Err(Error::Unauthorized("Invalid username or password".into()));
     }
 
     // Generate tokens
@@ -207,7 +201,7 @@ pub async fn login(
 
     Ok((
         headers,
-        Json(AuthResponse {
+        Json(Response {
             access_token,
             user: UserInfo {
                 id: UserId::new(user.id),
@@ -229,32 +223,30 @@ pub async fn login(
 pub async fn refresh(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoResponse, Error> {
     let cookie_value = match extract_refresh_cookie(&headers) {
         Some(v) if !v.is_empty() => v,
-        _ => return Err(AppError::Unauthorized("Missing refresh token".into())),
+        _ => return Err(Error::Unauthorized("Missing refresh token".into())),
     };
 
     // Validate the JWT signature and expiry
     let claims = auth_service::validate_refresh_token(&cookie_value, &state.config)
-        .map_err(|_| AppError::Unauthorized("Invalid or expired refresh token".into()))?;
+        .map_err(|_| Error::Unauthorized("Invalid or expired refresh token".into()))?;
 
     // Reject if token_type is not "refresh"
     if claims.token_type != "refresh" {
-        return Err(AppError::Unauthorized("Invalid token type".into()));
+        return Err(Error::Unauthorized("Invalid token type".into()));
     }
 
     // Look up user and check refresh_token_version
     let user = users::Entity::find_by_id(&claims.sub)
         .one(&state.db)
         .await?
-        .ok_or_else(|| AppError::Unauthorized("User not found".into()))?;
+        .ok_or_else(|| Error::Unauthorized("User not found".into()))?;
 
     // Version mismatch means the token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
-        return Err(AppError::Unauthorized(
-            "Refresh token has been revoked".into(),
-        ));
+        return Err(Error::Unauthorized("Refresh token has been revoked".into()));
     }
 
     // Issue new tokens
@@ -273,16 +265,13 @@ pub async fn refresh(
 /// Requires authentication. Increments `refresh_token_version` in the database,
 /// which invalidates ALL refresh tokens for this user across all devices.
 /// Also clears the refresh cookie on the current browser.
-pub async fn logout(
-    State(state): State<AppState>,
-    user: AuthUser,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, Error> {
     // Look up user to get current version
     let db_user = users::Entity::find_by_id(&user.user_id)
         .one(&state.db)
         .await?
         .ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!("Authenticated user not found in database"))
+            Error::Internal(anyhow::anyhow!("Authenticated user not found in database"))
         })?;
 
     // Increment version to invalidate all existing refresh tokens
@@ -299,7 +288,7 @@ pub async fn logout(
     headers.insert(
         header::SET_COOKIE,
         cookie.parse().map_err(|e| {
-            AppError::Internal(anyhow::Error::new(e).context("Failed to build Set-Cookie header"))
+            Error::Internal(anyhow::Error::new(e).context("Failed to build Set-Cookie header"))
         })?,
     );
 
@@ -313,12 +302,12 @@ pub async fn logout(
 /// Returns new tokens for the current session so the user stays logged in.
 pub async fn change_password(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: User,
     Json(body): Json<ChangePasswordRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoResponse, Error> {
     // Validate new password length
     if body.new_password.len() < 8 || body.new_password.len() > 128 {
-        return Err(AppError::BadRequest(
+        return Err(Error::BadRequest(
             "New password must be 8-128 characters".into(),
         ));
     }
@@ -327,7 +316,7 @@ pub async fn change_password(
     let db_user = users::Entity::find_by_id(&user.user_id)
         .one(&state.db)
         .await?
-        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+        .ok_or_else(|| Error::NotFound("User not found".into()))?;
 
     // Verify current password
     let current_ok = auth_service::verify_password(
@@ -337,9 +326,7 @@ pub async fn change_password(
     )
     .await?;
     if !current_ok {
-        return Err(AppError::Unauthorized(
-            "Current password is incorrect".into(),
-        ));
+        return Err(Error::Unauthorized("Current password is incorrect".into()));
     }
 
     // Hash new password

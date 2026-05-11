@@ -9,7 +9,7 @@ use axum::{
     routing::{get, post, put},
 };
 use axum_test::TestServer;
-use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::AppConfig, routes};
+use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::Config, routes};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde_json::{Value, json};
@@ -17,8 +17,8 @@ use tokio::sync::Semaphore;
 
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 
-fn test_config() -> Arc<AppConfig> {
-    Arc::new(AppConfig {
+fn test_config() -> Arc<Config> {
+    Arc::new(Config {
         jwt_secret: TEST_SECRET.to_string(),
         jwt_access_expiry_minutes: 15,
         jwt_refresh_expiry_days: 7,
@@ -27,8 +27,8 @@ fn test_config() -> Arc<AppConfig> {
     })
 }
 
-/// A trivial authenticated endpoint used to verify that the AuthUser extractor works.
-async fn protected_hello(user: beerio_kart::middleware::auth::AuthUser) -> axum::Json<Value> {
+/// A trivial authenticated endpoint used to verify that the User extractor works.
+async fn protected_hello(user: beerio_kart::middleware::auth::User) -> axum::Json<Value> {
     axum::Json(json!({ "hello": user.username }))
 }
 

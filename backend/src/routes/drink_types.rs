@@ -7,8 +7,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AppState, drink_type_id::drink_type_uuid, entities::drink_types, error::AppError,
-    middleware::auth::AuthUser,
+    AppState, drink_type_id::drink_type_uuid, entities::drink_types, error::Error,
+    middleware::auth::User,
 };
 
 // ── Response types ───────────────────────────────────────────────────
@@ -43,25 +43,25 @@ pub struct CreateDrinkTypeRequest {
 }
 
 #[derive(Deserialize)]
-pub struct DrinkTypesQuery {
+pub struct Filters {
     pub alcoholic: Option<bool>,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
 
 pub async fn create_drink_type(
-    user: AuthUser,
+    user: User,
     State(state): State<AppState>,
     Json(req): Json<CreateDrinkTypeRequest>,
-) -> Result<Json<DrinkTypeResponse>, AppError> {
+) -> Result<Json<DrinkTypeResponse>, Error> {
     let name = req.name.trim().to_string();
     if name.is_empty() {
-        return Err(AppError::BadRequest(
+        return Err(Error::BadRequest(
             "Drink type name cannot be empty".to_string(),
         ));
     }
     if name.len() > 200 {
-        return Err(AppError::BadRequest(
+        return Err(Error::BadRequest(
             "Drink type name must be 200 characters or fewer".to_string(),
         ));
     }
@@ -90,10 +90,10 @@ pub async fn create_drink_type(
 }
 
 pub async fn list_drink_types(
-    _user: AuthUser,
+    _user: User,
     State(state): State<AppState>,
-    Query(params): Query<DrinkTypesQuery>,
-) -> Result<Json<Vec<DrinkTypeResponse>>, AppError> {
+    Query(params): Query<Filters>,
+) -> Result<Json<Vec<DrinkTypeResponse>>, Error> {
     let mut query = drink_types::Entity::find();
     if let Some(alcoholic) = params.alcoholic {
         query = query.filter(drink_types::Column::Alcoholic.eq(alcoholic));
@@ -106,14 +106,14 @@ pub async fn list_drink_types(
 }
 
 pub async fn get_drink_type(
-    _user: AuthUser,
+    _user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<DrinkTypeResponse>, AppError> {
+) -> Result<Json<DrinkTypeResponse>, Error> {
     let dt = drink_types::Entity::find_by_id(&id)
         .one(&state.db)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("Drink type {id} not found")))?;
+        .ok_or_else(|| Error::NotFound(format!("Drink type {id} not found")))?;
 
     Ok(Json(dt.into()))
 }

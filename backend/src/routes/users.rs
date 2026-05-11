@@ -7,7 +7,7 @@ use sea_orm::EntityTrait;
 use serde::Serialize;
 
 use crate::{
-    AppState, domain::UserId, entities::users, error::AppError, middleware::auth::AuthUser,
+    AppState, domain::UserId, entities::users, error::Error, middleware::auth::User,
     services::users as user_service,
 };
 
@@ -28,9 +28,9 @@ pub struct UserPublicProfile {
 // ── Handlers ────────────────────────────────────────────────────────
 
 pub async fn list_users(
-    _user: AuthUser,
+    _user: User,
     State(state): State<AppState>,
-) -> Result<Json<Vec<UserPublicProfile>>, AppError> {
+) -> Result<Json<Vec<UserPublicProfile>>, Error> {
     let all_users = users::Entity::find().all(&state.db).await?;
     Ok(Json(
         all_users
@@ -50,25 +50,25 @@ pub async fn list_users(
 }
 
 pub async fn get_user(
-    _user: AuthUser,
+    _user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<user_service::UserDetailProfile>, AppError> {
+) -> Result<Json<user_service::UserDetailProfile>, Error> {
     let user = users::Entity::find_by_id(&id)
         .one(&state.db)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("User {id} not found")))?;
+        .ok_or_else(|| Error::NotFound(format!("User {id} not found")))?;
 
     let profile = user_service::build_detail_profile(&state.db, user).await?;
     Ok(Json(profile))
 }
 
 pub async fn update_user(
-    auth_user: AuthUser,
+    auth_user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<user_service::UpdateProfileRequest>,
-) -> Result<Json<user_service::UserDetailProfile>, AppError> {
+) -> Result<Json<user_service::UserDetailProfile>, Error> {
     let target_user_id = UserId::new(id);
     let profile =
         user_service::update_profile(&state.db, &auth_user.user_id, &target_user_id, req).await?;

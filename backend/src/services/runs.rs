@@ -12,7 +12,7 @@ use crate::{
         bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
         users, wheels,
     },
-    error::AppError,
+    error::Error,
     services::{helpers, sessions},
 };
 
@@ -119,14 +119,14 @@ pub struct RunFilters {
 
 /// Validate time fields on a run submission: track_time range, lap times
 /// positive and within range, and lap sum equals track_time.
-fn validate_time_fields(body: &CreateRunRequest) -> Result<(), AppError> {
+fn validate_time_fields(body: &CreateRunRequest) -> Result<(), Error> {
     if body.track_time <= 0 || body.track_time > MAX_TRACK_TIME_MS {
-        return Err(AppError::BadRequest(format!(
+        return Err(Error::BadRequest(format!(
             "track_time must be between 1 and {MAX_TRACK_TIME_MS} ms"
         )));
     }
     if body.lap1_time <= 0 || body.lap2_time <= 0 || body.lap3_time <= 0 {
-        return Err(AppError::BadRequest(
+        return Err(Error::BadRequest(
             "All lap times must be positive".to_string(),
         ));
     }
@@ -134,14 +134,14 @@ fn validate_time_fields(body: &CreateRunRequest) -> Result<(), AppError> {
         || body.lap2_time > MAX_TRACK_TIME_MS
         || body.lap3_time > MAX_TRACK_TIME_MS
     {
-        return Err(AppError::BadRequest(format!(
+        return Err(Error::BadRequest(format!(
             "Each lap time must be at most {MAX_TRACK_TIME_MS} ms"
         )));
     }
     let lap_sum = body.lap1_time + body.lap2_time + body.lap3_time;
     if lap_sum != body.track_time {
         let diff = (lap_sum - body.track_time).abs();
-        return Err(AppError::BadRequest(format!(
+        return Err(Error::BadRequest(format!(
             "Lap times must add up to total time (off by {diff}ms)"
         )));
     }
@@ -155,7 +155,7 @@ pub async fn create_run(
     db: &DatabaseConnection,
     user_id: &UserId,
     body: CreateRunRequest,
-) -> Result<RunDetail, AppError> {
+) -> Result<RunDetail, Error> {
     let session_race = validate_run_request(db, user_id, &body).await?;
     let run_id = insert_run(db, user_id, body, &session_race).await?;
     get_run(db, &run_id).await
@@ -179,20 +179,20 @@ async fn validate_run_request(
     db: &DatabaseConnection,
     user_id: &UserId,
     body: &CreateRunRequest,
-) -> Result<session_races::Model, AppError> {
+) -> Result<session_races::Model, Error> {
     validate_time_fields(body)?;
 
     let session_race = session_races::Entity::find_by_id(&body.session_race_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Session race not found".to_string()))?;
+        .ok_or_else(|| Error::NotFound("Session race not found".to_string()))?;
 
     let session_id = SessionId::new(session_race.session_id.clone());
     helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
-            AppError::Conflict(_) => {
-                AppError::Conflict("Cannot submit run for a closed session".to_string())
+            Error::Conflict(_) => {
+                Error::Conflict("Cannot submit run for a closed session".to_string())
             }
             other => other,
         })?;
@@ -209,7 +209,7 @@ async fn validate_run_request(
         .await?;
 
     if existing.is_some() {
-        return Err(AppError::Conflict(
+        return Err(Error::Conflict(
             "Already submitted a run for this race".to_string(),
         ));
     }
@@ -231,7 +231,7 @@ async fn validate_run_request(
         .as_ref()
         .is_some_and(|p| p.skipped_at.is_some())
     {
-        return Err(AppError::Conflict(
+        return Err(Error::Conflict(
             "Cannot submit a run for a skipped race".to_string(),
         ));
     }
@@ -254,7 +254,7 @@ async fn validate_run_request(
         .filter(|p| p.race_number < session_race.race_number)
         .min_by_key(|p| p.race_number)
     {
-        return Err(AppError::Conflict(format!(
+        return Err(Error::Conflict(format!(
             "Must submit or skip pending race #{} first",
             older.race_number
         )));
@@ -279,7 +279,7 @@ async fn insert_run(
     user_id: &UserId,
     body: CreateRunRequest,
     session_race: &session_races::Model,
-) -> Result<RunId, AppError> {
+) -> Result<RunId, Error> {
     let now = Utc::now().naive_utc();
     let run_id = RunId::new(Uuid::new_v4().to_string());
 
@@ -316,7 +316,7 @@ async fn insert_run(
 }
 
 /// Fetch a single run by ID with JOINed username and drink_type_name.
-pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetail, AppError> {
+pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetail, Error> {
     let row = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -334,7 +334,7 @@ pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetai
     ))
     .one(db)
     .await?
-    .ok_or_else(|| AppError::NotFound("Run not found".to_string()))?;
+    .ok_or_else(|| Error::NotFound("Run not found".to_string()))?;
 
     Ok(row.into())
 }
@@ -343,7 +343,7 @@ pub async fn get_run(db: &DatabaseConnection, run_id: &RunId) -> Result<RunDetai
 pub async fn list_runs(
     db: &DatabaseConnection,
     filters: RunFilters,
-) -> Result<Vec<RunDetail>, AppError> {
+) -> Result<Vec<RunDetail>, Error> {
     let mut conditions = Vec::new();
     let mut params: Vec<sea_orm::Value> = Vec::new();
 
@@ -401,14 +401,14 @@ pub async fn delete_run(
     db: &DatabaseConnection,
     run_id: &RunId,
     user_id: &UserId,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     let run = runs::Entity::find_by_id(run_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Run not found".to_string()))?;
+        .ok_or_else(|| Error::NotFound("Run not found".to_string()))?;
 
     if run.user_id.as_str() != user_id.as_str() {
-        return Err(AppError::Forbidden(
+        return Err(Error::Forbidden(
             "Only the run's owner can delete it".to_string(),
         ));
     }
@@ -417,18 +417,18 @@ pub async fn delete_run(
     let session_race = session_races::Entity::find_by_id(&run.session_race_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Session race not found for run")))?;
+        .ok_or_else(|| Error::Internal(anyhow::anyhow!("Session race not found for run")))?;
 
     let session_id = SessionId::new(session_race.session_id.clone());
     // FK guarantees the session exists; NotFound here signals data corruption.
     helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
-            AppError::NotFound(msg) => {
-                AppError::Internal(anyhow::anyhow!("Session not found for run: {msg}"))
+            Error::NotFound(msg) => {
+                Error::Internal(anyhow::anyhow!("Session not found for run: {msg}"))
             }
-            AppError::Conflict(_) => {
-                AppError::Conflict("Cannot delete run from a closed session".to_string())
+            Error::Conflict(_) => {
+                Error::Conflict("Cannot delete run from a closed session".to_string())
             }
             other => other,
         })?;
@@ -449,7 +449,7 @@ pub async fn delete_run(
 pub async fn get_run_defaults(
     db: &DatabaseConnection,
     user_id: &UserId,
-) -> Result<RunDefaults, AppError> {
+) -> Result<RunDefaults, Error> {
     // Try most recent run
     let latest_run = runs::Entity::find()
         .filter(runs::Column::UserId.eq(user_id))
@@ -472,7 +472,7 @@ pub async fn get_run_defaults(
     let user = users::Entity::find_by_id(user_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
 
     if user.preferred_character_id.is_some() || user.preferred_drink_type_id.is_some() {
         return Ok(RunDefaults {
@@ -1025,7 +1025,7 @@ mod tests {
 
         // Try to submit race 3 while races 1 and 2 are still pending.
         match create_run(&db, &host_id, valid_run_request(&race_ids[2])).await {
-            Err(AppError::Conflict(msg)) => assert!(
+            Err(Error::Conflict(msg)) => assert!(
                 msg.contains("Must submit or skip pending race #1"),
                 "expected message about race #1, got: {msg}"
             ),
@@ -1060,7 +1060,7 @@ mod tests {
         let (_session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 2).await;
 
         match create_run(&db, &host_id, valid_run_request(&race_ids[1])).await {
-            Err(AppError::Conflict(_)) => {}
+            Err(Error::Conflict(_)) => {}
             Err(other) => panic!("expected Conflict, got {other:?}"),
             Ok(_) => panic!("expected Conflict, got Ok"),
         }
@@ -1103,7 +1103,7 @@ mod tests {
             .expect("skip succeeds");
 
         match create_run(&db, &host_id, valid_run_request(&race_ids[0])).await {
-            Err(AppError::Conflict(msg)) => assert!(
+            Err(Error::Conflict(msg)) => assert!(
                 msg.contains("skipped"),
                 "expected message about skipped race, got: {msg}"
             ),

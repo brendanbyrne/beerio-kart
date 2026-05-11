@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::error::Error;
 
 /// A fully-specified race setup update (all four IDs required together).
 ///
@@ -7,25 +7,25 @@ use crate::error::AppError;
 /// without wheels (etc.) is meaningless. This type encodes that invariant at
 /// compile time so call sites can't read only some of the fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RaceSetupUpdate {
+pub struct Update {
     pub character_id: i32,
     pub body_id: i32,
     pub wheel_id: i32,
     pub glider_id: i32,
 }
 
-impl RaceSetupUpdate {
+impl Update {
     /// Parse a race-setup update from four optional fields.
     ///
     /// - All four `None` → `Ok(None)` (caller is not updating race setup).
-    /// - All four `Some` → `Ok(Some(RaceSetupUpdate))`.
+    /// - All four `Some` → `Ok(Some(Update))`.
     /// - Any mix        → `Err(BadRequest)`.
     pub fn try_from_optional(
         character_id: Option<i32>,
         body_id: Option<i32>,
         wheel_id: Option<i32>,
         glider_id: Option<i32>,
-    ) -> Result<Option<Self>, AppError> {
+    ) -> Result<Option<Self>, Error> {
         match (character_id, body_id, wheel_id, glider_id) {
             (None, None, None, None) => Ok(None),
             (Some(character_id), Some(body_id), Some(wheel_id), Some(glider_id)) => {
@@ -36,7 +36,7 @@ impl RaceSetupUpdate {
                     glider_id,
                 }))
             }
-            _ => Err(AppError::BadRequest(
+            _ => Err(Error::BadRequest(
                 "Race setup must be provided all together (character, body, wheel, glider) or not at all".into(),
             )),
         }
@@ -49,18 +49,18 @@ mod tests {
 
     #[test]
     fn all_none_returns_ok_none() {
-        let result = RaceSetupUpdate::try_from_optional(None, None, None, None).unwrap();
+        let result = Update::try_from_optional(None, None, None, None).unwrap();
         assert_eq!(result, None);
     }
 
     #[test]
     fn all_some_returns_ok_some() {
-        let result = RaceSetupUpdate::try_from_optional(Some(1), Some(2), Some(3), Some(4))
+        let result = Update::try_from_optional(Some(1), Some(2), Some(3), Some(4))
             .unwrap()
             .unwrap();
         assert_eq!(
             result,
-            RaceSetupUpdate {
+            Update {
                 character_id: 1,
                 body_id: 2,
                 wheel_id: 3,
@@ -69,9 +69,9 @@ mod tests {
         );
     }
 
-    fn assert_bad_request(result: Result<Option<RaceSetupUpdate>, AppError>) {
+    fn assert_bad_request(result: Result<Option<Update>, Error>) {
         match result {
-            Err(AppError::BadRequest(msg)) => {
+            Err(Error::BadRequest(msg)) => {
                 assert!(msg.contains("all together"), "msg was: {msg}");
             }
             other => panic!("expected BadRequest, got {other:?}"),
@@ -80,31 +80,16 @@ mod tests {
 
     #[test]
     fn single_some_is_bad_request() {
-        assert_bad_request(RaceSetupUpdate::try_from_optional(
-            Some(1),
-            None,
-            None,
-            None,
-        ));
+        assert_bad_request(Update::try_from_optional(Some(1), None, None, None));
     }
 
     #[test]
     fn three_some_one_none_is_bad_request() {
-        assert_bad_request(RaceSetupUpdate::try_from_optional(
-            Some(1),
-            Some(2),
-            Some(3),
-            None,
-        ));
+        assert_bad_request(Update::try_from_optional(Some(1), Some(2), Some(3), None));
     }
 
     #[test]
     fn interior_none_is_bad_request() {
-        assert_bad_request(RaceSetupUpdate::try_from_optional(
-            Some(1),
-            None,
-            Some(3),
-            Some(4),
-        ));
+        assert_bad_request(Update::try_from_optional(Some(1), None, Some(3), Some(4)));
     }
 }

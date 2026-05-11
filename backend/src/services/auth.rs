@@ -7,7 +7,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode}
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
-use crate::{config::AppConfig, error::AppError};
+use crate::{config::Config, error::Error};
 
 /// Claims for short-lived access tokens (sent in response body, stored in JS memory).
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,19 +51,20 @@ pub struct RefreshClaims {
 /// runs on Tokio's blocking pool via `spawn_blocking` so it never stalls an
 /// async worker, and `limiter` caps concurrent hashes (see
 /// `coding-standards/tokio.md` § 2 and § 12).
-pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<String, AppError> {
-    let _permit = limiter.acquire().await.map_err(|e| {
-        AppError::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed"))
-    })?;
+pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<String, Error> {
+    let _permit = limiter
+        .acquire()
+        .await
+        .map_err(|e| Error::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed")))?;
     tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(&mut rand_core::OsRng);
         Argon2::default()
             .hash_password(password.as_bytes(), &salt)
             .map(|h| h.to_string())
-            .map_err(AppError::from)
+            .map_err(Error::from)
     })
     .await
-    .map_err(|e| AppError::Internal(anyhow::Error::new(e).context("Argon2 hash task panicked")))?
+    .map_err(|e| Error::Internal(anyhow::Error::new(e).context("Argon2 hash task panicked")))?
 }
 
 /// Verify a plaintext password against a stored Argon2id hash.
@@ -74,28 +75,29 @@ pub async fn verify_password(
     limiter: &Semaphore,
     password: String,
     hash: String,
-) -> Result<bool, AppError> {
-    let _permit = limiter.acquire().await.map_err(|e| {
-        AppError::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed"))
-    })?;
+) -> Result<bool, Error> {
+    let _permit = limiter
+        .acquire()
+        .await
+        .map_err(|e| Error::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed")))?;
     tokio::task::spawn_blocking(move || {
-        let parsed = PasswordHash::new(&hash).map_err(AppError::from)?;
+        let parsed = PasswordHash::new(&hash).map_err(Error::from)?;
         Ok(Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
             .is_ok())
     })
     .await
-    .map_err(|e| AppError::Internal(anyhow::Error::new(e).context("Argon2 verify task panicked")))?
+    .map_err(|e| Error::Internal(anyhow::Error::new(e).context("Argon2 verify task panicked")))?
 }
 
 /// Create a short-lived access token for the given user.
 pub fn create_access_token(
     user_id: &str,
     username: &str,
-    config: &AppConfig,
+    config: &Config,
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let now = Utc::now();
-    let expiry = now + TimeDelta::minutes(config.jwt_access_expiry_minutes as i64);
+    let expiry = now + TimeDelta::minutes(config.jwt_access_expiry_minutes);
 
     let claims = AccessClaims {
         sub: user_id.to_string(),
@@ -116,10 +118,10 @@ pub fn create_access_token(
 pub fn create_refresh_token(
     user_id: &str,
     refresh_token_version: i32,
-    config: &AppConfig,
+    config: &Config,
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let now = Utc::now();
-    let expiry = now + TimeDelta::days(config.jwt_refresh_expiry_days as i64);
+    let expiry = now + TimeDelta::days(config.jwt_refresh_expiry_days);
 
     let claims = RefreshClaims {
         sub: user_id.to_string(),
@@ -139,7 +141,7 @@ pub fn create_refresh_token(
 /// Validate an access token and return its claims.
 pub fn validate_access_token(
     token: &str,
-    config: &AppConfig,
+    config: &Config,
 ) -> Result<AccessClaims, jsonwebtoken::errors::Error> {
     let token_data = decode::<AccessClaims>(
         token,
@@ -152,7 +154,7 @@ pub fn validate_access_token(
 /// Validate a refresh token and return its claims.
 pub fn validate_refresh_token(
     token: &str,
-    config: &AppConfig,
+    config: &Config,
 ) -> Result<RefreshClaims, jsonwebtoken::errors::Error> {
     let token_data = decode::<RefreshClaims>(
         token,
@@ -164,7 +166,7 @@ pub fn validate_refresh_token(
 
 /// Build the `Set-Cookie` header value for a refresh token.
 #[must_use]
-pub fn refresh_cookie(token: &str, max_age_seconds: i64, config: &AppConfig) -> String {
+pub fn refresh_cookie(token: &str, max_age_seconds: i64, config: &Config) -> String {
     let secure = if config.cookie_secure { "Secure; " } else { "" };
     format!(
         "refresh_token={token}; HttpOnly; {secure}SameSite=Lax; Path=/api/v1/auth/refresh; Max-Age={max_age_seconds}"
@@ -173,7 +175,7 @@ pub fn refresh_cookie(token: &str, max_age_seconds: i64, config: &AppConfig) -> 
 
 /// Build a `Set-Cookie` header value that clears the refresh token cookie.
 #[must_use]
-pub fn clear_refresh_cookie(config: &AppConfig) -> String {
+pub fn clear_refresh_cookie(config: &Config) -> String {
     refresh_cookie("", 0, config)
 }
 
@@ -190,8 +192,8 @@ mod tests {
     use super::*;
     use crate::ARGON2_MAX_CONCURRENT;
 
-    fn test_config() -> Arc<AppConfig> {
-        Arc::new(AppConfig {
+    fn test_config() -> Arc<Config> {
+        Arc::new(Config {
             jwt_secret: "test-secret-key-for-unit-tests".to_string(),
             jwt_access_expiry_minutes: 15,
             jwt_refresh_expiry_days: 7,
@@ -355,7 +357,7 @@ mod tests {
         let config = test_config();
         let token = create_access_token("user-123", "testuser", &config).unwrap();
 
-        let wrong_config = Arc::new(AppConfig {
+        let wrong_config = Arc::new(Config {
             jwt_secret: "wrong-secret".to_string(),
             jwt_access_expiry_minutes: 15,
             jwt_refresh_expiry_days: 7,
@@ -374,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_access_token_contains_correct_expiry_window() {
-        let config = Arc::new(AppConfig {
+        let config = Arc::new(Config {
             jwt_secret: "test-secret".to_string(),
             jwt_access_expiry_minutes: 30,
             jwt_refresh_expiry_days: 7,
@@ -391,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_refresh_cookie_format() {
-        let config = Arc::new(AppConfig {
+        let config = Arc::new(Config {
             jwt_secret: "s".to_string(),
             jwt_access_expiry_minutes: 15,
             jwt_refresh_expiry_days: 7,
@@ -408,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_refresh_cookie_no_secure_in_dev() {
-        let config = Arc::new(AppConfig {
+        let config = Arc::new(Config {
             jwt_secret: "s".to_string(),
             jwt_access_expiry_minutes: 15,
             jwt_refresh_expiry_days: 7,

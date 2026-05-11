@@ -13,7 +13,7 @@ use axum::{
 use axum_test::TestServer;
 use beerio_kart::{
     ARGON2_MAX_CONCURRENT, AppState,
-    config::AppConfig,
+    config::Config,
     drink_type_id::drink_type_uuid,
     entities::{bodies, characters, cups, drink_types, gliders, sessions, tracks, wheels},
     routes,
@@ -27,8 +27,8 @@ use uuid::Uuid;
 
 const TEST_SECRET: &str = "test-secret-for-session-tests";
 
-fn test_config() -> Arc<AppConfig> {
-    Arc::new(AppConfig {
+fn test_config() -> Arc<Config> {
+    Arc::new(Config {
         jwt_secret: TEST_SECRET.to_string(),
         jwt_access_expiry_minutes: 15,
         jwt_refresh_expiry_days: 7,

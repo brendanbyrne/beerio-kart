@@ -7,22 +7,24 @@ use anyhow::Context;
 /// Wrapped in `Arc` and stored in Axum's state so all handlers can access it
 /// without cloning the inner data on every request.
 #[derive(Clone, Debug)]
-pub struct AppConfig {
+pub struct Config {
     pub jwt_secret: String,
     /// How long access tokens are valid (minutes). Short-lived because they
-    /// can't be revoked — if one leaks, it expires quickly.
-    pub jwt_access_expiry_minutes: u64,
+    /// can't be revoked — if one leaks, it expires quickly. Stored as `i64`
+    /// because `chrono::TimeDelta::minutes` takes `i64`.
+    pub jwt_access_expiry_minutes: i64,
     /// How long refresh tokens are valid (days). Longer-lived because they're
     /// stored in an HttpOnly cookie (no JavaScript access) and can be revoked
-    /// by bumping `refresh_token_version` in the database.
-    pub jwt_refresh_expiry_days: u64,
+    /// by bumping `refresh_token_version` in the database. Stored as `i64`
+    /// because `chrono::TimeDelta::days` takes `i64`.
+    pub jwt_refresh_expiry_days: i64,
     pub admin_user_id: Option<String>,
     /// Controls the `Secure` flag on the refresh cookie. Must be `false` for
     /// local `http://localhost` development, `true` in production behind HTTPS.
     pub cookie_secure: bool,
 }
 
-impl AppConfig {
+impl Config {
     /// Load configuration from environment variables.
     ///
     /// Errors if `JWT_SECRET` is not set — running without a signing key would
