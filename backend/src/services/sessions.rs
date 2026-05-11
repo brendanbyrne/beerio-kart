@@ -66,7 +66,7 @@ async fn check_not_in_any_session(
 ///
 /// Returns `Internal` for unexpected DB failures.
 pub async fn get_active_session_id(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: &UserId,
 ) -> Result<Option<SessionId>, Error> {
     let row = ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
@@ -165,7 +165,7 @@ struct SessionSummaryRow {
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
-pub async fn list_active_sessions(db: &DatabaseConnection) -> Result<Vec<SessionSummary>, Error> {
+pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<SessionSummary>, Error> {
     let rows = SessionSummaryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -675,7 +675,7 @@ pub async fn skip_pending_race(
 /// Returns `NotFound` if no session with that ID exists; `Internal` for
 /// unexpected DB failures on any of the helper queries.
 pub async fn get_session_detail(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     session_id: &SessionId,
     requesting_user_id: Option<&UserId>,
 ) -> Result<SessionDetail, Error> {
@@ -1135,7 +1135,7 @@ pub async fn skip_turn(
 /// Returns `NotFound` if the session doesn't exist; `Internal` for
 /// unexpected DB failures.
 pub async fn list_races(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     session_id: &SessionId,
 ) -> Result<Vec<RaceInfo>, Error> {
     // Verify session exists
