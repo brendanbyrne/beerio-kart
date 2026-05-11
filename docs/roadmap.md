@@ -4,27 +4,37 @@ Where Beerio Kart is going at the cup-by-cup level. Status of individual work it
 
 ## How this works
 
-- **Cups** are GitHub milestones, named after Mario Kart 8 Deluxe cups (Mushroom, Flower, Star, Special, Shell, Banana, Leaf, Lightning, then Crossing/Bell/Egg/Triforce, then the eight Booster Course Pass cups). Cups are claimed in chronological start order — the Nth major work-chunk gets the Nth cup. No semantic mapping; cup names are arbitrary chronological labels.
+Two milestone types: **product cups** for user-facing feature work-chunks, **workstreams** for cross-cutting infrastructure that runs concurrent with product cups.
+
+- **Product cups** are GitHub milestones named after Mario Kart 8 Deluxe cups (Mushroom, Flower, Star, Special, Shell, Banana, Leaf, Lightning, then Crossing/Bell/Egg/Triforce, then the eight Booster Course Pass cups). Cups are claimed in chronological start order — the Nth product work-chunk gets the Nth cup. No semantic mapping; cup names are arbitrary chronological labels. Title format: `<CupName>: <Description>`.
+- **Workstream milestones** are GitHub milestones with topical names instead of cup names — `Docs:`, `Hardening:`, etc. Use these when the work is a cross-cutting concern (code hygiene, doc restructure, accessibility audit) running alongside product cups rather than a discrete user-visible release. Title format: `<Topic>: <Description>`.
 - **Issues** under a milestone are the working checklist. One Issue per discrete unit of work; the project board shows their status (Backlog → Ready → In Progress → Done).
-- **This file** is the narrative — each cup gets a section describing the goal, scope, deferred work, and success criteria. When a cup closes, its section keeps a brief retrospective and the cup keeps its name forever.
+- **This file** is the narrative — each milestone gets a section describing the goal, scope, deferred work, and success criteria. When a milestone closes, its section keeps a brief retrospective and the cup/topic keeps its name forever.
 - **Future-cup Scope sections double as the future-work record.** Cups not yet active list their work as bullets here, not as GitHub Issues. When a cup becomes the next active work-chunk, its bullets transcribe to Issues at that time and the Scope list in this file gets a "see Milestone X for current status" pointer. This keeps the GitHub Backlog scoped to "things we're committed to right now," not "everything we'd ever want to do."
 
 For the underlying conventions, see [`project-workflow.md`](./project-workflow.md) § Milestone lifecycle and [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12.
 
-## Cup mapping
+## Cup mapping (product)
 
 | Cup | Work chunk | Status | Closed |
 |-----|------------|--------|--------|
 | Mushroom | Foundation (was Phase 1) | Closed | 2026-03-31 |
 | Flower | Deployment (was Phase 2) | Closed | 2026-04-02 |
 | Star | Sessions & Run Recording (was Phase 3) | Open, in progress | — |
-| Special | Documentation overhaul (PRs 1–6 of the docs-restructure design record) | Open, in progress | — |
+| Special | *(freed 2026-05-11 — was Documentation overhaul; renamed to `Docs:` workstream)* | Available | — |
 | Shell | Session Rulesets (was Phase 4) | Future | — |
 | Banana | Stats & Leaderboards (was Phase 5) | Future | — |
 | Leaf | Social & Head-to-Head (was Phase 6) | Future | — |
 | Lightning | (next thing — TBD) | Reserved | — |
 
 OCR work (was Phase 7) is **not** yet milestoned — too speculative to commit to a cup. It gets a cup when it's next-up.
+
+## Workstream mapping (cross-cutting)
+
+| Topic | Work chunk | Status | Closed |
+|-------|------------|--------|--------|
+| Docs | Documentation overhaul (renamed from `Special:` for convention consistency, 2026-05-11) | Open — 0 open / 9 closed (ready to close) | — |
+| Hardening | Backend compliance plan — code hygiene, standards conformance, type-driven design, infrastructure (per `compliance-plan.md`) | Open, in progress | — |
 
 ---
 
@@ -78,9 +88,11 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 
 ---
 
-## Special — Documentation overhaul
+## Docs — Documentation overhaul
 
-**Status:** Open, in progress.
+**Status:** Open — 0 open issues / 9 closed. Ready to close when convenient.
+
+**Type:** Workstream (renamed from cup `Special:` on 2026-05-11 — non-product work shouldn't consume cup names per the convention update).
 
 **Goal.** Restructure `docs/` from a few large files into a coherent multi-doc structure: ADRs in `decisions/`, design records in `designs/`, narrative in `roadmap.md` and `design.md`, an operational `project-workflow.md`, and CLAUDE.md files at the right scopes. Settled in [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md).
 
@@ -93,11 +105,29 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 - PR 5 — final `design.md` trim to ~250 lines + repo-root `README.md` + cross-reference cleanup.
 - PR 6 (optional) — nested `backend/CLAUDE.md` and `frontend/CLAUDE.md`.
 
-**Deferred.** Periodic maintenance and follow-up cleanups (e.g., the `lychee` flip-back from `fail: false` → `fail: true` after PR 5) live in their own follow-up Issues, not Special's scope.
+**Deferred.** Periodic maintenance and follow-up cleanups (e.g., the `lychee` flip-back from `fail: false` → `fail: true` after PR 5) live in their own follow-up Issues, not Docs's scope.
 
 **Success criteria.** New contributors find what they need in under five minutes via the index in `docs/README.md`. Design records are durable; ADRs are searchable by topic; the working checklist lives on the project board, not in markdown.
 
-[Milestone Special](https://github.com/brendanbyrne/beerio-kart/milestone/4)
+[Milestone Docs: Documentation overhaul](https://github.com/brendanbyrne/beerio-kart/milestone/4)
+
+---
+
+## Hardening — Backend compliance plan
+
+**Status:** Open, in progress.
+
+**Type:** Workstream. Concurrent with product cups; expected to span Star and likely Shell.
+
+**Goal.** Bring the backend into conformance with the standards in `coding-standards/` and execute the sequenced PR list in [`compliance-plan.md`](./compliance-plan.md). Code hygiene, type-driven design, infrastructure (graceful shutdown, Tower middleware, tracing instrumentation), and documentation polish — all the work that supports product cups but doesn't itself ship user-facing functionality.
+
+**Scope.** The full sequenced list lives in `compliance-plan.md`. Already-merged Quality Pass work (PR-A1 / A2 / B1 / B2 / B3 / C1 / C2 / E3 / H1+ / X1 / X2) plus the remaining streams (D, F, the rest of G, I). Each chunk is a tracked Issue under this milestone.
+
+**Deferred.** Work whose scope is naturally part of a product cup stays in that cup (e.g., the `users.email` pre-check that lands with whatever profile-update endpoint introduces a real email value — that's Star or Banana, not Hardening). Hardening is for cross-cutting compliance work, not feature-adjacent code hygiene.
+
+**Success criteria.** `compliance-plan.md` reaches all-signed-off; the standards docs in `coding-standards/` describe the code as it actually is; the backend's structural hygiene supports the next product cup without surprise.
+
+[Milestone Hardening: Backend compliance plan](https://github.com/brendanbyrne/beerio-kart/milestone/8)
 
 ---
 

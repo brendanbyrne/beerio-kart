@@ -103,15 +103,19 @@ There's an alternative pattern (one Issue, multiple PRs with `Refs #NN` on inter
 
 ### Naming
 
-Mario Kart 8 Deluxe cup names, claimed in chronological start order. The Nth major work-chunk gets the Nth cup. No semantic mapping — cup names are arbitrary chronological labels.
+Two milestone types: **product cups** for user-facing feature work-chunks, **workstreams** for cross-cutting infrastructure that runs concurrent with product cups. The distinction was introduced 2026-05-11 after the Star milestone accumulated a heavy compliance-plan tail that obscured its actual product scope; pulling cross-cutting work into separate workstream milestones lets each milestone's progress bar mean what its name claims.
 
-Title format: `<CupName>: <Description>` (e.g., `Star: Sessions & Run Recording`).
+**Product cups.** Mario Kart 8 Deluxe cup names, claimed in chronological start order. The Nth product work-chunk gets the Nth cup. No semantic mapping — cup names are arbitrary chronological labels. Title format: `<CupName>: <Description>` (e.g., `Star: Sessions & Run Recording`).
 
-**Prose form:** when referring to a milestone in prose, write `Milestone <CupName>` (e.g., "frontend logic added in Milestone Star has somewhere to land tests"). Avoid "Star milestone" or just "Star" — the prefixed form disambiguates from the cup itself, the in-game item, or the work-chunk concept in general.
+**Workstreams.** Topical prefix instead of a cup name. Title format: `<Topic>: <Description>` (e.g., `Hardening: Backend compliance plan`, `Docs: Documentation overhaul`). Use this when the work is a cross-cutting concern (code hygiene, doc restructure, accessibility audit, observability buildout) that runs alongside product cups rather than being a discrete user-visible release.
 
-Cup pool: 8 base cups (Mushroom, Flower, Star, Special, Shell, Banana, Leaf, Lightning), 4 MK8 Deluxe additions (Crossing, Bell, Egg, Triforce), 8 Booster Course Pass cups (Golden Dash, Lucky Cat, Turnip, Propeller, Rock, Moon, Fruit, Boomerang). 20 total.
+Choosing between the two: ask "is this milestone's success criterion something a user would notice on the next release?" Yes → product cup. No → workstream. Workstreams can be long-lived (Hardening spans multiple product cups); product cups close when their feature deliverable ships.
 
-The current cup-to-work-chunk mapping is in the design record amendment (until PR 3 creates `docs/roadmap.md`, which will then own it).
+**Prose form:** for product cups, write `Milestone <CupName>` (e.g., "frontend logic added in Milestone Star has somewhere to land tests"). The cup-prefix form disambiguates the cup name from the in-game item or the abstract work-chunk concept. For workstreams, plain prose is fine (`the Hardening milestone`, `the Docs milestone`) — workstream names don't have the same homonym problem.
+
+Cup pool: 8 base cups (Mushroom, Flower, Star, Special, Shell, Banana, Leaf, Lightning), 4 MK8 Deluxe additions (Crossing, Bell, Egg, Triforce), 8 Booster Course Pass cups (Golden Dash, Lucky Cat, Turnip, Propeller, Rock, Moon, Fruit, Boomerang). 20 total. (Note: `Special` was originally used for the documentation overhaul; the 2026-05-11 convention update freed the cup name and renamed that milestone to the `Docs:` workstream. Special is available for the next product cup that needs it.)
+
+The current cup-to-work-chunk mapping and workstream list live in [`roadmap.md`](./roadmap.md).
 
 ### When to open
 
