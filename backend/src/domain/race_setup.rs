@@ -20,6 +20,11 @@ impl Update {
     /// - All four `None` → `Ok(None)` (caller is not updating race setup).
     /// - All four `Some` → `Ok(Some(Update))`.
     /// - Any mix        → `Err(BadRequest)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::BadRequest` if the four arguments are a mix of `Some`
+    /// and `None` — race setup is all-or-nothing.
     pub fn try_from_optional(
         character_id: Option<i32>,
         body_id: Option<i32>,

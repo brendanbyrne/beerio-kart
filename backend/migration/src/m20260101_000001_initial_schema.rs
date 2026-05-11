@@ -16,15 +16,15 @@ use sea_orm_migration::prelude::*;
 /// - There is a circular FK between `users.preferred_drink_type_id` and
 ///   `drink_types.created_by`. We break the cycle by creating `drink_types`
 ///   first without `created_by`, creating `users`, then adding `created_by`
-///   via raw `ALTER TABLE` (SQLite supports inline REFERENCES on ADD COLUMN
-///   but SeaORM's builder doesn't reliably emit it).
-/// - Timestamp columns use SeaORM's `.date_time()` which emits the literal
-///   SQL type `datetime_text`. SeaORM's codegen recognizes that type and
+///   via raw `ALTER TABLE` (`SQLite` supports inline REFERENCES on ADD COLUMN
+///   but `SeaORM`'s builder doesn't reliably emit it).
+/// - Timestamp columns use `SeaORM`'s `.date_time()` which emits the literal
+///   SQL type `datetime_text`. `SeaORM`'s codegen recognizes that type and
 ///   maps the column to `chrono::NaiveDateTime` when entities are regenerated.
 ///   The session/race/run tables are written as raw SQL (matching the prior
 ///   pattern) and use the same `datetime_text` type literally for consistency.
 /// - The partial unique index on `session_participants(user_id) WHERE left_at
-///   IS NULL` is created via raw SQL because SeaORM's builder doesn't support
+///   IS NULL` is created via raw SQL because `SeaORM`'s builder doesn't support
 ///   partial-index `WHERE` clauses.
 #[derive(DeriveMigrationName)]
 pub struct Migration;

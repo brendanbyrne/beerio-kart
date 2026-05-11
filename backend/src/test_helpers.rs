@@ -8,6 +8,11 @@
 //! a shared `common/mod.rs`), relocate these helpers there instead.
 
 #![cfg(test)]
+// Every helper in this file panics on DB-setup failure by design — a failed
+// `setup_db()`, `Migrator::up`, or insert is treated as a test infrastructure
+// problem, not a recoverable error. Documenting each panic individually would
+// be repetition; the file-level contract is enough.
+#![allow(clippy::missing_panics_doc)]
 
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, Set};
@@ -22,7 +27,7 @@ use crate::{
     },
 };
 
-/// Spin up an in-memory SQLite database with foreign keys enabled and all
+/// Spin up an in-memory `SQLite` database with foreign keys enabled and all
 /// migrations applied. Each call returns a fresh, isolated DB.
 pub async fn setup_db() -> DatabaseConnection {
     use migration::{Migrator, MigratorTrait};

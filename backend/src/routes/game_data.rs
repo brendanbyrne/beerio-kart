@@ -38,7 +38,7 @@ pub struct CupWithTracksResponse {
     pub tracks: Vec<TrackResponse>,
 }
 
-/// Convert any entity Model with (id: i32, name: String, image_path: String) to SimpleItem.
+/// Convert any entity Model with (id: i32, name: String, `image_path`: String) to `SimpleItem`.
 macro_rules! impl_into_simple_item {
     ($($module:ident),+) => {
         $(
@@ -72,6 +72,11 @@ pub struct TracksQuery {
 
 // ── Handlers ─────────────────────────────────────────────────────────
 
+/// GET /api/v1/characters — list all characters.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_characters(
     _user: User,
     State(state): State<AppState>,
@@ -80,6 +85,11 @@ pub async fn list_characters(
     Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
+/// GET /api/v1/bodies — list all kart bodies.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_bodies(
     _user: User,
     State(state): State<AppState>,
@@ -88,6 +98,11 @@ pub async fn list_bodies(
     Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
+/// GET /api/v1/wheels — list all wheels.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_wheels(
     _user: User,
     State(state): State<AppState>,
@@ -96,6 +111,11 @@ pub async fn list_wheels(
     Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
+/// GET /api/v1/gliders — list all gliders.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_gliders(
     _user: User,
     State(state): State<AppState>,
@@ -104,6 +124,11 @@ pub async fn list_gliders(
     Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
+/// GET /api/v1/cups — list all cups.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_cups(
     _user: User,
     State(state): State<AppState>,
@@ -112,6 +137,12 @@ pub async fn list_cups(
     Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
 }
 
+/// GET /api/v1/cups/:id — get a cup with its tracks.
+///
+/// # Errors
+///
+/// Returns `NotFound` if `id` doesn't match a cup; `Internal` for unexpected
+/// DB failures.
 pub async fn get_cup(
     _user: User,
     State(state): State<AppState>,
@@ -138,6 +169,12 @@ pub async fn get_cup(
     }))
 }
 
+/// GET /api/v1/tracks — list all tracks. Optional `cup_id` query filter
+/// narrows the result to a single cup.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_tracks(
     _user: User,
     State(state): State<AppState>,
@@ -152,6 +189,12 @@ pub async fn list_tracks(
     Ok(Json(items.into_iter().map(TrackResponse::from).collect()))
 }
 
+/// GET /api/v1/tracks/:id — get a single track.
+///
+/// # Errors
+///
+/// Returns `NotFound` if `id` doesn't match a track; `Internal` for
+/// unexpected DB failures.
 pub async fn get_track(
     _user: User,
     State(state): State<AppState>,

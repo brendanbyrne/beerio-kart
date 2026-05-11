@@ -6,18 +6,18 @@
 //! are committed source (per `coding-standards/seaorm.md` § 6), codegen no
 //! longer acts as an implicit drift-checker between migration and entity.
 //! This test replaces that signal with a single CI-time guarantee: for every
-//! entity, force SeaORM to issue a `SELECT` covering all declared columns
+//! entity, force `SeaORM` to issue a `SELECT` covering all declared columns
 //! against the schema the migration produces.
 //!
 //! # What this catches
 //!
 //! - **Entity declares a column the migration didn't create** → the issued
-//!   `SELECT` references a non-existent column and SQLite returns an error
+//!   `SELECT` references a non-existent column and `SQLite` returns an error
 //!   at execution time. Verified by manual injection during PR-X2 dev:
 //!   adding a phantom `bogus_drift_column` to `run_flags` produced a clean
 //!   `no such column: run_flags.bogus_drift_column` failure.
 //! - **Entity points at a wrong table name** → same shape: `no such table:
-//!   …` from SQLite.
+//!   …` from `SQLite`.
 //!
 //! # What this does NOT catch
 //!
@@ -27,10 +27,10 @@
 //!   different mechanism (e.g. introspecting `PRAGMA table_info` and
 //!   diffing against the entity's `Column` enum) which is out of scope for
 //!   this test.
-//! - **Type mismatch on a column that exists in both.** SQLite uses column
+//! - **Type mismatch on a column that exists in both.** `SQLite` uses column
 //!   *affinity*, not strict typing, so a `TEXT`-declared column happily
 //!   accepts an integer value at the SQL layer. With `LIMIT 0` no rows are
-//!   returned, so SeaORM's per-row decode (where a Rust-level type
+//!   returned, so `SeaORM`'s per-row decode (where a Rust-level type
 //!   mismatch would surface) never runs. Catching type drift requires
 //!   seeding at least one row — out of scope for the bootstrap version of
 //!   this test. Verified by manual injection: changing `run_flags.reason`
@@ -40,7 +40,7 @@
 //!   and rely on review attention plus the atomic-PR rule from CLAUDE.md.
 //! - **Hand-corrected attributes** like the absent `unique` on
 //!   `session_participants.user_id`. The entity deliberately omits `unique`
-//!   so SeaORM doesn't infer `has_one` on the `users` ↔
+//!   so `SeaORM` doesn't infer `has_one` on the `users` ↔
 //!   `session_participants` relation (see that entity's doc-comment for
 //!   the full reasoning, including the two distinct migration constraints
 //!   that justify it). Intentional deviation, not drift; review catches it.

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// The newtype is transparent for serde (so it serializes as a bare string),
 /// implements `Display`, `AsRef<str>`, `Deref<Target = str>`, and conversion
 /// from `String` / `&str`. `Deref` lets call sites treat the newtype as a
-/// `&str` for read-only operations (e.g. passing into SeaORM filters that
+/// `&str` for read-only operations (e.g. passing into `SeaORM` filters that
 /// expect `&str`). `From<&Self> for sea_orm::Value` is provided so call
 /// sites can pass `&UserId` (etc.) directly to `Column::Foo.eq(...)` and
 /// `find_by_id(...)` without an explicit `.as_str()` conversion.

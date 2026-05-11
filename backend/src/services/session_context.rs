@@ -13,6 +13,8 @@ use crate::{
     services::helpers,
 };
 
+/// A loaded session plus its ID in typed form.
+///
 /// `session_id` mirrors `session.id` as a typed `SessionId` so the helper
 /// methods can borrow `&self.session_id` instead of allocating a fresh wrapper
 /// on every call. Both fields hold the same UUID; the typed copy is the one
@@ -25,6 +27,11 @@ pub struct SessionContext {
 
 impl SessionContext {
     /// Load the session by ID and require it to be in the `Active` state.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the errors of [`helpers::load_active_session`]: `NotFound`
+    /// if the session doesn't exist, `Conflict` if it's not active.
     pub async fn load_active<C: ConnectionTrait>(
         db: &C,
         session_id: &SessionId,
@@ -38,6 +45,10 @@ impl SessionContext {
     }
 
     /// Require that `user_id` is the host of this session.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Forbidden` if `user_id` is not the host.
     pub fn require_host(&self, user_id: &UserId) -> Result<(), Error> {
         if self.session.host_id.as_str() != user_id.as_str() {
             return Err(Error::Forbidden("Only the host can do that".into()));
@@ -46,6 +57,11 @@ impl SessionContext {
     }
 
     /// Require that `user_id` is an active participant and return their row.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the errors of [`helpers::require_active_participant`]:
+    /// `Forbidden` if the user is not an active participant of this session.
     pub async fn require_participant<C: ConnectionTrait>(
         &self,
         db: &C,
@@ -58,6 +74,11 @@ impl SessionContext {
     /// Delegates the UPDATE to `helpers::touch_session`, then refreshes
     /// the in-memory field so callers that read it post-touch see the
     /// updated value.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the errors of [`helpers::touch_session`] — currently only
+    /// `Internal` for unexpected DB failures.
     pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), Error> {
         helpers::touch_session(db, &self.session_id).await?;
         self.session.last_activity_at = chrono::Utc::now().naive_utc();

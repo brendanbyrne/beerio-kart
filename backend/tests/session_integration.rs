@@ -90,7 +90,7 @@ async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
     (TestServer::new(app), db)
 }
 
-/// Seed minimal game data needed by skip + create_run integration tests.
+/// Seed minimal game data needed by skip + `create_run` integration tests.
 /// Production seed (`seed::run`) lives in main.rs and isn't reachable from
 /// integration tests; this is a stripped-down equivalent — one each of
 /// cup, track, character, body, wheels, glider, drink type.
@@ -163,7 +163,7 @@ async fn seed_minimal_game_data(db: &sea_orm::DatabaseConnection) {
     .expect("insert drink type");
 }
 
-/// Build a valid CreateRunRequest body for the given race ID.
+/// Build a valid `CreateRunRequest` body for the given race ID.
 fn run_request_json(session_race_id: &str) -> Value {
     let drink_id = drink_type_uuid("Test Beer");
     json!({
@@ -509,7 +509,7 @@ async fn test_stale_session_cleanup() {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Helper: register a host, seed minimal game data, create a session, pick a
-/// track. Returns (server, db, token, user_id, session_id, race_id).
+/// track. Returns (server, db, token, `user_id`, `session_id`, `race_id`).
 async fn setup_with_one_race() -> (
     TestServer,
     sea_orm::DatabaseConnection,

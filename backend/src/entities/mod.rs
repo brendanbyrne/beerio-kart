@@ -1,6 +1,8 @@
-//! Hand-written SeaORM entities. Schema-as-code source of truth lives in
-//! `migration/`; entities mirror that shape and are edited alongside the
-//! migration in the same PR. See `docs/coding-standards/seaorm.md` § 6.
+//! Hand-written `SeaORM` entities.
+//!
+//! Schema-as-code source of truth lives in `migration/`; entities mirror that
+//! shape and are edited alongside the migration in the same PR. See
+//! `docs/coding-standards/seaorm.md` § 6.
 
 pub mod prelude;
 

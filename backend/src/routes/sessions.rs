@@ -20,6 +20,11 @@ pub struct CreateSessionRequest {
 }
 
 /// POST /sessions — create a new session. Returns full session detail.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::create_session`]: `BadRequest` for an
+/// unknown ruleset, `Conflict` if the user is already in another active session.
 pub async fn create_session(
     user: User,
     State(state): State<AppState>,
@@ -35,6 +40,11 @@ pub struct MySessionResponse {
 }
 
 /// GET /sessions/mine — get the user's current active session ID.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::get_active_session_id`] — currently
+/// only `Internal` for unexpected DB failures.
 pub async fn my_session(
     user: User,
     State(state): State<AppState>,
@@ -44,6 +54,11 @@ pub async fn my_session(
 }
 
 /// GET /sessions — list active sessions.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::list_active_sessions`] — currently
+/// only `Internal` for unexpected DB failures.
 pub async fn list_sessions(
     _user: User,
     State(state): State<AppState>,
@@ -53,6 +68,11 @@ pub async fn list_sessions(
 }
 
 /// GET /sessions/:id — full session state for polling.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::get_session_detail`]: `NotFound` if
+/// the session does not exist.
 pub async fn get_session(
     user: User,
     State(state): State<AppState>,
@@ -64,6 +84,12 @@ pub async fn get_session(
 }
 
 /// POST /sessions/:id/join — join a session.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::join_session`]: `NotFound` if the
+/// session doesn't exist, `Conflict` if the session is closed or the user is
+/// already in another session.
 pub async fn join_session(
     user: User,
     State(state): State<AppState>,
@@ -75,6 +101,11 @@ pub async fn join_session(
 }
 
 /// POST /sessions/:id/leave — leave a session.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::leave_session`]: `NotFound` if the
+/// session doesn't exist, `BadRequest` if the user is not currently in it.
 pub async fn leave_session(
     user: User,
     State(state): State<AppState>,
@@ -86,6 +117,12 @@ pub async fn leave_session(
 }
 
 /// POST /sessions/:id/next-track — pick the next random track.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::next_track`]: `NotFound` if the
+/// session doesn't exist, `Conflict` if it's closed, `Forbidden` if the user
+/// is not an active participant.
 pub async fn next_track(
     user: User,
     State(state): State<AppState>,
@@ -97,6 +134,13 @@ pub async fn next_track(
 }
 
 /// POST /sessions/:id/skip-turn — re-roll the current track.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::skip_turn`]: `NotFound` if the
+/// session doesn't exist, `Conflict` if it's closed or if runs have already
+/// been submitted for the current race, `BadRequest` if there is no track to
+/// skip.
 pub async fn skip_turn(
     user: User,
     State(state): State<AppState>,
@@ -107,8 +151,15 @@ pub async fn skip_turn(
     Ok((StatusCode::CREATED, Json(race)))
 }
 
-/// POST /sessions/:id/races/:race_id/skip — mark a pending race as skipped
+/// POST /`sessions/:id/races/:race_id/skip` — mark a pending race as skipped
 /// for the requesting user. Idempotent.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::skip_pending_race`]: `NotFound` if
+/// the session or race doesn't exist, `Conflict` if the session is closed or
+/// the user already submitted a run for the race, `Forbidden` if the user is
+/// not an active participant.
 pub async fn skip_pending_race(
     user: User,
     State(state): State<AppState>,
@@ -121,6 +172,11 @@ pub async fn skip_pending_race(
 }
 
 /// GET /sessions/:id/races — list all races in a session.
+///
+/// # Errors
+///
+/// Propagates the errors of [`sessions::list_races`] — currently only
+/// `Internal` for unexpected DB failures.
 pub async fn list_races(
     _user: User,
     State(state): State<AppState>,

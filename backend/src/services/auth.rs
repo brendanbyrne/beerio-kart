@@ -24,7 +24,8 @@ pub struct AccessClaims {
     pub token_type: String,
 }
 
-/// Claims for long-lived refresh tokens (stored in an HttpOnly cookie).
+/// Claims for long-lived refresh tokens (stored in an `HttpOnly` cookie).
+///
 /// Contains `refresh_token_version` which must match the DB value — this is
 /// how we revoke all refresh tokens for a user (e.g., on logout or password change).
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,6 +52,12 @@ pub struct RefreshClaims {
 /// runs on Tokio's blocking pool via `spawn_blocking` so it never stalls an
 /// async worker, and `limiter` caps concurrent hashes (see
 /// `coding-standards/tokio.md` § 2 and § 12).
+///
+/// # Errors
+///
+/// Returns `Error::Hash` if Argon2 rejects the input (extremely unusual —
+/// e.g., RNG failure during salt generation); `Error::Internal` if the
+/// blocking task panics or the limiter semaphore is closed.
 pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<String, Error> {
     let _permit = limiter
         .acquire()
@@ -71,6 +78,12 @@ pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<Stri
 ///
 /// Like `hash_password`, this offloads the verify to the blocking pool and
 /// is gated by the shared semaphore.
+///
+/// # Errors
+///
+/// Returns `Error::Hash` if `hash` doesn't parse as a valid Argon2 string;
+/// `Error::Internal` if the blocking task panics or the semaphore is closed.
+/// Note: a wrong password is `Ok(false)`, not an error.
 pub async fn verify_password(
     limiter: &Semaphore,
     password: String,
@@ -91,6 +104,11 @@ pub async fn verify_password(
 }
 
 /// Create a short-lived access token for the given user.
+///
+/// # Errors
+///
+/// Returns `jsonwebtoken::errors::Error` if HMAC signing fails — in practice
+/// only possible if `config.jwt_secret` is empty or otherwise unusable.
 pub fn create_access_token(
     user_id: &str,
     username: &str,
@@ -115,6 +133,11 @@ pub fn create_access_token(
 }
 
 /// Create a long-lived refresh token for the given user.
+///
+/// # Errors
+///
+/// Returns `jsonwebtoken::errors::Error` if HMAC signing fails — in practice
+/// only possible if `config.jwt_secret` is empty or otherwise unusable.
 pub fn create_refresh_token(
     user_id: &str,
     refresh_token_version: i32,
@@ -139,6 +162,11 @@ pub fn create_refresh_token(
 }
 
 /// Validate an access token and return its claims.
+///
+/// # Errors
+///
+/// Returns `jsonwebtoken::errors::Error` if the JWT signature is invalid,
+/// the token is expired or malformed, or the algorithm doesn't match HS256.
 pub fn validate_access_token(
     token: &str,
     config: &Config,
@@ -152,6 +180,12 @@ pub fn validate_access_token(
 }
 
 /// Validate a refresh token and return its claims.
+///
+/// # Errors
+///
+/// Returns `jsonwebtoken::errors::Error` if the JWT signature is invalid,
+/// the token is expired or malformed, or the algorithm doesn't match HS256.
+/// Callers should additionally check `claims.token_type == "refresh"`.
 pub fn validate_refresh_token(
     token: &str,
     config: &Config,

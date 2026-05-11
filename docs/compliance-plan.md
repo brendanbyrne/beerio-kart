@@ -347,7 +347,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Risk:** Low.
 - **Verification:** `cargo doc --no-deps` produces clean output; spot-check that summary tables are readable.
 - **Tracking:** Issue [#114](https://github.com/brendanbyrne/beerio-kart/issues/114).
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ### PR-G4: File-length splits
 
@@ -492,3 +492,4 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-11 — PR-H1+ (d) Issue [#103](https://github.com/brendanbyrne/beerio-kart/issues/103) closed via PR #112 (renamed 13 sites for `module_name_repetitions`: `App*` prefix dropped, `list_<resource>` shortened to `list`; fixed 6 cast sites by changing `Config.jwt_*_expiry` field types from `u64` to `i64` and propagating invariant violations as `Error::Internal` instead of silent fallbacks).
 - 2026-05-11 — PR-H1+ (e) Issue [#98](https://github.com/brendanbyrne/beerio-kart/issues/98) verified clean without code changes. PR-A1 (#24) never added module-level allows for `clippy::nursery` (verified by `gh pr diff 24` and `grep -rn "allow.*clippy" backend/src`); `nursery = "warn"` is enabled workspace-wide and the codebase has zero nursery-lint violations. Closes the PR-H1+ tracking parent [#95](https://github.com/brendanbyrne/beerio-kart/issues/95).
 - 2026-05-11 — Filed Issue [#114](https://github.com/brendanbyrne/beerio-kart/issues/114) tracking PR-G3 (doc-comment audit). Scoped to four lints (`missing_errors_doc`, `doc_markdown`, `missing_panics_doc`, `too_long_first_doc_paragraph`) and the 149 sites they surface as of today. Added Tracking line to PR-G3 row; added a note on the D1/D2 dependency relaxation since the Issue body discusses both pickup options.
+- 2026-05-11 — Marked PR-G3 sign-off complete. Removed the four `allow` lines from `backend/Cargo.toml`; cleared 147 sites (60 `doc_markdown` via `cargo clippy --fix`, 72 `missing_errors_doc` with hand-written `# Errors` sections, 9 `missing_panics_doc` via a per-file `#![allow]` on `test_helpers.rs` justified by the contract "every helper panics on DB-setup failure", 6 `too_long_first_doc_paragraph` via paragraph splits). `cargo clippy --all-targets -- -D warnings` and `cargo doc --no-deps` clean. The D1/D2 dependency was relaxed per the option-1 framing in #114 — some `# Errors` sections reference primitives (`i32`, `String`) that will become newtypes in the D-stream; the re-edit is expected to be cheap.

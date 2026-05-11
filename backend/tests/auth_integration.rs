@@ -32,7 +32,7 @@ async fn protected_hello(user: beerio_kart::middleware::auth::User) -> axum::Jso
     axum::Json(json!({ "hello": user.username }))
 }
 
-/// Create a fresh in-memory SQLite database with all migrations applied.
+/// Create a fresh in-memory `SQLite` database with all migrations applied.
 async fn setup_test_app() -> TestServer {
     let db = Database::connect("sqlite::memory:")
         .await
@@ -75,7 +75,7 @@ async fn register_user(server: &TestServer, username: &str, password: &str) -> V
     response.json()
 }
 
-/// Helper: extract the refresh_token cookie value from a Set-Cookie header.
+/// Helper: extract the `refresh_token` cookie value from a Set-Cookie header.
 fn extract_refresh_cookie(response: &axum_test::TestResponse) -> Option<String> {
     let header = response.header("set-cookie");
     let header_str = header.to_str().ok()?;

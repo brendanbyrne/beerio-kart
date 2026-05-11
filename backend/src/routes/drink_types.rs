@@ -49,6 +49,16 @@ pub struct Filters {
 
 // ── Handlers ─────────────────────────────────────────────────────────
 
+/// POST /api/v1/drink-types — create or return an existing drink type.
+///
+/// Dedup is case-insensitive (the UUID is derived from the uppercased name),
+/// so re-submitting an existing name returns the original row with 200 rather
+/// than a 409.
+///
+/// # Errors
+///
+/// Returns `BadRequest` if the trimmed name is empty or >200 chars;
+/// `Internal` for unexpected DB failures.
 pub async fn create_drink_type(
     user: User,
     State(state): State<AppState>,
@@ -87,6 +97,12 @@ pub async fn create_drink_type(
     Ok(Json(inserted.into()))
 }
 
+/// GET /api/v1/drink-types — list drink types. Optional `alcoholic` query
+/// filter narrows the result.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn list_drink_types(
     _user: User,
     State(state): State<AppState>,
@@ -103,6 +119,12 @@ pub async fn list_drink_types(
     ))
 }
 
+/// GET /api/v1/drink-types/:id — get a single drink type.
+///
+/// # Errors
+///
+/// Returns `NotFound` if `id` doesn't match a drink type; `Internal` for
+/// unexpected DB failures.
 pub async fn get_drink_type(
     _user: User,
     State(state): State<AppState>,

@@ -18,8 +18,11 @@ use crate::{
 
 /// Load a session by ID and require that it is in the `Active` state.
 ///
+/// # Errors
+///
 /// - `NotFound` if no row with that ID exists.
 /// - `Conflict` if the session exists but is closed.
+/// - `Internal` for unexpected DB failures.
 pub async fn load_active_session<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
@@ -37,7 +40,10 @@ pub async fn load_active_session<C: ConnectionTrait>(
 /// Require that `user_id` is an active (not-yet-left) participant in the
 /// session. Returns the participant row on success.
 ///
-/// `Forbidden` if the user has no active participant row for this session.
+/// # Errors
+///
+/// Returns `Forbidden` if the user has no active participant row for this
+/// session; `Internal` for unexpected DB failures.
 pub async fn require_active_participant<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
@@ -66,6 +72,11 @@ pub async fn require_active_participant<C: ConnectionTrait>(
 /// **Caller contract:** must run inside the same transaction as the
 /// `session_races` INSERT. If any participation insert fails the whole
 /// transaction rolls back, leaving no orphan race or partial snapshot.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures on either the SELECT of
+/// present participants or the bulk insert of participation rows.
 pub async fn insert_race_participations<C: ConnectionTrait>(
     txn: &C,
     session_id: &SessionId,
@@ -108,6 +119,10 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
 
 /// Bump the session's `last_activity_at` column to now. Single `UPDATE`,
 /// no prior read required.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn touch_session<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
@@ -122,11 +137,14 @@ pub async fn touch_session<C: ConnectionTrait>(
 }
 
 /// Assert that a row with the given primary key exists in entity `E`.
-/// Returns `BadRequest` with a formatted message on miss (e.g., "Invalid
-/// character_id").
 ///
 /// The generic bounds mirror `EntityTrait::find_by_id` — the primary key's
 /// `ValueType` is what the caller must pass in.
+///
+/// # Errors
+///
+/// Returns `BadRequest` with a formatted message on miss (e.g., "Invalid
+/// `character_id`"); `Internal` for unexpected DB failures.
 pub async fn require_exists<E, C>(
     db: &C,
     id: <<E as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType,
@@ -151,7 +169,11 @@ where
 /// - `skip_turn`:  `exclude = &used_ids, always_exclude = &[skipped_id]` —
 ///   the skipped track stays excluded even through a reset.
 ///
-/// Returns `Internal` only if the `tracks` table is empty (seed error).
+/// # Errors
+///
+/// Returns `Internal` if the `tracks` table is empty (seed error) or if the
+/// pool is empty after a reset (e.g., every track is in `always_exclude`);
+/// `Internal` for unexpected DB failures.
 pub async fn pick_random_track<C: ConnectionTrait>(
     db: &C,
     exclude: &[i32],

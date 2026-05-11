@@ -59,6 +59,13 @@ where
 
 /// Update a user's profile (preferred race setup and/or drink type).
 /// Only the user themselves can update their own profile.
+///
+/// # Errors
+///
+/// Returns `Forbidden` if `actor_user_id != target_user_id`; `NotFound` if
+/// the target user doesn't exist; `BadRequest` if race setup is provided as
+/// a partial set (not all-or-nothing) or any of the character / body / wheel
+/// / glider / drink-type IDs doesn't exist; `Internal` for DB failures.
 pub async fn update_profile(
     db: &DatabaseConnection,
     actor_user_id: &UserId,
@@ -113,8 +120,13 @@ pub async fn update_profile(
 }
 
 /// Load drink type details and assemble the full profile response.
+///
 /// TODO: if profile fetching becomes a hot path, collapse the separate
-/// drink_type lookup into a JOIN query to avoid the extra round trip.
+/// `drink_type` lookup into a JOIN query to avoid the extra round trip.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
 pub async fn build_detail_profile(
     db: &DatabaseConnection,
     user: users::Model,
