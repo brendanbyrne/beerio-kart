@@ -151,7 +151,7 @@ pub async fn skip_turn(
     Ok((StatusCode::CREATED, Json(race)))
 }
 
-/// POST /`sessions/:id/races/:race_id/skip` — mark a pending race as skipped
+/// `POST /sessions/:id/races/:race_id/skip` — mark a pending race as skipped
 /// for the requesting user. Idempotent.
 ///
 /// # Errors
