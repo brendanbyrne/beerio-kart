@@ -36,8 +36,8 @@ impl Update {
                     glider_id,
                 }))
             }
-            _ => Err(Error::BadRequest(
-                "Race setup must be provided all together (character, body, wheel, glider) or not at all".into(),
+            _ => Err(Error::bad_request(
+                "Race setup must be provided all together (character, body, wheel, glider) or not at all",
             )),
         }
     }
@@ -71,8 +71,8 @@ mod tests {
 
     fn assert_bad_request(result: Result<Option<Update>, Error>) {
         match result {
-            Err(Error::BadRequest(msg)) => {
-                assert!(msg.contains("all together"), "msg was: {msg}");
+            Err(Error::BadRequest { client, .. }) => {
+                assert!(client.contains("all together"), "client was: {client}");
             }
             other => panic!("expected BadRequest, got {other:?}"),
         }

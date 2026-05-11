@@ -93,13 +93,11 @@ pub async fn register(
 ) -> Result<impl IntoResponse, Error> {
     let username = body.username.trim();
     if username.is_empty() || username.chars().count() > 30 {
-        return Err(Error::BadRequest("Username must be 1-30 characters".into()));
+        return Err(Error::bad_request("Username must be 1-30 characters"));
     }
 
     if body.password.len() < 8 || body.password.len() > 128 {
-        return Err(Error::BadRequest(
-            "Password must be 8-128 characters".into(),
-        ));
+        return Err(Error::bad_request("Password must be 8-128 characters"));
     }
 
     // Check if username already exists (nicer error than a DB constraint violation)
@@ -109,7 +107,7 @@ pub async fn register(
         .await?;
 
     if existing.is_some() {
-        return Err(Error::Conflict("Username already taken".into()));
+        return Err(Error::conflict("Username already taken"));
     }
 
     // Hash password (offloaded to the blocking pool, capped by argon2_limit)
@@ -307,9 +305,7 @@ pub async fn change_password(
 ) -> Result<impl IntoResponse, Error> {
     // Validate new password length
     if body.new_password.len() < 8 || body.new_password.len() > 128 {
-        return Err(Error::BadRequest(
-            "New password must be 8-128 characters".into(),
-        ));
+        return Err(Error::bad_request("New password must be 8-128 characters"));
     }
 
     // Look up user

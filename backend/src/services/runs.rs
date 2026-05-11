@@ -121,27 +121,25 @@ pub struct RunFilters {
 /// positive and within range, and lap sum equals track_time.
 fn validate_time_fields(body: &CreateRunRequest) -> Result<(), Error> {
     if body.track_time <= 0 || body.track_time > MAX_TRACK_TIME_MS {
-        return Err(Error::BadRequest(format!(
+        return Err(Error::bad_request(format!(
             "track_time must be between 1 and {MAX_TRACK_TIME_MS} ms"
         )));
     }
     if body.lap1_time <= 0 || body.lap2_time <= 0 || body.lap3_time <= 0 {
-        return Err(Error::BadRequest(
-            "All lap times must be positive".to_string(),
-        ));
+        return Err(Error::bad_request("All lap times must be positive"));
     }
     if body.lap1_time > MAX_TRACK_TIME_MS
         || body.lap2_time > MAX_TRACK_TIME_MS
         || body.lap3_time > MAX_TRACK_TIME_MS
     {
-        return Err(Error::BadRequest(format!(
+        return Err(Error::bad_request(format!(
             "Each lap time must be at most {MAX_TRACK_TIME_MS} ms"
         )));
     }
     let lap_sum = body.lap1_time + body.lap2_time + body.lap3_time;
     if lap_sum != body.track_time {
         let diff = (lap_sum - body.track_time).abs();
-        return Err(Error::BadRequest(format!(
+        return Err(Error::bad_request(format!(
             "Lap times must add up to total time (off by {diff}ms)"
         )));
     }
@@ -191,9 +189,7 @@ async fn validate_run_request(
     helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
-            Error::Conflict(_) => {
-                Error::Conflict("Cannot submit run for a closed session".to_string())
-            }
+            Error::Conflict { .. } => Error::conflict("Cannot submit run for a closed session"),
             other => other,
         })?;
     helpers::require_active_participant(db, &session_id, user_id).await?;
@@ -209,9 +205,7 @@ async fn validate_run_request(
         .await?;
 
     if existing.is_some() {
-        return Err(Error::Conflict(
-            "Already submitted a run for this race".to_string(),
-        ));
+        return Err(Error::conflict("Already submitted a run for this race"));
     }
 
     // Mutual exclusion with skip: if the user already explicitly skipped
@@ -231,9 +225,7 @@ async fn validate_run_request(
         .as_ref()
         .is_some_and(|p| p.skipped_at.is_some())
     {
-        return Err(Error::Conflict(
-            "Cannot submit a run for a skipped race".to_string(),
-        ));
+        return Err(Error::conflict("Cannot submit a run for a skipped race"));
     }
 
     // Ordered-submit guard: if the user has any pending race with a smaller
@@ -254,7 +246,7 @@ async fn validate_run_request(
         .filter(|p| p.race_number < session_race.race_number)
         .min_by_key(|p| p.race_number)
     {
-        return Err(Error::Conflict(format!(
+        return Err(Error::conflict(format!(
             "Must submit or skip pending race #{} first",
             older.race_number
         )));
@@ -427,9 +419,7 @@ pub async fn delete_run(
             Error::NotFound(msg) => {
                 Error::Internal(anyhow::anyhow!("Session not found for run: {msg}"))
             }
-            Error::Conflict(_) => {
-                Error::Conflict("Cannot delete run from a closed session".to_string())
-            }
+            Error::Conflict { .. } => Error::conflict("Cannot delete run from a closed session"),
             other => other,
         })?;
 
@@ -1025,9 +1015,9 @@ mod tests {
 
         // Try to submit race 3 while races 1 and 2 are still pending.
         match create_run(&db, &host_id, valid_run_request(&race_ids[2])).await {
-            Err(Error::Conflict(msg)) => assert!(
-                msg.contains("Must submit or skip pending race #1"),
-                "expected message about race #1, got: {msg}"
+            Err(Error::Conflict { client, .. }) => assert!(
+                client.contains("Must submit or skip pending race #1"),
+                "expected message about race #1, got: {client}"
             ),
             Err(other) => panic!("expected Conflict, got {other:?}"),
             Ok(_) => panic!("expected Conflict, got Ok"),
@@ -1060,7 +1050,7 @@ mod tests {
         let (_session_id, race_ids) = setup_session_with_n_races(&db, &host_id, 2).await;
 
         match create_run(&db, &host_id, valid_run_request(&race_ids[1])).await {
-            Err(Error::Conflict(_)) => {}
+            Err(Error::Conflict { .. }) => {}
             Err(other) => panic!("expected Conflict, got {other:?}"),
             Ok(_) => panic!("expected Conflict, got Ok"),
         }
@@ -1103,9 +1093,9 @@ mod tests {
             .expect("skip succeeds");
 
         match create_run(&db, &host_id, valid_run_request(&race_ids[0])).await {
-            Err(Error::Conflict(msg)) => assert!(
-                msg.contains("skipped"),
-                "expected message about skipped race, got: {msg}"
+            Err(Error::Conflict { client, .. }) => assert!(
+                client.contains("skipped"),
+                "expected message about skipped race, got: {client}"
             ),
             Err(other) => panic!("expected Conflict, got {other:?}"),
             Ok(_) => panic!("submitting after skip must Conflict, got Ok"),

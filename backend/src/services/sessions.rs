@@ -50,7 +50,7 @@ async fn check_not_in_any_session(
         .await?;
 
     if let Some(row) = existing {
-        return Err(Error::Conflict(format!(
+        return Err(Error::conflict(format!(
             "Already in session {}",
             row.session_id
         )));
@@ -574,7 +574,7 @@ pub async fn skip_pending_race(
     helpers::load_active_session(db, session_id)
         .await
         .map_err(|e| match e {
-            Error::Conflict(_) => Error::Conflict("Cannot skip in a closed session".to_string()),
+            Error::Conflict { .. } => Error::conflict("Cannot skip in a closed session"),
             other => other,
         })?;
     // Symmetry with `create_run`: the user must currently be in the session
@@ -615,7 +615,7 @@ pub async fn skip_pending_race(
         .one(db)
         .await?;
     if existing_run.is_some() {
-        return Err(Error::Conflict("Already submitted".to_string()));
+        return Err(Error::conflict("Already submitted"));
     }
 
     // Idempotent: already skipped → return success without changing
@@ -722,7 +722,7 @@ pub async fn join_session(
     helpers::load_active_session(db, session_id)
         .await
         .map_err(|e| match e {
-            Error::Conflict(_) => Error::Conflict("Cannot join a closed session".to_string()),
+            Error::Conflict { .. } => Error::conflict("Cannot join a closed session"),
             other => other,
         })?;
     check_not_in_any_session(db, user_id).await?;
@@ -761,8 +761,8 @@ pub async fn join_session(
                 // this branch implies a race between the two queries (very
                 // unlikely without external manipulation) or direct DB
                 // tampering. Return Conflict either way for safety.
-                return Err(Error::Conflict(
-                    "Already an active participant in this session".to_string(),
+                return Err(Error::conflict(
+                    "Already an active participant in this session",
                 ));
             };
 
@@ -872,7 +872,7 @@ pub async fn leave_session(
     // leaving a session you're not in is bad input, not an auth failure.
     let participant = helpers::require_active_participant(db, session_id, user_id)
         .await
-        .map_err(|_| Error::BadRequest("Not currently in this session".to_string()))?;
+        .map_err(|_| Error::bad_request("Not currently in this session"))?;
 
     let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
@@ -995,7 +995,7 @@ pub async fn skip_turn(
         .order_by_desc(session_races::Column::RaceNumber)
         .one(db)
         .await?
-        .ok_or_else(|| Error::BadRequest("No track to skip".to_string()))?;
+        .ok_or_else(|| Error::bad_request("No track to skip"))?;
 
     // Verify no runs exist for this race
     let run_count = runs::Entity::find()
@@ -1004,9 +1004,7 @@ pub async fn skip_turn(
         .await?;
 
     if run_count > 0 {
-        return Err(Error::BadRequest(
-            "Can't skip — runs already submitted".to_string(),
-        ));
+        return Err(Error::bad_request("Can't skip — runs already submitted"));
     }
 
     let skipped_track_id = current_race.track_id;
@@ -2440,7 +2438,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            Error::Conflict(msg) => assert_eq!(msg, "Already submitted"),
+            Error::Conflict { client, .. } => assert_eq!(client, "Already submitted"),
             other => panic!("expected Conflict, got {other:?}"),
         }
     }
@@ -2465,10 +2463,10 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            Error::Conflict(msg) => {
+            Error::Conflict { client, .. } => {
                 assert!(
-                    msg.contains("closed"),
-                    "expected closed-session message, got: {msg}"
+                    client.contains("closed"),
+                    "expected closed-session message, got: {client}"
                 );
             }
             other => panic!("expected Conflict, got {other:?}"),

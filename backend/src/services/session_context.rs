@@ -101,7 +101,7 @@ mod tests {
         let err = SessionContext::load_active(&db, &session_id)
             .await
             .unwrap_err();
-        assert!(matches!(err, Error::Conflict(_)));
+        assert!(matches!(err, Error::Conflict { .. }));
     }
 
     #[tokio::test]
