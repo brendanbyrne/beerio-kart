@@ -2,7 +2,7 @@ use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::{UserId, race_setup::Update},
+    domain::{UserId, race_setup},
     entities::{bodies, characters, drink_types, gliders, users, wheels},
     error::Error,
     services::helpers,
@@ -78,8 +78,8 @@ pub async fn update_profile(
 
     let mut active: users::ActiveModel = user.into();
 
-    // Race setup: all-or-nothing via Update
-    if let Some(setup) = Update::try_from_optional(
+    // Race setup: all-or-nothing via race_setup::Update
+    if let Some(setup) = race_setup::Update::try_from_optional(
         req.preferred_character_id,
         req.preferred_body_id,
         req.preferred_wheel_id,

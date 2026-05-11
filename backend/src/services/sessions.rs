@@ -670,9 +670,15 @@ pub async fn get_session_detail(
     // 1-indexed and gapless: `next_track` appends monotonically, and
     // `skip_turn` replaces in-place (preserves race_number). No deletion
     // path exists. Under this invariant, last().race_number == COUNT(*).
-    let race_number = races
-        .last()
-        .map_or(1, |r| usize::try_from(r.race_number).unwrap_or(0));
+    let race_number = match races.last() {
+        None => 1,
+        Some(r) => usize::try_from(r.race_number).map_err(|_| {
+            Error::Internal(anyhow::anyhow!(
+                "race_number invariant violated: got {}",
+                r.race_number
+            ))
+        })?,
+    };
 
     Ok(SessionDetail {
         id: SessionId::new(session.id),
@@ -915,7 +921,12 @@ pub async fn next_track(
         .filter(session_races::Column::SessionId.eq(session_id))
         .all(db)
         .await?;
-    let race_count = i32::try_from(used_races.len()).unwrap_or(i32::MAX);
+    let race_count = i32::try_from(used_races.len()).map_err(|_| {
+        Error::Internal(anyhow::anyhow!(
+            "session has more races than i32 can represent: {}",
+            used_races.len()
+        ))
+    })?;
     let used_track_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
 
     let chosen = helpers::pick_random_track(db, &used_track_ids, &[]).await?;
