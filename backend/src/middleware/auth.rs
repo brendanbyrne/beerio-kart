@@ -1,6 +1,6 @@
 use axum::{extract::FromRequestParts, http::request::Parts};
 
-use crate::{domain::UserId, error::AppError};
+use crate::{domain::UserId, error::Error};
 
 /// Extractor that validates the JWT from the `Authorization: Bearer <token>`
 /// header and makes the authenticated user's info available to handlers.
@@ -12,22 +12,22 @@ use crate::{domain::UserId, error::AppError};
 ///
 /// Usage in a handler:
 /// ```ignore
-/// async fn protected(user: AuthUser) -> impl IntoResponse {
+/// async fn protected(user: User) -> impl IntoResponse {
 ///     format!("Hello, {}", user.username)
 /// }
 /// ```
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct AuthUser {
+pub struct User {
     pub user_id: UserId,
     pub username: String,
 }
 
-/// Axum extractor implementation. Pulls `AppConfig` from state and validates
+/// Axum extractor implementation. Pulls `Config` from state and validates
 /// the bearer token. Returns 401 if the token is missing, malformed, expired,
 /// or not an access token.
-impl FromRequestParts<crate::AppState> for AuthUser {
-    type Rejection = AppError;
+impl FromRequestParts<crate::AppState> for User {
+    type Rejection = Error;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -37,18 +37,18 @@ impl FromRequestParts<crate::AppState> for AuthUser {
             .headers
             .get("Authorization")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
+            .ok_or_else(|| Error::Unauthorized("Missing Authorization header".to_string()))?;
 
         let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
-            AppError::Unauthorized("Invalid Authorization header format".to_string())
+            Error::Unauthorized("Invalid Authorization header format".to_string())
         })?;
 
         let claims = crate::services::auth::validate_access_token(token, &state.config)
-            .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
+            .map_err(|_| Error::Unauthorized("Invalid or expired token".to_string()))?;
 
         // Reject refresh tokens used as access tokens
         if claims.token_type != "access" {
-            return Err(AppError::Unauthorized("Invalid token type".to_string()));
+            return Err(Error::Unauthorized("Invalid token type".to_string()));
         }
 
         Ok(Self {
@@ -58,7 +58,7 @@ impl FromRequestParts<crate::AppState> for AuthUser {
     }
 }
 
-/// Extractor for admin-only routes. First validates the JWT (via `AuthUser`),
+/// Extractor for admin-only routes. First validates the JWT (via `User`),
 /// then checks the user ID against the `ADMIN_USER_ID` env var.
 ///
 /// Returns 403 if the user is authenticated but not the admin.
@@ -70,24 +70,24 @@ pub struct AdminUser {
 }
 
 impl FromRequestParts<crate::AppState> for AdminUser {
-    type Rejection = AppError;
+    type Rejection = Error;
 
     async fn from_request_parts(
         parts: &mut Parts,
         state: &crate::AppState,
     ) -> Result<Self, Self::Rejection> {
         // First, authenticate normally
-        let auth_user = AuthUser::from_request_parts(parts, state).await?;
+        let auth_user = User::from_request_parts(parts, state).await?;
 
         // Then check admin status
         let admin_id = state
             .config
             .admin_user_id
             .as_ref()
-            .ok_or_else(|| AppError::Forbidden("Admin access not configured".to_string()))?;
+            .ok_or_else(|| Error::Forbidden("Admin access not configured".to_string()))?;
 
         if auth_user.user_id.as_str() != admin_id {
-            return Err(AppError::Forbidden("Admin access required".to_string()));
+            return Err(Error::Forbidden("Admin access required".to_string()));
         }
 
         Ok(Self {

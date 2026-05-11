@@ -70,7 +70,7 @@ pub async fn seed_tracks_for_test(db: &DatabaseConnection) {
     let cup_names = ["Test Cup A", "Test Cup B", "Test Cup C"];
     for (i, name) in cup_names.iter().enumerate() {
         cups::ActiveModel {
-            id: Set((i + 1) as i32),
+            id: Set(i32::try_from(i + 1).expect("test cup index fits in i32")),
             name: Set((*name).to_string()),
             image_path: Set(format!("images/cups/test-cup-{}.webp", i + 1)),
         }

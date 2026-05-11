@@ -15,11 +15,11 @@ struct ErrorBody {
 /// Unified error type for all route handlers.
 ///
 /// Implements Axum's `IntoResponse`, so handlers can return
-/// `Result<impl IntoResponse, AppError>` and use `?` directly
+/// `Result<impl IntoResponse, Error>` and use `?` directly
 /// instead of writing match arms for every fallible call.
 #[derive(Error, Debug)]
 #[non_exhaustive]
-pub enum AppError {
+pub enum Error {
     /// 400 — validation failures, malformed input
     #[error("{0}")]
     BadRequest(String),
@@ -56,7 +56,7 @@ pub enum AppError {
     Hash(#[from] argon2::password_hash::Error),
 }
 
-impl IntoResponse for AppError {
+impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, user_message) = match &self {
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
@@ -94,10 +94,10 @@ fn format_error_chain(err: &(dyn std::error::Error + 'static)) -> String {
 //
 // The `Token` and `Hash` variants get their `From` impls from `#[from]` on the
 // variant. `DbErr` needs hand-written discrimination — different `DbErr`
-// variants map to different `AppError` variants (404 / 409 / 400 / 500), which
+// variants map to different `Error` variants (404 / 409 / 400 / 500), which
 // `#[from]` can't express.
 
-impl From<sea_orm::DbErr> for AppError {
+impl From<sea_orm::DbErr> for Error {
     fn from(e: sea_orm::DbErr) -> Self {
         use sea_orm::{DbErr, SqlErr};
         match &e {
@@ -125,9 +125,9 @@ mod tests {
 
     #[test]
     fn test_record_not_found_maps_to_not_found() {
-        let err: AppError = DbErr::RecordNotFound("user not found".to_string()).into();
+        let err: Error = DbErr::RecordNotFound("user not found".to_string()).into();
         match err {
-            AppError::NotFound(msg) => assert_eq!(msg, "user not found"),
+            Error::NotFound(msg) => assert_eq!(msg, "user not found"),
             other => panic!("expected NotFound, got {other:?}"),
         }
     }
@@ -135,9 +135,9 @@ mod tests {
     #[test]
     fn test_unrecognized_dberr_maps_to_internal() {
         // DbErr::Custom does not produce a SqlErr, so it should fall through to Internal.
-        let err: AppError = DbErr::Custom("something went wrong".to_string()).into();
+        let err: Error = DbErr::Custom("something went wrong".to_string()).into();
         match &err {
-            AppError::Internal(_) => {}
+            Error::Internal(_) => {}
             other => panic!("expected Internal, got {other:?}"),
         }
         // The static "Database error" context is the topmost layer, the original
@@ -173,9 +173,9 @@ mod tests {
         .await;
 
         let dberr = result.expect_err("duplicate username should fail");
-        let app_err: AppError = dberr.into();
+        let app_err: Error = dberr.into();
         match app_err {
-            AppError::Conflict(_) => {}
+            Error::Conflict(_) => {}
             other => panic!("expected Conflict, got {other:?}"),
         }
     }
@@ -204,9 +204,9 @@ mod tests {
         .await;
 
         let dberr = result.expect_err("missing FK should fail");
-        let app_err: AppError = dberr.into();
+        let app_err: Error = dberr.into();
         match app_err {
-            AppError::BadRequest(_) => {}
+            Error::BadRequest(_) => {}
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }
@@ -215,9 +215,9 @@ mod tests {
     fn test_jwt_error_maps_to_token_variant_with_source() {
         let jwt_err =
             jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken);
-        let app_err: AppError = jwt_err.into();
+        let app_err: Error = jwt_err.into();
         match &app_err {
-            AppError::Token(_) => {}
+            Error::Token(_) => {}
             other => panic!("expected Token, got {other:?}"),
         }
         // The wrapped error must be reachable via the source chain so the
@@ -230,9 +230,9 @@ mod tests {
 
     #[test]
     fn test_argon2_error_maps_to_hash_variant_with_source() {
-        let app_err: AppError = argon2::password_hash::Error::Password.into();
+        let app_err: Error = argon2::password_hash::Error::Password.into();
         match &app_err {
-            AppError::Hash(_) => {}
+            Error::Hash(_) => {}
             other => panic!("expected Hash, got {other:?}"),
         }
         assert!(
@@ -245,7 +245,7 @@ mod tests {
     fn test_format_error_chain_joins_sources() {
         let jwt_err =
             jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken);
-        let app_err: AppError = jwt_err.into();
+        let app_err: Error = jwt_err.into();
         let chain = format_error_chain(&app_err);
         // First segment is the variant's Display ("Token error"); the second is
         // the wrapped jwt error's Display, joined by ": ".
@@ -260,9 +260,9 @@ mod tests {
     fn test_internal_synthetic_anyhow_round_trips() {
         // Synthetic Internal — no underlying error, just a runtime-formatted
         // message via anyhow::anyhow!. The chain should contain the message.
-        let app_err: AppError = anyhow::anyhow!("Invariant violation: {}", "stale state").into();
+        let app_err: Error = anyhow::anyhow!("Invariant violation: {}", "stale state").into();
         match &app_err {
-            AppError::Internal(_) => {}
+            Error::Internal(_) => {}
             other => panic!("expected Internal, got {other:?}"),
         }
         let chain = format_error_chain(&app_err);
@@ -278,7 +278,7 @@ mod tests {
         // The chain walk should show the static context first, then the source's
         // Display. This is the shape produced by the From<DbErr> fallback.
         let inner = std::io::Error::other("disk gone");
-        let app_err: AppError = anyhow::Error::new(inner).context("Writing snapshot").into();
+        let app_err: Error = anyhow::Error::new(inner).context("Writing snapshot").into();
         let chain = format_error_chain(&app_err);
         assert!(chain.contains("Writing snapshot"), "got: {chain}");
         assert!(chain.contains("disk gone"), "got: {chain}");

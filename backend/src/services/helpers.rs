@@ -13,7 +13,7 @@ use sea_orm::{
 use crate::{
     domain::{SessionId, SessionRaceId, UserId, enums::SessionStatus},
     entities::{session_participants, session_race_participations, sessions, tracks},
-    error::AppError,
+    error::Error,
 };
 
 /// Load a session by ID and require that it is in the `Active` state.
@@ -23,13 +23,13 @@ use crate::{
 pub async fn load_active_session<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
-) -> Result<sessions::Model, AppError> {
+) -> Result<sessions::Model, Error> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".into()))?;
+        .ok_or_else(|| Error::NotFound("Session not found".into()))?;
     if session.status != SessionStatus::Active.as_str() {
-        return Err(AppError::Conflict("Session is not active".into()));
+        return Err(Error::Conflict("Session is not active".into()));
     }
     Ok(session)
 }
@@ -42,7 +42,7 @@ pub async fn require_active_participant<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
     user_id: &UserId,
-) -> Result<session_participants::Model, AppError> {
+) -> Result<session_participants::Model, Error> {
     session_participants::Entity::find()
         .filter(
             Condition::all()
@@ -52,7 +52,7 @@ pub async fn require_active_participant<C: ConnectionTrait>(
         )
         .one(db)
         .await?
-        .ok_or_else(|| AppError::Forbidden("Not a participant in this session".into()))
+        .ok_or_else(|| Error::Forbidden("Not a participant in this session".into()))
 }
 
 /// Snapshot per-race presence at race-creation time.
@@ -70,7 +70,7 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
     txn: &C,
     session_id: &SessionId,
     session_race_id: &SessionRaceId,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     let now = Utc::now().naive_utc();
 
     let present = session_participants::Entity::find()
@@ -111,7 +111,7 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
 pub async fn touch_session<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     let now = Utc::now().naive_utc();
     sessions::Entity::update_many()
         .col_expr(sessions::Column::LastActivityAt, Expr::value(now))
@@ -131,13 +131,13 @@ pub async fn require_exists<E, C>(
     db: &C,
     id: <<E as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType,
     entity_label: &str,
-) -> Result<(), AppError>
+) -> Result<(), Error>
 where
     E: EntityTrait,
     C: ConnectionTrait,
 {
     if E::find_by_id(id).one(db).await?.is_none() {
-        return Err(AppError::BadRequest(format!("Invalid {entity_label}_id")));
+        return Err(Error::BadRequest(format!("Invalid {entity_label}_id")));
     }
     Ok(())
 }
@@ -156,10 +156,10 @@ pub async fn pick_random_track<C: ConnectionTrait>(
     db: &C,
     exclude: &[i32],
     always_exclude: &[i32],
-) -> Result<tracks::Model, AppError> {
+) -> Result<tracks::Model, Error> {
     let all_tracks = tracks::Entity::find().all(db).await?;
     if all_tracks.is_empty() {
-        return Err(AppError::Internal(anyhow::anyhow!("No tracks configured")));
+        return Err(Error::Internal(anyhow::anyhow!("No tracks configured")));
     }
 
     let available: Vec<&tracks::Model> = all_tracks
@@ -188,7 +188,7 @@ pub async fn pick_random_track<C: ConnectionTrait>(
         pool.choose(&mut rng).copied().cloned()
     };
 
-    chosen.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Empty track pool after reset")))
+    chosen.ok_or_else(|| Error::Internal(anyhow::anyhow!("Empty track pool after reset")))
 }
 
 #[cfg(test)]
@@ -223,7 +223,7 @@ mod tests {
         let err = load_active_session(&db, &SessionId::new("does-not-exist"))
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::NotFound(_)));
+        assert!(matches!(err, Error::NotFound(_)));
     }
 
     #[tokio::test]
@@ -233,7 +233,7 @@ mod tests {
         let session_id = insert_session(&db, &host, "closed").await;
 
         let err = load_active_session(&db, &session_id).await.unwrap_err();
-        assert!(matches!(err, AppError::Conflict(_)));
+        assert!(matches!(err, Error::Conflict(_)));
     }
 
     // --- require_active_participant ---
@@ -261,7 +261,7 @@ mod tests {
         let err = require_active_participant(&db, &session_id, &user)
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden(_)));
     }
 
     #[tokio::test]
@@ -274,7 +274,7 @@ mod tests {
         let err = require_active_participant(&db, &session_id, &user)
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden(_)));
     }
 
     // --- touch_session ---
@@ -339,7 +339,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Invalid character_id"),
+            Error::BadRequest(msg) => assert_eq!(msg, "Invalid character_id"),
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }
@@ -391,7 +391,7 @@ mod tests {
         let db = setup_db().await;
         // No tracks seeded.
         let err = pick_random_track(&db, &[], &[]).await.unwrap_err();
-        assert!(matches!(err, AppError::Internal(_)));
+        assert!(matches!(err, Error::Internal(_)));
     }
 
     #[tokio::test]

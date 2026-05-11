@@ -119,7 +119,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 ## 2. API client generation
 
 - **Decision:** The backend emits an OpenAPI 3.x spec from `utoipa` annotations on every route handler. The frontend consumes a generated TypeScript client (`openapi-typescript-codegen` or `openapi-fetch`) — no hand-rolled `fetch` wrappers per endpoint.
-- **Why:** § 1 lists ~40 endpoints. Hand-rolling a typed client and keeping it in sync with `AppError`'s shape, request/response DTOs, and query-parameter quirks is a part-time job. With `utoipa`, the spec is derived from the same Rust types that handlers already use, so drift is impossible by construction. The cost is ~5 lines of `#[utoipa::path(...)]` per handler — cheap if added as routes are written, painful to retrofit.
+- **Why:** § 1 lists ~40 endpoints. Hand-rolling a typed client and keeping it in sync with `error::Error`'s shape, request/response DTOs, and query-parameter quirks is a part-time job. With `utoipa`, the spec is derived from the same Rust types that handlers already use, so drift is impossible by construction. The cost is ~5 lines of `#[utoipa::path(...)]` per handler — cheap if added as routes are written, painful to retrofit.
 - **Implementation:**
   - Add `utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }` and `utoipa-axum = "0.2"` to `backend/Cargo.toml`.
   - Each route handler gets a `#[utoipa::path(...)]` attribute describing method, path, request body, responses, and tags.
@@ -141,13 +141,13 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
   { "error": "Session is closed.", "code": "session_closed" }
   ```
   The `error` field is human-readable (may change wording without notice). The `code` field is a stable string the frontend matches on (changing a code is a breaking change).
-- **Why:** Status code alone (`409 Conflict`) doesn't tell the frontend whether to render "session is closed, start a new one" or "username is taken, pick another" — both are 409. The current `AppError` variants carry a free-text message, which forces the frontend to either show raw backend text (bad UX) or pattern-match on substrings (brittle). A stable code lets the frontend pick the right copy and the right recovery action without coupling to backend wording.
+- **Why:** Status code alone (`409 Conflict`) doesn't tell the frontend whether to render "session is closed, start a new one" or "username is taken, pick another" — both are 409. The current `error::Error` variants carry a free-text message, which forces the frontend to either show raw backend text (bad UX) or pattern-match on substrings (brittle). A stable code lets the frontend pick the right copy and the right recovery action without coupling to backend wording.
 - **Implementation:**
-  - Add a `code: &'static str` to each `AppError` variant, or better — split `AppError` into a flat enum where each variant carries its own code:
+  - Add a `code: &'static str` to each `error::Error` variant, or better — split `error::Error` into a flat enum where each variant carries its own code:
     ```rust
     #[derive(thiserror::Error, Debug)]
     #[non_exhaustive]
-    pub enum AppError {
+    pub enum Error {
         #[error("Session is closed.")]
         SessionClosed,
         #[error("Username already taken.")]
@@ -157,7 +157,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
         // ...
     }
 
-    impl AppError {
+    impl Error {
         fn code(&self) -> &'static str {
             match self {
                 Self::SessionClosed => "session_closed",
@@ -292,3 +292,4 @@ The list of stable `code` values returned in error responses. Add to this list w
 - 2026-05-02 — Initial draft. Sets API client generation, error code contract, polling/ETag, refresh flow, idempotency, time format, error code registry, versioning, CORS. The first six (API client generation through Time format) are the "decide before the backend gets much further" set; the rest (Error code registry, Versioning, CORS) are clarifications of decisions that were already made or implied. To be revisited when the frontend work starts.
 - 2026-05-02 — Added prelaunch carve-out to the Versioning section: while prelaunch, breaking changes ship in `/api/v1` directly rather than spinning up a v2 path. Mirrors the "launch" definition in `seaorm.md` § 5.
 - 2026-05-06 — Merged the API Surface section from `design.md` as new § 1 "Endpoint catalog". Convention sections renumbered: previous §§ 1–9 are now §§ 2–10; previous § 10 (history) is now § 11. Internal cross-references updated: § 3 (Error response contract) "see § 7 below for the registry" → "see § 8 below"; § 4 (Polling) and § 6 (Idempotency) updated to reference § 1.5 / Issue #75 instead of `design.md` callouts. Top-of-document scope statement expanded to cover both catalog and conventions. ADR 0031 reference added to § 5 to replace the `design.md` "Auth token strategy" pointer. PR 4 of the docs restructure.
+- 2026-05-10 — Renamed `AppError` → `error::Error` in the § 3 (error response contract) prose and example. Companion to the module-name-repetition cleanup in PR-H1+ (d). PR #103 sequence.

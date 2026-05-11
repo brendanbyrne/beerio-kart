@@ -7,7 +7,7 @@ use axum::{
     Json, Router,
     routing::{get, post, put},
 };
-use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::AppConfig, db, routes, services};
+use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::Config, db, routes, services};
 use migration::{Migrator, MigratorTrait};
 use serde::Serialize;
 use tokio::sync::Semaphore;
@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "sqlite:../data/db/beerio-kart.db?mode=rwc".to_string());
 
     // Load config from env vars (errors if JWT_SECRET is missing)
-    let config = AppConfig::from_env()?;
+    let config = Config::from_env()?;
 
     // Build the SQLx pool with per-connection PRAGMAs (foreign_keys, busy_timeout,
     // synchronous, journal_mode), then wrap as a SeaORM DatabaseConnection. See

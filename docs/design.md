@@ -70,9 +70,9 @@ Use SeaORM's builder API for single-table reads and writes (`Entity::find()`, `E
 
 ### Error response pattern
 
-All route handlers return `Result<impl IntoResponse, AppError>` where `AppError` (`src/error.rs`) is a unified error type that implements Axum's `IntoResponse` trait. This enables idiomatic `?` error propagation instead of verbose match arms.
+All route handlers return `Result<impl IntoResponse, error::Error>` where `error::Error` (`src/error.rs`) is a unified error type that implements Axum's `IntoResponse` trait. This enables idiomatic `?` error propagation instead of verbose match arms.
 
-**`AppError` variants:**
+**`error::Error` variants:**
 
 | Variant | HTTP Status | User-facing message |
 |---------|-------------|---------------------|
@@ -89,8 +89,8 @@ All route handlers return `Result<impl IntoResponse, AppError>` where `AppError`
 - The 500-class variants (`Internal`, `Token`, `Hash`) log the real error chain via `tracing::error!` (walking `error.source()`) but return a generic message to the client — internal details are never exposed.
 - `Internal` wraps an `anyhow::Error` (via `#[from]`). Construct source-bearing internals as `anyhow::Error::new(e).context("Loading user")` and synthetic ones (invariant violations, missing seed data) as `anyhow::anyhow!("Cup not found for cup_id {id}")`. The `.context(...)` static-string layer answers *what we were doing*; the wrapped source's `Display` answers *what failed concretely*. The boundary log walks the full chain. Per `coding-standards/rust.md` § 1, error-message strings start with a capital letter and have no trailing punctuation.
 - `Token` and `Hash` are typed wrappers (with `#[from]`) around `jsonwebtoken::errors::Error` and `argon2::password_hash::Error` respectively, so `?` works directly on token operations and password hashing. The wrapped error is reachable via `error.source()` so the boundary log captures the underlying detail.
-- `From<sea_orm::DbErr>` is variant-aware: `RecordNotFound` → `NotFound` (404), `SqlErr::UniqueConstraintViolation` → `Conflict` (409), `SqlErr::ForeignKeyConstraintViolation` → `BadRequest` (400), everything else → `Internal` (500) wrapped with the static context `"Database error"`. This preserves error semantics that a blanket-Internal mapping would otherwise hide. (Note: the fallback context is generic; sites that want richer call-site context use `.map_err(|e| AppError::Internal(anyhow::Error::new(e).context("…")))` instead of `?`.)
-- `AppError` is `#[non_exhaustive]`: the compiler enforces a wildcard arm in any external matcher so adding a future variant (e.g., `Timeout`, `RateLimited`) doesn't break callers.
+- `From<sea_orm::DbErr>` is variant-aware: `RecordNotFound` → `NotFound` (404), `SqlErr::UniqueConstraintViolation` → `Conflict` (409), `SqlErr::ForeignKeyConstraintViolation` → `BadRequest` (400), everything else → `Internal` (500) wrapped with the static context `"Database error"`. This preserves error semantics that a blanket-Internal mapping would otherwise hide. (Note: the fallback context is generic; sites that want richer call-site context use `.map_err(|e| error::Error::Internal(anyhow::Error::new(e).context("…")))` instead of `?`.)
+- `error::Error` is `#[non_exhaustive]`: the compiler enforces a wildcard arm in any external matcher so adding a future variant (e.g., `Timeout`, `RateLimited`) doesn't break callers.
 - Client-facing errors (`BadRequest`, `Unauthorized`, etc.) are always constructed explicitly — they require human judgment about the appropriate status code and message.
 
 **Response format:** All errors return JSON: `{ "error": "<message>" }`
@@ -164,3 +164,4 @@ See [`decisions/`](./decisions/) — each prior bullet has been distilled into a
 - 2026-05-08 — Removed the Project Structure section entirely (heading + body, ~99 lines of repo tree). The tree now lives only in the rebuilt repo-root `README.md`. Diverges from PR 4's stub-pointer pattern (User Workflows / API Surface / UI Screens kept their headings) — design.md is for architecture, repo tree is bootstrap content. PR 5 of the docs restructure.
 - 2026-05-09 — Updated the AppError variants table and Key behaviors bullets to reflect the thiserror migration: added `Token` and `Hash` rows; clarified that the 500-class log path now walks `error.source()` for the full chain; noted `#[non_exhaustive]`. PR #105.
 - 2026-05-09 — Reshaped `Internal` from `String` to `anyhow::Error` (PR-C2). Updated the variants table row and the Key behaviors bullet describing `Internal` construction patterns (`.context(...)` for source-bearing, `anyhow::anyhow!(...)` for synthetic). Noted that the `From<DbErr>` fallback uses a generic `"Database error"` context and that callers wanting richer context use `.map_err(...)` rather than `?`. PR #107.
+- 2026-05-10 — Renamed `AppError` → `error::Error` (and `AppConfig` → `config::Config`, `AuthUser` → `auth::User`, `AuthResponse` → `auth::Response`, `RaceSetupUpdate` → `race_setup::Update`, plus the `list_<resource>` route/service functions → `list`) per the module-name-repetition cleanup in PR-H1+ (d). Live-prose references in this section updated; historical PR notes preserve the old names. PR #103 sequence.

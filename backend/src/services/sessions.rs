@@ -15,7 +15,7 @@ use crate::{
         cups, runs, session_participants, session_race_participations, session_races, sessions,
         users,
     },
-    error::AppError,
+    error::Error,
     services::helpers,
 };
 
@@ -31,7 +31,7 @@ struct ActiveParticipantRow {
 async fn check_not_in_any_session(
     db: &impl ConnectionTrait,
     user_id: &UserId,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     let existing =
         ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
             db.get_database_backend(),
@@ -50,7 +50,7 @@ async fn check_not_in_any_session(
         .await?;
 
     if let Some(row) = existing {
-        return Err(AppError::Conflict(format!(
+        return Err(Error::Conflict(format!(
             "Already in session {}",
             row.session_id
         )));
@@ -64,7 +64,7 @@ async fn check_not_in_any_session(
 pub async fn get_active_session_id(
     db: &DatabaseConnection,
     user_id: &UserId,
-) -> Result<Option<SessionId>, AppError> {
+) -> Result<Option<SessionId>, Error> {
     let row = ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -90,7 +90,7 @@ pub async fn create_session(
     db: &DatabaseConnection,
     user_id: &UserId,
     ruleset: &str,
-) -> Result<SessionDetail, AppError> {
+) -> Result<SessionDetail, Error> {
     let parsed: Ruleset = ruleset.parse()?;
 
     check_not_in_any_session(db, user_id).await?;
@@ -151,9 +151,7 @@ struct SessionSummaryRow {
 
 /// List active sessions sorted by last_activity_at DESC.
 /// Uses a single JOIN query instead of N+1 queries.
-pub async fn list_active_sessions(
-    db: &DatabaseConnection,
-) -> Result<Vec<SessionSummary>, AppError> {
+pub async fn list_active_sessions(db: &DatabaseConnection) -> Result<Vec<SessionSummary>, Error> {
     let rows = SessionSummaryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -300,16 +298,13 @@ pub struct SessionDetail {
 
 /// Look up the host's username. Returns `Internal` if the FK-referenced
 /// user row is missing (data corruption — FKs should prevent this).
-async fn load_host_username(
-    db: &impl ConnectionTrait,
-    host_id: &UserId,
-) -> Result<String, AppError> {
+async fn load_host_username(db: &impl ConnectionTrait, host_id: &UserId) -> Result<String, Error> {
     users::Entity::find_by_id(host_id)
         .one(db)
         .await?
         .map(|u| u.username)
         .ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!("Host user not found for host_id {host_id}"))
+            Error::Internal(anyhow::anyhow!("Host user not found for host_id {host_id}"))
         })
 }
 
@@ -317,7 +312,7 @@ async fn load_host_username(
 async fn load_participants(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
-) -> Result<Vec<ParticipantInfo>, AppError> {
+) -> Result<Vec<ParticipantInfo>, Error> {
     let rows = ParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -348,7 +343,7 @@ async fn load_participants(
 async fn load_current_race_with_submissions(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
-) -> Result<Option<SessionRaceInfo>, AppError> {
+) -> Result<Option<SessionRaceInfo>, Error> {
     let race_row = CurrentRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -409,7 +404,7 @@ async fn load_current_race_with_submissions(
 async fn load_race_history(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
-) -> Result<Vec<RaceInfo>, AppError> {
+) -> Result<Vec<RaceInfo>, Error> {
     let rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
         r#"
@@ -491,7 +486,7 @@ pub async fn get_pending_races(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
     user_id: &UserId,
-) -> Result<Vec<SessionRaceInfo>, AppError> {
+) -> Result<Vec<SessionRaceInfo>, Error> {
     let now = Utc::now().naive_utc();
     let grace_cutoff = now - chrono::Duration::minutes(REJOIN_GRACE_MINUTES);
 
@@ -575,13 +570,11 @@ pub async fn skip_pending_race(
     session_id: &SessionId,
     session_race_id: &SessionRaceId,
     user_id: &UserId,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     helpers::load_active_session(db, session_id)
         .await
         .map_err(|e| match e {
-            AppError::Conflict(_) => {
-                AppError::Conflict("Cannot skip in a closed session".to_string())
-            }
+            Error::Conflict(_) => Error::Conflict("Cannot skip in a closed session".to_string()),
             other => other,
         })?;
     // Symmetry with `create_run`: the user must currently be in the session
@@ -597,7 +590,7 @@ pub async fn skip_pending_race(
         .one(db)
         .await?;
     let Some(race) = race.filter(|r| r.session_id == session_id.as_str()) else {
-        return Err(AppError::NotFound(
+        return Err(Error::NotFound(
             "Race not found in this session".to_string(),
         ));
     };
@@ -610,7 +603,7 @@ pub async fn skip_pending_race(
         )
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Pending race not found".to_string()))?;
+        .ok_or_else(|| Error::NotFound("Pending race not found".to_string()))?;
 
     // Reject if user already submitted a run for this race.
     let existing_run = runs::Entity::find()
@@ -622,7 +615,7 @@ pub async fn skip_pending_race(
         .one(db)
         .await?;
     if existing_run.is_some() {
-        return Err(AppError::Conflict("Already submitted".to_string()));
+        return Err(Error::Conflict("Already submitted".to_string()));
     }
 
     // Idempotent: already skipped → return success without changing
@@ -656,11 +649,11 @@ pub async fn get_session_detail(
     db: &DatabaseConnection,
     session_id: &SessionId,
     requesting_user_id: Option<&UserId>,
-) -> Result<SessionDetail, AppError> {
+) -> Result<SessionDetail, Error> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| Error::NotFound("Session not found".to_string()))?;
 
     let host_id = UserId::new(session.host_id);
     let host_username = load_host_username(db, &host_id).await?;
@@ -677,7 +670,9 @@ pub async fn get_session_detail(
     // 1-indexed and gapless: `next_track` appends monotonically, and
     // `skip_turn` replaces in-place (preserves race_number). No deletion
     // path exists. Under this invariant, last().race_number == COUNT(*).
-    let race_number = races.last().map_or(1, |r| r.race_number as usize);
+    let race_number = races
+        .last()
+        .map_or(1, |r| usize::try_from(r.race_number).unwrap_or(0));
 
     Ok(SessionDetail {
         id: SessionId::new(session.id),
@@ -717,11 +712,11 @@ pub async fn join_session(
     db: &DatabaseConnection,
     session_id: &SessionId,
     user_id: &UserId,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     helpers::load_active_session(db, session_id)
         .await
         .map_err(|e| match e {
-            AppError::Conflict(_) => AppError::Conflict("Cannot join a closed session".to_string()),
+            Error::Conflict(_) => Error::Conflict("Cannot join a closed session".to_string()),
             other => other,
         })?;
     check_not_in_any_session(db, user_id).await?;
@@ -760,7 +755,7 @@ pub async fn join_session(
                 // this branch implies a race between the two queries (very
                 // unlikely without external manipulation) or direct DB
                 // tampering. Return Conflict either way for safety.
-                return Err(AppError::Conflict(
+                return Err(Error::Conflict(
                     "Already an active participant in this session".to_string(),
                 ));
             };
@@ -819,7 +814,7 @@ async fn transfer_host_or_close(
     session_id: &SessionId,
     leaving_user_id: &UserId,
     is_host_leaving: bool,
-) -> Result<HostDisposition, AppError> {
+) -> Result<HostDisposition, Error> {
     if is_host_leaving {
         let next_host = session_participants::Entity::find()
             .filter(
@@ -861,17 +856,17 @@ pub async fn leave_session(
     db: &DatabaseConnection,
     session_id: &SessionId,
     user_id: &UserId,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     let session = sessions::Entity::find_by_id(session_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| Error::NotFound("Session not found".to_string()))?;
 
     // require_active_participant returns Forbidden (authorization guard), but
     // leaving a session you're not in is bad input, not an auth failure.
     let participant = helpers::require_active_participant(db, session_id, user_id)
         .await
-        .map_err(|_| AppError::BadRequest("Not currently in this session".to_string()))?;
+        .map_err(|_| Error::BadRequest("Not currently in this session".to_string()))?;
 
     let now = Utc::now().naive_utc();
     let txn = db.begin().await?;
@@ -909,7 +904,7 @@ pub async fn next_track(
     db: &DatabaseConnection,
     session_id: &SessionId,
     user_id: &UserId,
-) -> Result<SessionRaceInfo, AppError> {
+) -> Result<SessionRaceInfo, Error> {
     use crate::services::session_context::SessionContext;
 
     let ctx = SessionContext::load_active(db, session_id).await?;
@@ -920,7 +915,7 @@ pub async fn next_track(
         .filter(session_races::Column::SessionId.eq(session_id))
         .all(db)
         .await?;
-    let race_count = used_races.len() as i32;
+    let race_count = i32::try_from(used_races.len()).unwrap_or(i32::MAX);
     let used_track_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
 
     let chosen = helpers::pick_random_track(db, &used_track_ids, &[]).await?;
@@ -952,7 +947,7 @@ pub async fn next_track(
         .one(db)
         .await?
         .ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!(
+            Error::Internal(anyhow::anyhow!(
                 "Cup not found for cup_id {}",
                 chosen.cup_id
             ))
@@ -980,7 +975,7 @@ pub async fn skip_turn(
     db: &DatabaseConnection,
     session_id: &SessionId,
     _user_id: &UserId,
-) -> Result<SessionRaceInfo, AppError> {
+) -> Result<SessionRaceInfo, Error> {
     helpers::load_active_session(db, session_id).await?;
 
     // Find the most recent race
@@ -989,7 +984,7 @@ pub async fn skip_turn(
         .order_by_desc(session_races::Column::RaceNumber)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::BadRequest("No track to skip".to_string()))?;
+        .ok_or_else(|| Error::BadRequest("No track to skip".to_string()))?;
 
     // Verify no runs exist for this race
     let run_count = runs::Entity::find()
@@ -998,7 +993,7 @@ pub async fn skip_turn(
         .await?;
 
     if run_count > 0 {
-        return Err(AppError::BadRequest(
+        return Err(Error::BadRequest(
             "Can't skip — runs already submitted".to_string(),
         ));
     }
@@ -1047,7 +1042,7 @@ pub async fn skip_turn(
         .one(db)
         .await?
         .ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!(
+            Error::Internal(anyhow::anyhow!(
                 "Cup not found for cup_id {}",
                 chosen.cup_id
             ))
@@ -1070,12 +1065,12 @@ pub async fn skip_turn(
 pub async fn list_races(
     db: &DatabaseConnection,
     session_id: &SessionId,
-) -> Result<Vec<RaceInfo>, AppError> {
+) -> Result<Vec<RaceInfo>, Error> {
     // Verify session exists
     sessions::Entity::find_by_id(session_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| Error::NotFound("Session not found".to_string()))?;
 
     let rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -1114,7 +1109,7 @@ pub async fn list_races(
 /// Also marks all remaining active participants as left, preventing
 /// users from being soft-locked out of creating/joining new sessions.
 /// Returns the number of sessions closed.
-pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, AppError> {
+pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error> {
     let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).naive_utc();
 
     let stale = sessions::Entity::find()
@@ -1180,7 +1175,7 @@ mod tests {
         let err = load_host_username(&db, &UserId::new("nonexistent-id"))
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::Internal(_)));
+        assert!(matches!(err, Error::Internal(_)));
     }
 
     // ── transfer_host_or_close ───────────────────────────────────────
@@ -2381,7 +2376,7 @@ mod tests {
         let err = skip_pending_race(&db, &session.id, &bogus_race_id, &host_id)
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::NotFound(_)));
+        assert!(matches!(err, Error::NotFound(_)));
     }
 
     #[tokio::test]
@@ -2434,7 +2429,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            AppError::Conflict(msg) => assert_eq!(msg, "Already submitted"),
+            Error::Conflict(msg) => assert_eq!(msg, "Already submitted"),
             other => panic!("expected Conflict, got {other:?}"),
         }
     }
@@ -2459,7 +2454,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            AppError::Conflict(msg) => {
+            Error::Conflict(msg) => {
                 assert!(
                     msg.contains("closed"),
                     "expected closed-session message, got: {msg}"
@@ -2494,7 +2489,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(
-            matches!(err, AppError::Forbidden(_)),
+            matches!(err, Error::Forbidden(_)),
             "expected Forbidden for left user, got {err:?}"
         );
     }

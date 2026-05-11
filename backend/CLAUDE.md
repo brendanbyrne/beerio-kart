@@ -60,7 +60,7 @@ When we exit prelaunch (decided when we have real user data we don't want to los
 
 ## Errors
 
-All route handlers return `Result<impl IntoResponse, AppError>` where `AppError` (`src/error.rs`) is a unified error type that implements Axum's `IntoResponse`. This enables `?` propagation. See [`docs/design.md`](../docs/design.md) § Observability → Error response pattern for the full table of variants and the `From<sea_orm::DbErr>` mapping.
+All route handlers return `Result<impl IntoResponse, error::Error>` where `error::Error` (`src/error.rs`) is a unified error type that implements Axum's `IntoResponse`. This enables `?` propagation. See [`docs/design.md`](../docs/design.md) § Observability → Error response pattern for the full table of variants and the `From<sea_orm::DbErr>` mapping.
 
 Open follow-up: [#84](https://github.com/brendanbyrne/beerio-kart/issues/84) tracks sanitizing driver-string leakage from `From<DbErr>` (Conflict/BadRequest paths leak schema details). Worth reading before touching `error.rs`.
 

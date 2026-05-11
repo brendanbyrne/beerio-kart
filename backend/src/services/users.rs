@@ -2,9 +2,9 @@ use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::{UserId, race_setup::RaceSetupUpdate},
+    domain::{UserId, race_setup::Update},
     entities::{bodies, characters, drink_types, gliders, users, wheels},
-    error::AppError,
+    error::Error,
     services::helpers,
 };
 
@@ -64,9 +64,9 @@ pub async fn update_profile(
     actor_user_id: &UserId,
     target_user_id: &UserId,
     req: UpdateProfileRequest,
-) -> Result<UserDetailProfile, AppError> {
+) -> Result<UserDetailProfile, Error> {
     if actor_user_id.as_str() != target_user_id.as_str() {
-        return Err(AppError::Forbidden(
+        return Err(Error::Forbidden(
             "You can only update your own profile".to_string(),
         ));
     }
@@ -74,12 +74,12 @@ pub async fn update_profile(
     let user = users::Entity::find_by_id(target_user_id)
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("User {target_user_id} not found")))?;
+        .ok_or_else(|| Error::NotFound(format!("User {target_user_id} not found")))?;
 
     let mut active: users::ActiveModel = user.into();
 
-    // Race setup: all-or-nothing via RaceSetupUpdate
-    if let Some(setup) = RaceSetupUpdate::try_from_optional(
+    // Race setup: all-or-nothing via Update
+    if let Some(setup) = Update::try_from_optional(
         req.preferred_character_id,
         req.preferred_body_id,
         req.preferred_wheel_id,
@@ -118,7 +118,7 @@ pub async fn update_profile(
 pub async fn build_detail_profile(
     db: &DatabaseConnection,
     user: users::Model,
-) -> Result<UserDetailProfile, AppError> {
+) -> Result<UserDetailProfile, Error> {
     let drink_type = if let Some(ref dt_id) = user.preferred_drink_type_id {
         drink_types::Entity::find_by_id(dt_id)
             .one(db)
@@ -174,7 +174,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(AppError::Forbidden(_))));
+        assert!(matches!(result, Err(Error::Forbidden(_))));
     }
 
     #[tokio::test]
@@ -196,7 +196,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(AppError::NotFound(_))));
+        assert!(matches!(result, Err(Error::NotFound(_))));
     }
 
     #[tokio::test]
@@ -246,7 +246,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        assert!(matches!(result, Err(Error::BadRequest(_))));
     }
 
     #[tokio::test]
@@ -269,7 +269,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        assert!(matches!(result, Err(Error::BadRequest(_))));
     }
 
     #[tokio::test]
@@ -292,7 +292,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        assert!(matches!(result, Err(Error::BadRequest(_))));
     }
 
     #[tokio::test]

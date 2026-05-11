@@ -7,8 +7,8 @@ use axum::{Router, http::StatusCode, routing::get};
 use axum_test::TestServer;
 use beerio_kart::{
     ARGON2_MAX_CONCURRENT, AppState,
-    config::AppConfig,
-    middleware::auth::{AdminUser, AuthUser},
+    config::Config,
+    middleware::auth::{AdminUser, User},
 };
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
@@ -17,8 +17,8 @@ use tokio::sync::Semaphore;
 
 const TEST_SECRET: &str = "middleware-test-secret";
 
-/// Minimal handler that requires AuthUser.
-async fn auth_handler(user: AuthUser) -> axum::Json<Value> {
+/// Minimal handler that requires User.
+async fn auth_handler(user: User) -> axum::Json<Value> {
     axum::Json(serde_json::json!({ "user_id": user.user_id }))
 }
 
@@ -27,8 +27,8 @@ async fn admin_handler(admin: AdminUser) -> axum::Json<Value> {
     axum::Json(serde_json::json!({ "admin_id": admin.user_id }))
 }
 
-fn make_config(admin_user_id: Option<&str>) -> Arc<AppConfig> {
-    Arc::new(AppConfig {
+fn make_config(admin_user_id: Option<&str>) -> Arc<Config> {
+    Arc::new(Config {
         jwt_secret: TEST_SECRET.to_string(),
         jwt_access_expiry_minutes: 15,
         jwt_refresh_expiry_days: 7,
@@ -69,7 +69,7 @@ fn create_refresh_token(user_id: &str) -> String {
     beerio_kart::services::auth::create_refresh_token(user_id, 0, &config).unwrap()
 }
 
-// ── AuthUser extractor tests ────────────────────────────────────────
+// ── User extractor tests ────────────────────────────────────────
 
 #[tokio::test]
 async fn test_auth_user_missing_header_returns_401() {

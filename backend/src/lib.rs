@@ -17,7 +17,7 @@ pub mod test_helpers;
 
 use std::sync::Arc;
 
-use config::AppConfig;
+use config::Config;
 use sea_orm::DatabaseConnection;
 use tokio::sync::Semaphore;
 
@@ -32,12 +32,12 @@ pub const ARGON2_MAX_CONCURRENT: usize = 16;
 
 /// Shared application state available to all Axum handlers via `State<AppState>`.
 ///
-/// `AppState` is cheaply cloneable — `DatabaseConnection`, `Arc<AppConfig>`,
+/// `AppState` is cheaply cloneable — `DatabaseConnection`, `Arc<Config>`,
 /// and `Arc<Semaphore>` are all reference-counted internally.
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
-    pub config: Arc<AppConfig>,
+    pub config: Arc<Config>,
     /// Caps concurrent Argon2 hash/verify operations across all handlers.
     /// See `services::auth::{hash_password, verify_password}`.
     pub argon2_limit: Arc<Semaphore>,

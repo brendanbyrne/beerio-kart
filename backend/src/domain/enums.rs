@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::AppError;
+use crate::error::Error;
 
 /// Lifecycle state of a session.
 ///
@@ -33,13 +33,13 @@ impl fmt::Display for SessionStatus {
 }
 
 impl FromStr for SessionStatus {
-    type Err = AppError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "active" => Ok(Self::Active),
             "closed" => Ok(Self::Closed),
-            other => Err(AppError::Internal(anyhow::anyhow!(
+            other => Err(Error::Internal(anyhow::anyhow!(
                 "Unknown session status: {other}"
             ))),
         }
@@ -70,12 +70,12 @@ impl fmt::Display for Ruleset {
 }
 
 impl FromStr for Ruleset {
-    type Err = AppError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "random" => Ok(Self::Random),
-            other => Err(AppError::BadRequest(format!("Invalid ruleset: '{other}'"))),
+            other => Err(Error::BadRequest(format!("Invalid ruleset: '{other}'"))),
         }
     }
 }
@@ -100,7 +100,7 @@ mod tests {
     fn session_status_unknown_is_internal_error() {
         let err = SessionStatus::from_str("nonsense").unwrap_err();
         match &err {
-            AppError::Internal(inner) => assert!(inner.to_string().contains("nonsense")),
+            Error::Internal(inner) => assert!(inner.to_string().contains("nonsense")),
             other => panic!("expected Internal, got {other:?}"),
         }
     }
@@ -133,7 +133,7 @@ mod tests {
         // deliberately different from SessionStatus, which is read from the DB.
         let err = Ruleset::from_str("spiral").unwrap_err();
         match err {
-            AppError::BadRequest(msg) => assert!(msg.contains("spiral")),
+            Error::BadRequest(msg) => assert!(msg.contains("spiral")),
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }

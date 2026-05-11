@@ -9,17 +9,17 @@ use serde::Deserialize;
 use crate::{
     AppState,
     domain::{RunId, SessionRaceId, UserId},
-    error::AppError,
-    middleware::auth::AuthUser,
+    error::Error,
+    middleware::auth::User,
     services::runs,
 };
 
 /// POST /runs — create a run.
 pub async fn create_run(
-    user: AuthUser,
+    user: User,
     State(state): State<AppState>,
     Json(body): Json<runs::CreateRunRequest>,
-) -> Result<(StatusCode, Json<runs::RunDetail>), AppError> {
+) -> Result<(StatusCode, Json<runs::RunDetail>), Error> {
     let detail = runs::create_run(&state.db, &user.user_id, body).await?;
     Ok((StatusCode::CREATED, Json(detail)))
 }
@@ -33,10 +33,10 @@ pub struct ListRunsQuery {
 
 /// GET /runs — list runs with optional filters.
 pub async fn list_runs(
-    _user: AuthUser,
+    _user: User,
     State(state): State<AppState>,
     Query(query): Query<ListRunsQuery>,
-) -> Result<Json<Vec<runs::RunDetail>>, AppError> {
+) -> Result<Json<Vec<runs::RunDetail>>, Error> {
     let filters = runs::RunFilters {
         session_race_id: query.session_race_id.map(SessionRaceId::new),
         user_id: query.user_id.map(UserId::new),
@@ -48,19 +48,19 @@ pub async fn list_runs(
 
 /// GET /runs/defaults — get defaults for the authenticated user.
 pub async fn get_defaults(
-    user: AuthUser,
+    user: User,
     State(state): State<AppState>,
-) -> Result<Json<runs::RunDefaults>, AppError> {
+) -> Result<Json<runs::RunDefaults>, Error> {
     let defaults = runs::get_run_defaults(&state.db, &user.user_id).await?;
     Ok(Json(defaults))
 }
 
 /// GET /runs/:id — get a single run.
 pub async fn get_run(
-    _user: AuthUser,
+    _user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<runs::RunDetail>, AppError> {
+) -> Result<Json<runs::RunDetail>, Error> {
     let run_id = RunId::new(id);
     let detail = runs::get_run(&state.db, &run_id).await?;
     Ok(Json(detail))
@@ -68,10 +68,10 @@ pub async fn get_run(
 
 /// DELETE /runs/:id — delete a run. Owner only, active session only.
 pub async fn delete_run(
-    user: AuthUser,
+    user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoResponse, Error> {
     let run_id = RunId::new(id);
     runs::delete_run(&state.db, &run_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)

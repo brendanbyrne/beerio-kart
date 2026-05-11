@@ -9,7 +9,7 @@ use sea_orm::ConnectionTrait;
 use crate::{
     domain::{SessionId, UserId},
     entities::{session_participants, sessions},
-    error::AppError,
+    error::Error,
     services::helpers,
 };
 
@@ -28,7 +28,7 @@ impl SessionContext {
     pub async fn load_active<C: ConnectionTrait>(
         db: &C,
         session_id: &SessionId,
-    ) -> Result<Self, AppError> {
+    ) -> Result<Self, Error> {
         let session = helpers::load_active_session(db, session_id).await?;
         let session_id = SessionId::new(session.id.clone());
         Ok(Self {
@@ -38,9 +38,9 @@ impl SessionContext {
     }
 
     /// Require that `user_id` is the host of this session.
-    pub fn require_host(&self, user_id: &UserId) -> Result<(), AppError> {
+    pub fn require_host(&self, user_id: &UserId) -> Result<(), Error> {
         if self.session.host_id.as_str() != user_id.as_str() {
-            return Err(AppError::Forbidden("Only the host can do that".into()));
+            return Err(Error::Forbidden("Only the host can do that".into()));
         }
         Ok(())
     }
@@ -50,7 +50,7 @@ impl SessionContext {
         &self,
         db: &C,
         user_id: &UserId,
-    ) -> Result<session_participants::Model, AppError> {
+    ) -> Result<session_participants::Model, Error> {
         helpers::require_active_participant(db, &self.session_id, user_id).await
     }
 
@@ -58,7 +58,7 @@ impl SessionContext {
     /// Delegates the UPDATE to `helpers::touch_session`, then refreshes
     /// the in-memory field so callers that read it post-touch see the
     /// updated value.
-    pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), AppError> {
+    pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), Error> {
         helpers::touch_session(db, &self.session_id).await?;
         self.session.last_activity_at = chrono::Utc::now().naive_utc();
         Ok(())
@@ -89,7 +89,7 @@ mod tests {
         let err = SessionContext::load_active(&db, &SessionId::new("missing"))
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::NotFound(_)));
+        assert!(matches!(err, Error::NotFound(_)));
     }
 
     #[tokio::test]
@@ -101,7 +101,7 @@ mod tests {
         let err = SessionContext::load_active(&db, &session_id)
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::Conflict(_)));
+        assert!(matches!(err, Error::Conflict(_)));
     }
 
     #[tokio::test]
@@ -123,7 +123,7 @@ mod tests {
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
         let err = ctx.require_host(&other).unwrap_err();
-        assert!(matches!(err, AppError::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden(_)));
     }
 
     #[tokio::test]
@@ -141,7 +141,7 @@ mod tests {
         // Forbidden path: another user isn't.
         let outsider = create_user(&db, "outsider").await;
         let err = ctx.require_participant(&db, &outsider).await.unwrap_err();
-        assert!(matches!(err, AppError::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden(_)));
     }
 
     #[tokio::test]
