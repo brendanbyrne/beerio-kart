@@ -13,6 +13,7 @@ use axum::{
 use axum_test::TestServer;
 use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::Config, routes};
 use migration::{Migrator, MigratorTrait};
+use rstest::rstest;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
@@ -268,88 +269,34 @@ async fn register_and_get_token(server: &TestServer, username: &str) -> (String,
 // Game Data Endpoints
 // ═══════════════════════════════════════════════════════════════════════
 
+// rstest demo (rust.md § 7): six list-endpoint count tests collapsed into one
+// table-driven case. Adding a new game-data list endpoint here is one
+// `#[case]` line, not a fresh ~12-line `#[tokio::test]` clone. Each case
+// still surfaces as its own line in `cargo test` output via the
+// auto-generated suffix (e.g. `test_list_endpoint_returns_seeded_count::case_1`).
+#[rstest]
+#[case("/api/v1/characters", 50)]
+#[case("/api/v1/bodies", 41)]
+#[case("/api/v1/wheels", 22)]
+#[case("/api/v1/gliders", 15)]
+#[case("/api/v1/cups", 24)]
+#[case("/api/v1/tracks", 96)]
 #[tokio::test]
-async fn test_list_characters_returns_50_items() {
+async fn test_list_endpoint_returns_seeded_count(#[case] endpoint: &str, #[case] expected: usize) {
     let (server, _db) = setup_test_app().await;
     let (token, _) = register_and_get_token(&server, "testuser").await;
 
     let res = server
-        .get("/api/v1/characters")
+        .get(endpoint)
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::OK);
     let body: Vec<Value> = res.json();
-    assert_eq!(body.len(), 50, "Expected 50 characters");
-}
-
-#[tokio::test]
-async fn test_list_bodies_returns_41_items() {
-    let (server, _db) = setup_test_app().await;
-    let (token, _) = register_and_get_token(&server, "testuser").await;
-
-    let res = server
-        .get("/api/v1/bodies")
-        .add_header(AUTH_HEADER, auth_value(&token))
-        .await;
-    res.assert_status(axum::http::StatusCode::OK);
-    let body: Vec<Value> = res.json();
-    assert_eq!(body.len(), 41, "Expected 41 bodies");
-}
-
-#[tokio::test]
-async fn test_list_wheels_returns_22_items() {
-    let (server, _db) = setup_test_app().await;
-    let (token, _) = register_and_get_token(&server, "testuser").await;
-
-    let res = server
-        .get("/api/v1/wheels")
-        .add_header(AUTH_HEADER, auth_value(&token))
-        .await;
-    res.assert_status(axum::http::StatusCode::OK);
-    let body: Vec<Value> = res.json();
-    assert_eq!(body.len(), 22, "Expected 22 wheels");
-}
-
-#[tokio::test]
-async fn test_list_gliders_returns_15_items() {
-    let (server, _db) = setup_test_app().await;
-    let (token, _) = register_and_get_token(&server, "testuser").await;
-
-    let res = server
-        .get("/api/v1/gliders")
-        .add_header(AUTH_HEADER, auth_value(&token))
-        .await;
-    res.assert_status(axum::http::StatusCode::OK);
-    let body: Vec<Value> = res.json();
-    assert_eq!(body.len(), 15, "Expected 15 gliders");
-}
-
-#[tokio::test]
-async fn test_list_cups_returns_24_items() {
-    let (server, _db) = setup_test_app().await;
-    let (token, _) = register_and_get_token(&server, "testuser").await;
-
-    let res = server
-        .get("/api/v1/cups")
-        .add_header(AUTH_HEADER, auth_value(&token))
-        .await;
-    res.assert_status(axum::http::StatusCode::OK);
-    let body: Vec<Value> = res.json();
-    assert_eq!(body.len(), 24, "Expected 24 cups");
-}
-
-#[tokio::test]
-async fn test_list_tracks_returns_96_items() {
-    let (server, _db) = setup_test_app().await;
-    let (token, _) = register_and_get_token(&server, "testuser").await;
-
-    let res = server
-        .get("/api/v1/tracks")
-        .add_header(AUTH_HEADER, auth_value(&token))
-        .await;
-    res.assert_status(axum::http::StatusCode::OK);
-    let body: Vec<Value> = res.json();
-    assert_eq!(body.len(), 96, "Expected 96 tracks");
+    assert_eq!(
+        body.len(),
+        expected,
+        "expected {expected} items from {endpoint}"
+    );
 }
 
 #[tokio::test]
@@ -366,6 +313,12 @@ async fn test_list_tracks_filtered_by_cup_returns_4_tracks() {
     assert_eq!(body.len(), 4, "Each cup should have exactly 4 tracks");
 }
 
+// insta demo (rust.md § 7): snapshot the full response body for
+// `/api/v1/cups/1`. Locks down the response shape — adding, removing, or
+// renaming a field surfaces as a reviewable diff in the snapshot file. To
+// update intentionally: re-run with `cargo insta accept` (or `cargo insta
+// review` for interactive triage). Cup #1 (Mushroom Cup) is seeded from
+// `data/cups.json` so the output is deterministic.
 #[tokio::test]
 async fn test_get_cup_with_tracks() {
     let (server, _db) = setup_test_app().await;
@@ -377,9 +330,7 @@ async fn test_get_cup_with_tracks() {
         .await;
     res.assert_status(axum::http::StatusCode::OK);
     let body: Value = res.json();
-    assert!(body["name"].is_string());
-    let tracks = body["tracks"].as_array().unwrap();
-    assert_eq!(tracks.len(), 4, "Cup should include its 4 tracks");
+    insta::assert_json_snapshot!("cup_1_with_tracks", body);
 }
 
 #[tokio::test]
