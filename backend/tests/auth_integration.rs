@@ -14,6 +14,7 @@ use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
+use uuid::Uuid;
 
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 
@@ -34,10 +35,7 @@ async fn protected_hello(user: beerio_kart::middleware::auth::User) -> axum::Jso
 
 /// Create a fresh in-memory `SQLite` database with all migrations applied.
 async fn setup_test_app() -> TestServer {
-    let url = format!(
-        "sqlite:file:{}?mode=memory&cache=shared",
-        uuid::Uuid::new_v4()
-    );
+    let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
     let db = Database::connect(&url)
         .await
         .expect("Failed to connect to in-memory SQLite");
@@ -112,7 +110,7 @@ async fn test_register_success_returns_201_with_access_token_and_refresh_cookie(
     assert_eq!(body["user"]["username"], "alice");
     assert!(body["user"]["id"].is_string());
     let id = body["user"]["id"].as_str().unwrap();
-    assert!(uuid::Uuid::parse_str(id).is_ok());
+    assert!(Uuid::parse_str(id).is_ok());
 
     // Should set a refresh cookie
     let cookie = extract_refresh_cookie(&response);
