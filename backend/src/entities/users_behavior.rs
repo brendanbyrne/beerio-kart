@@ -42,7 +42,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn before_save_stamps_created_at_and_updated_at_on_insert() {
+    async fn test_before_save_stamps_created_at_and_updated_at_on_insert() {
         // `create_user` constructs a `users::ActiveModel` with `created_at`
         // and `updated_at` left as `NotSet`; `before_save` must populate both.
         let db = setup_db().await;
@@ -63,7 +63,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn before_save_advances_updated_at_on_update() {
+    async fn test_before_save_advances_updated_at_on_update() {
         let db = setup_db().await;
         let user_id = create_user(&db, "bob").await;
 
