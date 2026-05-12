@@ -4,7 +4,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use axum::{
-    BoxError, Json, Router,
+    Json, Router,
     error_handling::HandleErrorLayer,
     http::StatusCode,
     routing::{get, post, put},
@@ -12,7 +12,9 @@ use axum::{
 use beerio_kart::{
     ARGON2_MAX_CONCURRENT, AppState,
     config::{self, Config},
-    db, routes, services,
+    db,
+    middleware::limits::handle_load_shed_error,
+    routes, services,
 };
 use migration::{Migrator, MigratorTrait};
 use serde::Serialize;
@@ -284,17 +286,4 @@ async fn hello() -> Json<HelloResponse> {
     Json(HelloResponse {
         message: "Hello from Beerio Kart!".to_string(),
     })
-}
-
-/// Translate the only error type expected to reach `HandleErrorLayer` —
-/// `tower::load_shed::error::Overloaded` from `LoadShedLayer` — into a 503.
-/// Anything else is a programming bug (no other layer above this one errors),
-/// so map it to 500 rather than panic.
-async fn handle_load_shed_error(err: BoxError) -> (StatusCode, &'static str) {
-    if err.is::<tower::load_shed::error::Overloaded>() {
-        (StatusCode::SERVICE_UNAVAILABLE, "Service overloaded")
-    } else {
-        tracing::error!(error = %err, "unexpected error reached load-shed handler");
-        (StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
-    }
 }
