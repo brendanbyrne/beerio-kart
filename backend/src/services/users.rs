@@ -113,7 +113,7 @@ pub async fn update_profile(
         active.preferred_drink_type_id = Set(dt_id_option);
     }
 
-    active.updated_at = Set(chrono::Utc::now().naive_utc());
+    // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
     let updated = active.update(db).await?;
 
     build_detail_profile(db, updated).await

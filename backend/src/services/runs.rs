@@ -1,7 +1,8 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    FromQueryResult, ModelTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
+    ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, Condition, ConnectionTrait,
+    DatabaseConnection, EntityTrait, FromQueryResult, ModelTrait, QueryFilter, QueryOrder, Set,
+    TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -280,7 +281,6 @@ async fn insert_run(
     body: CreateRunRequest,
     session_race: &session_races::Model,
 ) -> Result<RunId, Error> {
-    let now = Utc::now().naive_utc();
     let run_id = RunId::new(Uuid::new_v4().to_string());
 
     let txn = db.begin().await?;
@@ -301,7 +301,7 @@ async fn insert_run(
         drink_type_id: Set(body.drink_type_id),
         disqualified: Set(body.disqualified),
         photo_path: Set(None),
-        created_at: Set(now),
+        created_at: NotSet,
         notes: Set(None),
     }
     .insert(&txn)

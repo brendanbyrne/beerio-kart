@@ -15,7 +15,9 @@
 #![allow(clippy::missing_panics_doc)]
 
 use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, Set};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::NotSet, ConnectionTrait, Database, DatabaseConnection, Set,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -52,7 +54,6 @@ pub async fn setup_db() -> DatabaseConnection {
 /// hash. Returns the generated user ID.
 pub async fn create_user(db: &DatabaseConnection, username: &str) -> UserId {
     let id = Uuid::new_v4().to_string();
-    let now = Utc::now().naive_utc();
     // Placeholder hash — tests don't verify passwords, but the column is NOT NULL.
     let placeholder_hash = "$argon2id$v=19$m=19456,t=2,p=1$dGVzdHNhbHQ$abc123";
     users::ActiveModel {
@@ -66,8 +67,8 @@ pub async fn create_user(db: &DatabaseConnection, username: &str) -> UserId {
         preferred_glider_id: Set(None),
         preferred_drink_type_id: Set(None),
         refresh_token_version: Set(0),
-        created_at: Set(now),
-        updated_at: Set(now),
+        created_at: NotSet,
+        updated_at: NotSet,
     }
     .insert(db)
     .await
@@ -116,15 +117,14 @@ pub async fn seed_tracks_for_test(db: &DatabaseConnection) {
 /// session ID.
 pub async fn insert_session(db: &DatabaseConnection, host_id: &UserId, status: &str) -> SessionId {
     let id = Uuid::new_v4().to_string();
-    let now = Utc::now().naive_utc();
     sessions::ActiveModel {
         id: Set(id.clone()),
         host_id: Set(host_id.as_str().to_string()),
         ruleset: Set("random".to_string()),
         least_played_drink_category: Set(None),
         status: Set(status.to_string()),
-        created_at: Set(now),
-        last_activity_at: Set(now),
+        created_at: NotSet,
+        last_activity_at: Set(Utc::now().naive_utc()),
     }
     .insert(db)
     .await
@@ -189,7 +189,7 @@ pub async fn insert_race_participation(
     session_race_participations::ActiveModel {
         session_race_id: Set(session_race_id.as_str().to_string()),
         user_id: Set(user_id.as_str().to_string()),
-        created_at: Set(Utc::now().naive_utc()),
+        created_at: NotSet,
         skipped_at: Set(skipped_at),
     }
     .insert(db)
@@ -291,7 +291,7 @@ pub async fn seed_game_data(db: &DatabaseConnection) {
         id: Set(drink_id),
         name: Set("Test Beer".to_string()),
         alcoholic: Set(true),
-        created_at: Set(Utc::now().naive_utc()),
+        created_at: NotSet,
         created_by: Set(None),
     }
     .insert(db)

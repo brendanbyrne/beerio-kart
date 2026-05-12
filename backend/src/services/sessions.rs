@@ -1,8 +1,8 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    FromQueryResult, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
-    sea_query::Expr,
+    ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, Condition, ConnectionTrait,
+    DatabaseConnection, EntityTrait, FromQueryResult, ModelTrait, PaginatorTrait, QueryFilter,
+    QueryOrder, Set, TransactionTrait, sea_query::Expr,
 };
 use uuid::Uuid;
 
@@ -105,6 +105,10 @@ pub async fn create_session(
 
     check_not_in_any_session(db, user_id).await?;
 
+    // `last_activity_at` and `joined_at` are application-managed (not handled
+    // by `before_save` — see `entities/sessions_behavior.rs` for why), so
+    // capture `now` here and stamp them by hand. `sessions.created_at` is
+    // populated by `ActiveModelBehavior::before_save`.
     let now = Utc::now().naive_utc();
     let session_id = SessionId::new(Uuid::new_v4().to_string());
 
@@ -116,7 +120,7 @@ pub async fn create_session(
         ruleset: Set(parsed.to_string()),
         least_played_drink_category: Set(None),
         status: Set(SessionStatus::Active.to_string()),
-        created_at: Set(now),
+        created_at: NotSet,
         last_activity_at: Set(now),
     }
     .insert(&txn)
@@ -980,19 +984,20 @@ pub async fn next_track(
 
     let chosen = helpers::pick_random_track(db, &used_track_ids, &[]).await?;
 
-    let now = Utc::now().naive_utc();
     let race_id = SessionRaceId::new(Uuid::new_v4().to_string());
     let new_race_number = race_count + 1;
 
     let txn = db.begin().await?;
 
-    session_races::ActiveModel {
+    // Capture the inserted row so we can echo its `before_save`-stamped
+    // `created_at` back in the response.
+    let inserted = session_races::ActiveModel {
         id: Set(race_id.as_str().to_string()),
         session_id: Set(session_id.as_str().to_string()),
         race_number: Set(new_race_number),
         track_id: Set(chosen.id),
         chosen_by: Set(None),
-        created_at: Set(now),
+        created_at: NotSet,
     }
     .insert(&txn)
     .await?;
@@ -1021,7 +1026,7 @@ pub async fn next_track(
         track_name: chosen.name.clone(),
         cup_name: cup,
         image_path: chosen.image_path.clone(),
-        created_at: now.and_utc(),
+        created_at: inserted.created_at.and_utc(),
         submissions: Vec::new(),
     })
 }
@@ -1078,7 +1083,6 @@ pub async fn skip_turn(
 
     let chosen = helpers::pick_random_track(db, &exclude_ids, &[skipped_track_id]).await?;
 
-    let now = Utc::now().naive_utc();
     let race_id = SessionRaceId::new(Uuid::new_v4().to_string());
 
     // Delete old race + insert new one + snapshot present users in a single
@@ -1089,13 +1093,15 @@ pub async fn skip_turn(
 
     current_race.delete(&txn).await?;
 
-    session_races::ActiveModel {
+    // Capture the inserted row so we can echo its `before_save`-stamped
+    // `created_at` back in the response.
+    let inserted = session_races::ActiveModel {
         id: Set(race_id.as_str().to_string()),
         session_id: Set(session_id.as_str().to_string()),
         race_number: Set(keep_race_number),
         track_id: Set(chosen.id),
         chosen_by: Set(None),
-        created_at: Set(now),
+        created_at: NotSet,
     }
     .insert(&txn)
     .await?;
@@ -1123,7 +1129,7 @@ pub async fn skip_turn(
         track_name: chosen.name.clone(),
         cup_name: cup,
         image_path: chosen.image_path.clone(),
-        created_at: now.and_utc(),
+        created_at: inserted.created_at.and_utc(),
         submissions: Vec::new(),
     })
 }
@@ -1892,7 +1898,6 @@ mod tests {
 
         let txn = db.begin().await.unwrap();
         let race_id = Uuid::new_v4().to_string();
-        let now = Utc::now().naive_utc();
 
         session_races::ActiveModel {
             id: Set(race_id.clone()),
@@ -1900,7 +1905,7 @@ mod tests {
             race_number: Set(1),
             track_id: Set(1),
             chosen_by: Set(None),
-            created_at: Set(now),
+            created_at: NotSet,
         }
         .insert(&txn)
         .await
@@ -1910,7 +1915,7 @@ mod tests {
         let bad = session_race_participations::ActiveModel {
             session_race_id: Set(race_id.clone()),
             user_id: Set("ghost".to_string()),
-            created_at: Set(now),
+            created_at: NotSet,
             skipped_at: Set(None),
         }
         .insert(&txn)
@@ -1991,7 +1996,7 @@ mod tests {
             drink_type_id: Set(drink_id),
             disqualified: Set(false),
             photo_path: Set(None),
-            created_at: Set(Utc::now().naive_utc()),
+            created_at: NotSet,
             notes: Set(None),
         }
         .insert(&db)
@@ -2496,7 +2501,7 @@ mod tests {
             drink_type_id: Set(drink_id),
             disqualified: Set(false),
             photo_path: Set(None),
-            created_at: Set(Utc::now().naive_utc()),
+            created_at: NotSet,
             notes: Set(None),
         }
         .insert(&db)

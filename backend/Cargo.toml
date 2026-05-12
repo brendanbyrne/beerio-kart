@@ -38,6 +38,11 @@ edition = "2024"
 [dependencies]
 anyhow = "1"
 argon2 = { version = "0.5", features = ["std"] }
+# `ActiveModelBehavior::before_save` is an async trait method; SeaORM 1.x
+# defines the trait via `#[async_trait]`, so overriding it requires the same
+# macro on our impl. SeaORM doesn't re-export `async_trait`, so we depend on
+# it directly. See `entities/*_behavior.rs`.
+async-trait = "0.1"
 axum = { version = "0.8", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
 jsonwebtoken = "9"

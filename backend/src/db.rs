@@ -54,8 +54,8 @@ pub async fn connect(url: &str) -> Result<DatabaseConnection, DbErr> {
 mod tests {
     use migration::{Migrator, MigratorTrait};
     use sea_orm::{
-        ActiveModelTrait, EntityTrait, FromQueryResult, PaginatorTrait, Set, Statement,
-        TransactionTrait,
+        ActiveModelTrait, ActiveValue::NotSet, EntityTrait, FromQueryResult, PaginatorTrait, Set,
+        Statement, TransactionTrait,
     };
     use uuid::Uuid;
 
@@ -82,7 +82,6 @@ mod tests {
         // only fail if the query happened to land on the connection that ran
         // the startup PRAGMA — flaky and pool-size-dependent.
         let db = shared_memory_db().await;
-        let now = chrono::Utc::now().naive_utc();
         let result = users::ActiveModel {
             id: Set(Uuid::new_v4().to_string()),
             username: Set("alice".to_string()),
@@ -94,8 +93,8 @@ mod tests {
             preferred_glider_id: Set(None),
             preferred_drink_type_id: Set(None),
             refresh_token_version: Set(0),
-            created_at: Set(now),
-            updated_at: Set(now),
+            created_at: NotSet,
+            updated_at: NotSet,
         }
         .insert(&db)
         .await;

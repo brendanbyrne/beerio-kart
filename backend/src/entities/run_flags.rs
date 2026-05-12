@@ -35,4 +35,5 @@ impl Related<super::runs::Entity> for Entity {
     }
 }
 
-impl ActiveModelBehavior for ActiveModel {}
+// `ActiveModelBehavior` for this entity lives in the sibling
+// `run_flags_behavior.rs` (it stamps `created_at`).

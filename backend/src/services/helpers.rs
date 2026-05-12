@@ -101,6 +101,12 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
         return Ok(());
     }
 
+    // `created_at` is set by hand here (rather than left as `NotSet` for
+    // `ActiveModelBehavior::before_save` to fill in) because SeaORM's bulk
+    // `Entity::insert_many(...).exec()` path bypasses `before_save` — only
+    // single-row `ActiveModel::insert` / `update` / `save` invoke it. We use
+    // `insert_many` deliberately to keep the snapshot to one round-trip; the
+    // trade is this one explicit timestamp.
     let rows = present
         .into_iter()
         .map(|p| session_race_participations::ActiveModel {

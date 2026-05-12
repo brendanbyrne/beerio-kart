@@ -39,4 +39,5 @@ impl Related<super::users::Entity> for Entity {
     }
 }
 
-impl ActiveModelBehavior for ActiveModel {}
+// `ActiveModelBehavior` for this entity lives in the sibling
+// `drink_types_behavior.rs` (it stamps `created_at`).
