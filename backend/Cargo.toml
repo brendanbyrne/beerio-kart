@@ -72,3 +72,9 @@ tower = "0.5.3"
 # error.rs tests to assert the client/detail split: driver-string detail must
 # reach `tracing::warn!` but must not reach the response body. See Issue #84.
 tracing-test = "0.2"
+# Table-driven test cases (rust.md § 7). Reach for it when the same logic
+# runs over half-a-dozen inputs.
+rstest = "0.23"
+# Snapshot assertions for HTTP response bodies in integration tests
+# (rust.md § 7). Updates land via `cargo insta accept`.
+insta = { version = "1.41", features = ["json"] }

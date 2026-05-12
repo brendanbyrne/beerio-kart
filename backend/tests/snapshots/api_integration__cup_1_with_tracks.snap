@@ -1,0 +1,39 @@
+---
+source: tests/api_integration.rs
+expression: body
+---
+{
+  "id": 1,
+  "image_path": "images/cups/mushroom-cup.webp",
+  "name": "Mushroom Cup",
+  "tracks": [
+    {
+      "cup_id": 1,
+      "id": 1,
+      "image_path": "images/tracks/mario-kart-stadium.webp",
+      "name": "Mario Kart Stadium",
+      "position": 1
+    },
+    {
+      "cup_id": 1,
+      "id": 2,
+      "image_path": "images/tracks/water-park.webp",
+      "name": "Water Park",
+      "position": 2
+    },
+    {
+      "cup_id": 1,
+      "id": 3,
+      "image_path": "images/tracks/sweet-sweet-canyon.webp",
+      "name": "Sweet Sweet Canyon",
+      "position": 3
+    },
+    {
+      "cup_id": 1,
+      "id": 4,
+      "image_path": "images/tracks/thwomp-ruins.webp",
+      "name": "Thwomp Ruins",
+      "position": 4
+    }
+  ]
+}
