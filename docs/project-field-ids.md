@@ -44,7 +44,7 @@ The Backlog option ID (`f75ad846`) was originally named "Todo"; it was renamed i
 | Medium | yellow | `ae0843f9` |
 | High | red | `89730d5f` |
 
-Convention: **Medium is the default** for new Issues. The API exposes no "default" flag on a field option — the default is enforced by the project's auto-add workflow (configurable in the Settings UI), not the field schema itself. If you set Priority via the API on a freshly-added item, set it explicitly to `ae0843f9` rather than relying on auto-population.
+The Medium-default convention lives in [`project-workflow.md`](./project-workflow.md) § Required fields at creation. API-side note: there's no "default" flag on a field option in the GraphQL schema — the default is enforced by the project's auto-add workflow (configurable in the Settings UI), not the field schema itself. If you set Priority via the API on a freshly-added item, set it explicitly to `ae0843f9` rather than relying on auto-population.
 
 ## Iteration field
 
@@ -167,9 +167,27 @@ GITHUB_CLEAR_PROJECT_V2_ITEM_FIELD_VALUE
   projectId, itemId, fieldId
 ```
 
+### Batching: aliased mutations in one GraphQL document
+
+When updating fields on many items at once, prefer one mutation document with aliased mutations over many separate calls. Within a single document, GraphQL executes mutations sequentially per spec — this sidesteps the "parallel mutations can trigger transient conflicts" warning at the top of `GITHUB_RUN_GRAPH_QL_QUERY`'s description while keeping the wire round-trips to one. Example shape:
+
+```graphql
+mutation {
+  a: updateProjectV2ItemFieldValue(input: {...}) { projectV2Item { id } }
+  b: updateProjectV2ItemFieldValue(input: {...}) { projectV2Item { id } }
+  c: updateProjectV2ItemFieldValue(input: {...}) { projectV2Item { id } }
+}
+```
+
+26 aliased mutations in one document have been verified to work (2026-05-11 — setting Status + Priority on 13 items in one shot).
+
+**Gotcha: `rateLimit` is a Query field, not a Mutation field.** Including a top-level `rateLimit { remaining cost resetAt }` selection inside a `mutation { ... }` document fails the whole document at parse time with `Field 'rateLimit' doesn't exist on type 'Mutation'` — before any mutation runs. If you want rate-limit telemetry, query it separately, or just rely on the toolkit's quota counter.
+
 ## Document history
 
 - 2026-05-05 — Initial capture after first successful Composio MCP connection. Project was created with default fields only (Board template).
 - 2026-05-05 — Renamed Todo → Backlog (option ID `f75ad846` preserved). Added Ready (`1619f959`) as a new Status option to support the Cowork-queues / Claude-Code-pulls workflow. Removed In Review (never created — workflow ultimately decided to track Issues only and rely on GitHub's native Pulls tab for PR-review state). Added Priority field (`PVTSSF_lAHOAA6jO84BWue2zhSAv-I`) with Low / Medium / High options. PR auto-add workflow disabled in Project Settings (board now tracks Issues only). All changes refreshed via `GITHUB_LIST_PROJECT_FIELDS_FOR_USER`.
 - 2026-05-09 — Added the Iteration field (`PVTIF_lAHOAA6jO84BWue2zhScvcQ`) and Roadmap view (#6, `PVTV_lAHOAA6jO84BWue2zgKSLrw`) per the Roadmap experiment. 6 iterations of 14 days each starting 2026-05-11 cover audit close, the C1 + H1+ Quality Pass, and Star kickoff through run recording. Backfilled iteration values on all 32 then-open Issues. The Iteration field section above also corrects two stale claims in this file's prose: (1) `data_type=iteration` via `GITHUB_ADD_FIELD_TO_USER_PROJECT` actually 500s — the GraphQL `createProjectV2Field` mutation works; (2) views CAN be created programmatically via Composio's `GITHUB_CREATE_VIEW_FOR_USER_PROJECT` REST shim, contrary to docs/CLAUDE.md's "Settings-UI-only" assertion (which is correct for fields' option lists and for the auto-add/auto-close workflows, but not for view creation or iteration fields).
 - 2026-05-11 — Corrected the Roadmap view section's claim that "the Iteration field anchors the timeline axis automatically." It does not. A freshly-created Roadmap view defaults to Start/Target date for the timeline axis AND no Group by; both must be flipped to Iteration in the UI to get an iter-anchored Roadmap. The date-axis binding has no GraphQL field at all; `groupByFields` exists on `ProjectV2View` but stayed empty even when Group by was set via the UI (possibly an API/UI sync lag worth re-verifying). Save view in the UI is also required — changes appear applied but revert on reload until saved. Surfaced while filing Issue #114 (PR-G3): items had correct iter values but the Roadmap view was a flat list; Brendan flipped both settings, confirmed the view renders correctly, then saved.
+- 2026-05-11 — Added § Common write patterns → "Batching: aliased mutations in one GraphQL document" covering the aliased-mutations technique (26 mutations in one doc verified during the 13-Issue compliance-plan triage) and the `rateLimit`-doesn't-exist-on-Mutation gotcha that wiped a first attempt. Surfaced while setting Status + Priority on the 13 new Hardening-milestone Issues.
+- 2026-05-11 — § Priority field: removed the duplicated "Medium is the default" convention statement; the canonical convention now lives in [`project-workflow.md`](./project-workflow.md) § Required fields at creation. Kept the API-specific facts (no schema-level default flag, set `ae0843f9` explicitly via API). Cleanup move per the file's increasingly playbook-shaped content — pure conventions belong in `project-workflow.md`, API facts here.
