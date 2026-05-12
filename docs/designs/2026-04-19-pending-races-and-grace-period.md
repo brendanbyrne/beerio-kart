@@ -1,5 +1,7 @@
 # Design Review — Pending Races & Grace Period (Phase 3 PR 3D)
 
+> **Superseded in part by [ADR-0035](../decisions/0035-race-anchored-session-lifetime.md) (2026-05-11).** § 3 (grace period semantics) and the supporting grace logic in § 1, § 2, and § 8 are no longer in force — race-anchored expiry replaces the 5-minute rejoin grace and the `joined_at`-reset semantics. § 4 (submit-in-order enforcement), § 5 (current-track override), § 6 (API surface), and § 9 (out-of-scope items) are not affected. This file is preserved as the point-in-time record of the original design discussion.
+
 Date: 2026-04-19
 Author: Cowork
 Scope: detailed design for the "pending races" feature and the 5-minute grace period around session leaves, per DESIGN.md §"Pending Race Tracking" (line 406), §Session Participants (line 274), and Workflow 5 (line 479).

@@ -33,7 +33,7 @@ OCR work (was Phase 7) is **not** yet milestoned — too speculative to commit t
 
 | Topic | Work chunk | Status | Closed |
 |-------|------------|--------|--------|
-| Docs | Documentation overhaul (renamed from `Special:` for convention consistency, 2026-05-11) | Open — 0 open / 9 closed (ready to close) | — |
+| Docs | Documentation overhaul (renamed from `Special:` for convention consistency, 2026-05-11) | Closed | 2026-05-11 |
 | Hardening | Backend compliance plan — code hygiene, standards conformance, type-driven design, infrastructure (per `compliance-plan.md`) | Open, in progress | — |
 
 ---
@@ -66,13 +66,13 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 
 **Scope.**
 
-- Session lifecycle: create, join, leave, auto-close after inactivity, host transfer on leave.
+- Session lifecycle: create, join, leave, auto-close via race-derived liveness (per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md)), host transfer on leave.
 - Session races: track choice (Random ruleset for MVP), `skip turn` to pass a stalled chooser.
 - Run entry within session context: time, drink type, race setup, DQ flag, optional photo.
-- Pending race tracking: 3-deep UI cap, submit-in-order, skip option, 5-minute grace on disconnect.
+- Pending race tracking: 3-deep UI cap, submit-in-order, skip option, per-race 1-hour expiry (per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md) — replaces the 5-minute disconnect grace originally scoped here).
 - Photo upload (separate endpoint) and auto-flagging for record-breaking runs without photos (per ADR 0025).
 - Supporting APIs: users, drink types, runs, sessions, pre-seeded data reads.
-- Background task: stale session cleanup (Tokio).
+- Background task: stale session cleanup (Tokio) — DB hygiene only per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md); user-facing liveness is derived at read time.
 - Home screen: active sessions list + "Start a Session" primary action + recent runs.
 - Build chore: `justfile` recipes for `dev`, `test`, `entities`, `build`.
 
@@ -90,24 +90,11 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 
 ## Docs — Documentation overhaul
 
-**Status:** Open — 0 open issues / 9 closed. Ready to close when convenient.
+**Status:** Closed 2026-05-11.
 
 **Type:** Workstream (renamed from cup `Special:` on 2026-05-11 — non-product work shouldn't consume cup names per the convention update).
 
-**Goal.** Restructure `docs/` from a few large files into a coherent multi-doc structure: ADRs in `decisions/`, design records in `designs/`, narrative in `roadmap.md` and `design.md`, an operational `project-workflow.md`, and CLAUDE.md files at the right scopes. Settled in [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md).
-
-**Scope.** PRs 1–6 of the docs-restructure design record:
-
-- PR 1 — foundation (project-workflow.md, ADR scaffolding, Issue/PR templates, link-check workflow, `reviews/` migration, data-model extraction). Merged.
-- PR 2 — Resolved Decisions section → 33 ADRs in `decisions/`. Merged.
-- PR 3 — this file + spawn the Star backlog as Issues. (You are reading the result of this PR's first deliverable.)
-- PR 4 — merge `design.md`'s API Surface section into `api-contract.md`; move User Workflows + UI Screens into a new `user-workflows.md`.
-- PR 5 — final `design.md` trim to ~250 lines + repo-root `README.md` + cross-reference cleanup.
-- PR 6 (optional) — nested `backend/CLAUDE.md` and `frontend/CLAUDE.md`.
-
-**Deferred.** Periodic maintenance and follow-up cleanups (e.g., the `lychee` flip-back from `fail: false` → `fail: true` after PR 5) live in their own follow-up Issues, not Docs's scope.
-
-**Success criteria.** New contributors find what they need in under five minutes via the index in `docs/README.md`. Design records are durable; ADRs are searchable by topic; the working checklist lives on the project board, not in markdown.
+Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-hoc review notes, no clear narrative-vs-decision separation) into a coherent multi-doc structure: 34 ADRs in `decisions/` distilled from prior `DESIGN.md` bullets, design records in `designs/` for point-in-time sign-off narratives, the cup-by-cup story in `roadmap.md`, a slimmed `design.md` (~250 lines) for architecture, the operational `project-workflow.md`, an `api-contract.md` for wire-format conventions, a `user-workflows.md` for end-user flows and screens, a `data-model.md` for the schema, and CLAUDE.md files at appropriate scopes (repo root, `backend/`, `frontend/`, `docs/`). All six PRs of [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) landed. The workstream that turned scattered project documentation into something a new contributor can navigate in under five minutes via `docs/README.md`.
 
 [Milestone Docs: Documentation overhaul](https://github.com/brendanbyrne/beerio-kart/milestone/4)
 
