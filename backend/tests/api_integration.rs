@@ -16,6 +16,7 @@ use migration::{Migrator, MigratorTrait};
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set};
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
+use uuid::Uuid;
 
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 
@@ -33,7 +34,8 @@ fn test_config() -> Arc<Config> {
 /// static data seeded. Returns the test server and the underlying DB connection
 /// for direct queries in tests.
 async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
-    let db = Database::connect("sqlite::memory:")
+    let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
+    let db = Database::connect(&url)
         .await
         .expect("Failed to connect to in-memory SQLite");
 

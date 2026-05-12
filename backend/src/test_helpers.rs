@@ -29,12 +29,18 @@ use crate::{
 
 /// Spin up an in-memory `SQLite` database with foreign keys enabled and all
 /// migrations applied. Each call returns a fresh, isolated DB.
+///
+/// The URL uses a unique cache name so pool connections within this test all
+/// see the same DB (per `seaorm.md` § 9), while different tests stay isolated
+/// from each other. Plain `sqlite::memory:?cache=shared` would share one DB
+/// across every test in the process.
 pub async fn setup_db() -> DatabaseConnection {
     use migration::{Migrator, MigratorTrait};
 
-    let db = Database::connect("sqlite::memory:")
+    let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
+    let db = Database::connect(&url)
         .await
-        .expect("connect to sqlite::memory:");
+        .expect("connect to in-memory DB");
     db.execute_unprepared("PRAGMA foreign_keys = ON")
         .await
         .expect("enable foreign keys");

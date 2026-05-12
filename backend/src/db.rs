@@ -53,7 +53,10 @@ pub async fn connect(url: &str) -> Result<DatabaseConnection, DbErr> {
 #[cfg(test)]
 mod tests {
     use migration::{Migrator, MigratorTrait};
-    use sea_orm::{ActiveModelTrait, FromQueryResult, Set, Statement};
+    use sea_orm::{
+        ActiveModelTrait, EntityTrait, FromQueryResult, PaginatorTrait, Set, Statement,
+        TransactionTrait,
+    };
     use uuid::Uuid;
 
     use super::*;
@@ -100,6 +103,36 @@ mod tests {
             result.is_err(),
             "insert with bogus FK should fail when foreign_keys=ON"
         );
+    }
+
+    #[tokio::test]
+    async fn test_shared_cache_schema_visible_across_pool_connections() {
+        // Two concurrent transactions force the pool to hand out two distinct
+        // connections (each `begin()` pins one for the lifetime of the txn).
+        // Both must be able to SELECT from `users` — proving that the
+        // migration ran on connection #1 is visible to connection #2, i.e.
+        // the `cache=shared` URL is working. Without it (or with a plain
+        // `sqlite::memory:` URL), the second connection would open a fresh,
+        // empty in-memory DB and the query would fail with "no such table".
+        let db = shared_memory_db().await;
+
+        let txn_a = db.begin().await.expect("begin txn a");
+        let txn_b = db.begin().await.expect("begin txn b");
+
+        let count_a = users::Entity::find()
+            .count(&txn_a)
+            .await
+            .expect("count via txn a");
+        let count_b = users::Entity::find()
+            .count(&txn_b)
+            .await
+            .expect("count via txn b");
+
+        assert_eq!(count_a, 0);
+        assert_eq!(count_b, 0);
+
+        txn_a.commit().await.expect("commit a");
+        txn_b.commit().await.expect("commit b");
     }
 
     #[tokio::test]
