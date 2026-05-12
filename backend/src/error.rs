@@ -167,7 +167,7 @@ impl From<sea_orm::DbErr> for Error {
 mod tests {
     use std::error::Error as _;
 
-    use sea_orm::{ActiveModelTrait, DbErr, Set};
+    use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, DbErr, Set};
 
     use super::*;
     use crate::{
@@ -206,7 +206,6 @@ mod tests {
         create_user(&db, "alice").await;
 
         // Second insert with the same username triggers UniqueConstraintViolation.
-        let now = chrono::Utc::now().naive_utc();
         let result = users::ActiveModel {
             id: Set(uuid::Uuid::new_v4().to_string()),
             username: Set("alice".to_string()),
@@ -218,8 +217,8 @@ mod tests {
             preferred_glider_id: Set(None),
             preferred_drink_type_id: Set(None),
             refresh_token_version: Set(0),
-            created_at: Set(now),
-            updated_at: Set(now),
+            created_at: NotSet,
+            updated_at: NotSet,
         }
         .insert(&db)
         .await;
@@ -246,7 +245,6 @@ mod tests {
         let db = setup_db().await;
 
         // Insert a user with a preferred_character_id that doesn't exist in characters.
-        let now = chrono::Utc::now().naive_utc();
         let result = users::ActiveModel {
             id: Set(uuid::Uuid::new_v4().to_string()),
             username: Set("bob".to_string()),
@@ -258,8 +256,8 @@ mod tests {
             preferred_glider_id: Set(None),
             preferred_drink_type_id: Set(None),
             refresh_token_version: Set(0),
-            created_at: Set(now),
-            updated_at: Set(now),
+            created_at: NotSet,
+            updated_at: NotSet,
         }
         .insert(&db)
         .await;

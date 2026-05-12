@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use chrono::{DateTime, Utc};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -83,12 +83,12 @@ pub async fn create_drink_type(
         return Ok(Json(existing.into()));
     }
 
-    let now = chrono::Utc::now().naive_utc();
+    // `created_at` is populated by `drink_types::ActiveModelBehavior::before_save`.
     let model = drink_types::ActiveModel {
         id: Set(id),
         name: Set(name),
         alcoholic: Set(req.alcoholic),
-        created_at: Set(now),
+        created_at: NotSet,
         created_by: Set(Some(user.user_id.into_string())),
     };
 

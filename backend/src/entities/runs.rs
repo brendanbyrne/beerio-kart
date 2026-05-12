@@ -152,4 +152,5 @@ impl Related<super::wheels::Entity> for Entity {
     }
 }
 
-impl ActiveModelBehavior for ActiveModel {}
+// `ActiveModelBehavior` for this entity lives in the sibling
+// `runs_behavior.rs` (it stamps `created_at`).

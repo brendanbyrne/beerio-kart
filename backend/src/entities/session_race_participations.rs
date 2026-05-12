@@ -49,4 +49,5 @@ impl Related<super::users::Entity> for Entity {
     }
 }
 
-impl ActiveModelBehavior for ActiveModel {}
+// `ActiveModelBehavior` for this entity lives in the sibling
+// `session_race_participations_behavior.rs` (it stamps `created_at`).

@@ -4,7 +4,10 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter,
+    Set,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -119,11 +122,9 @@ pub async fn register(
     // Hash password (offloaded to the blocking pool, capped by argon2_limit)
     let password_hash = auth_service::hash_password(&state.argon2_limit, body.password).await?;
 
-    // Generate user ID and timestamps
     let user_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().naive_utc();
 
-    // Insert user
+    // Timestamps are populated by `users::ActiveModelBehavior::before_save`.
     let new_user = users::ActiveModel {
         id: Set(user_id.clone()),
         username: Set(username.to_string()),
@@ -135,8 +136,8 @@ pub async fn register(
         preferred_glider_id: Set(None),
         preferred_drink_type_id: Set(None),
         refresh_token_version: Set(0),
-        created_at: Set(now),
-        updated_at: Set(now),
+        created_at: NotSet,
+        updated_at: NotSet,
     };
 
     new_user.insert(&state.db).await?;
@@ -296,11 +297,11 @@ pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl In
             Error::Internal(anyhow::anyhow!("Authenticated user not found in database"))
         })?;
 
-    // Increment version to invalidate all existing refresh tokens
+    // Increment version to invalidate all existing refresh tokens.
+    // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
     let new_version = db_user.refresh_token_version + 1;
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.refresh_token_version = Set(new_version);
-    active.updated_at = Set(chrono::Utc::now().naive_utc());
 
     active.update(&state.db).await?;
 
@@ -359,14 +360,14 @@ pub async fn change_password(
     // Hash new password
     let new_hash = auth_service::hash_password(&state.argon2_limit, body.new_password).await?;
 
-    // Update password and bump version (invalidates all other sessions)
+    // Update password and bump version (invalidates all other sessions).
+    // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
     let new_version = db_user.refresh_token_version + 1;
     let username = db_user.username.clone();
     let user_id = db_user.id.clone();
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.password_hash = Set(new_hash);
     active.refresh_token_version = Set(new_version);
-    active.updated_at = Set(chrono::Utc::now().naive_utc());
 
     active.update(&state.db).await?;
 
