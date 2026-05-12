@@ -147,6 +147,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-C1 (`AppError::BadRequest` for parse failures).
 - **Risk:** Medium. Long diff; each conversion site is a chance to break.
 - **Verification:** All tests pass. API contract unchanged (verified by running through a few endpoints manually and confirming request/response shapes are identical).
+- **Tracking:** Issue [#122](https://github.com/brendanbyrne/beerio-kart/issues/122).
 - **Sign-off:** [ ]
 
 ### PR-D2: Validated string newtypes
@@ -160,6 +161,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-D1.
 - **Risk:** Medium — moving validation from services to constructors means a few code paths change which type the parse error materializes from. Existing `AppError::BadRequest` text should be preserved or improved.
 - **Verification:** Tests cover happy + invalid cases for each newtype.
+- **Tracking:** Issue [#133](https://github.com/brendanbyrne/beerio-kart/issues/133).
 - **Sign-off:** [ ]
 
 ### PR-D3: Convert string-typed enums to `DeriveActiveEnum`
@@ -174,6 +176,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-D1.
 - **Risk:** Low. The DB still stores TEXT; the change is in Rust.
 - **Verification:** Match arms over the new enums are exhaustive (compiler enforces); existing string-comparison code is gone.
+- **Tracking:** Issue [#120](https://github.com/brendanbyrne/beerio-kart/issues/120).
 - **Sign-off:** [ ]
 
 ### PR-D4: Numeric domain types
@@ -187,6 +190,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-D1.
 - **Risk:** Low.
 - **Verification:** Existing run-time validation tests pass; the function `assert_lap_sum(laps: [LapTimeMs; 3], total: RaceTimeMs)` is the new invariant point.
+- **Tracking:** Issue [#119](https://github.com/brendanbyrne/beerio-kart/issues/119).
 - **Sign-off:** [ ]
 
 ---
@@ -203,6 +207,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-A2 (audit identifies which entities need this).
 - **Risk:** Low. Centralizing behavior reduces bugs, doesn't introduce them.
 - **Verification:** Tests confirm `updated_at` advances on update; integration test inserts a row and reads back the timestamp.
+- **Tracking:** Issue [#137](https://github.com/brendanbyrne/beerio-kart/issues/137).
 - **Sign-off:** [ ]
 
 ### PR-E2: Audit `&impl ConnectionTrait` usage
@@ -215,7 +220,8 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-A2 (audit identifies the offenders).
 - **Risk:** Low. Generic bound is a strict superset of `&DatabaseConnection`.
 - **Verification:** Compiler. After the change, every service can be called from inside a transaction.
-- **Sign-off:** [ ]
+- **Tracking:** Issues [#104](https://github.com/brendanbyrne/beerio-kart/issues/104) (services/runs.rs) and [#118](https://github.com/brendanbyrne/beerio-kart/issues/118) (services/sessions.rs + services/users.rs). Split into two sub-PRs per audit scope.
+- **Sign-off:** [x] Completed 2026-05-11 (#104 and #118 both closed).
 
 ### PR-E3: Drop `sessions.created_by`
 
@@ -250,6 +256,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** None.
 - **Risk:** Medium — first time shutdown is exercised end-to-end. Test on Unraid before tagging release.
 - **Verification:** Send SIGTERM during a long-running request; confirm in-flight requests complete (or the timeout triggers cleanly).
+- **Tracking:** Issue [#124](https://github.com/brendanbyrne/beerio-kart/issues/124).
 - **Sign-off:** [ ]
 
 ### PR-F2: Implement `session_cleanup_loop` as a tracked background task
@@ -263,6 +270,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-F1, PR-D3 (`SessionStatus` enum).
 - **Risk:** Low.
 - **Verification:** Insert a session with `last_activity_at` 2h ago; let the cleanup tick fire; confirm status flipped to `closed`.
+- **Tracking:** Issue [#58](https://github.com/brendanbyrne/beerio-kart/issues/58) (open; cross-milestone in `Star: Sessions & Run Recording` since this PR is both a tokio.md compliance task and a Star-cup feature).
 - **Sign-off:** [ ]
 
 ### PR-F3: Tower middleware — request limits
@@ -275,6 +283,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** None.
 - **Risk:** Medium — rate limiter could falsely throttle. Start permissive; tighten with metrics.
 - **Verification:** `curl --data-binary @big-file` against an upload endpoint past the size limit returns 413; concurrent request flood returns 503/429.
+- **Tracking:** Issue [#132](https://github.com/brendanbyrne/beerio-kart/issues/132).
 - **Sign-off:** [ ]
 
 ### PR-F4: Per-call timeouts on DB and external calls
@@ -288,6 +297,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-C1 (AppError shape stable).
 - **Risk:** Medium. Timeouts that fire under load are operational pain; need monitoring before tightening.
 - **Verification:** Force a SQLite lock (long write transaction in another connection); confirm the blocked query times out cleanly with the configured budget.
+- **Tracking:** Issue [#123](https://github.com/brendanbyrne/beerio-kart/issues/123).
 - **Sign-off:** [ ]
 
 ### PR-F5: `#[tracing::instrument]` audit on services and handlers
@@ -301,6 +311,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** None. Could land in parallel with most Stream D/E PRs.
 - **Risk:** Low. Adds tracing spans; no behavior change.
 - **Verification:** Run with `RUST_LOG=info,beerio_kart=debug`; hit a handler that traverses two service calls and confirm log lines from inside both nested spans carry the parent's `user_id` / `session_id` fields.
+- **Tracking:** Issue [#127](https://github.com/brendanbyrne/beerio-kart/issues/127).
 - **Sign-off:** [ ]
 - **Why this exists:** Surfaced during PR-27 (Argon2 spawn_blocking) review. The reviewer correctly flagged that the new async helpers lack `#[tracing::instrument]` — a real `tokio.md` § 10 violation — but scoped it out of PR-27 because no other public async fn in `services/` or `routes/` is annotated either. That's the right call for one PR, the wrong outcome long-term: the gap won't fix itself. This row makes it a tracked work item.
 
@@ -318,6 +329,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** None.
 - **Risk:** Low.
 - **Verification:** Existing tests pass. Add one test that exercises pool size > 1 to confirm tables remain visible across connections.
+- **Tracking:** Issue [#138](https://github.com/brendanbyrne/beerio-kart/issues/138).
 - **Sign-off:** [ ]
 
 ### PR-G2: Add `rstest`, `proptest`, `insta` as dev-dependencies
@@ -332,6 +344,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** None.
 - **Risk:** Low.
 - **Verification:** Demo tests pass. `insta accept` workflow works.
+- **Tracking:** Issue [#136](https://github.com/brendanbyrne/beerio-kart/issues/136).
 - **Sign-off:** [ ]
 
 ### PR-G3: Doc-comment audit
@@ -347,7 +360,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Risk:** Low.
 - **Verification:** `cargo doc --no-deps` produces clean output; spot-check that summary tables are readable.
 - **Tracking:** Issue [#114](https://github.com/brendanbyrne/beerio-kart/issues/114).
-- **Sign-off:** [ ]
+- **Sign-off:** [x] Closed 2026-05-11 via #114.
 
 ### PR-G4: File-length splits
 
@@ -359,6 +372,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-A2 (audit confirms which files need it).
 - **Risk:** Medium — lots of `pub(crate)` boundary changes; the compiler will catch most issues but ergonomic shifts may surface.
 - **Verification:** Tests pass; `git mv` history is preserved where possible.
+- **Tracking:** Issue [#129](https://github.com/brendanbyrne/beerio-kart/issues/129).
 - **Sign-off:** [ ]
 
 ---
@@ -393,6 +407,7 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** Doc split lands (already done).
 - **Risk:** Low.
 - **Verification:** Run the skill on a sample PR; confirm it reads the right files.
+- **Tracking:** Issue [#131](https://github.com/brendanbyrne/beerio-kart/issues/131).
 - **Sign-off:** [ ]
 
 ---
@@ -492,3 +507,7 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-11 — PR-H1+ (d) Issue [#103](https://github.com/brendanbyrne/beerio-kart/issues/103) closed via PR #112 (renamed 13 sites for `module_name_repetitions`: `App*` prefix dropped, `list_<resource>` shortened to `list`; fixed 6 cast sites by changing `Config.jwt_*_expiry` field types from `u64` to `i64` and propagating invariant violations as `Error::Internal` instead of silent fallbacks).
 - 2026-05-11 — PR-H1+ (e) Issue [#98](https://github.com/brendanbyrne/beerio-kart/issues/98) verified clean without code changes. PR-A1 (#24) never added module-level allows for `clippy::nursery` (verified by `gh pr diff 24` and `grep -rn "allow.*clippy" backend/src`); `nursery = "warn"` is enabled workspace-wide and the codebase has zero nursery-lint violations. Closes the PR-H1+ tracking parent [#95](https://github.com/brendanbyrne/beerio-kart/issues/95).
 - 2026-05-11 — Filed Issue [#114](https://github.com/brendanbyrne/beerio-kart/issues/114) tracking PR-G3 (doc-comment audit). Scoped to four lints (`missing_errors_doc`, `doc_markdown`, `missing_panics_doc`, `too_long_first_doc_paragraph`) and the 149 sites they surface as of today. Added Tracking line to PR-G3 row; added a note on the D1/D2 dependency relaxation since the Issue body discusses both pickup options.
+- 2026-05-11 — Marked PR-G3 sign-off complete (closed earlier today via [#114](https://github.com/brendanbyrne/beerio-kart/issues/114)). Checkbox had been stale on the row.
+- 2026-05-11 — Marked PR-E2 sign-off complete. Implementation split into [#104](https://github.com/brendanbyrne/beerio-kart/issues/104) (services/runs.rs) and [#118](https://github.com/brendanbyrne/beerio-kart/issues/118) (services/sessions.rs + services/users.rs); both closed today. Added Tracking line to PR-E2 row.
+- 2026-05-11 — Added Tracking line to PR-F2 pointing at Issue [#58](https://github.com/brendanbyrne/beerio-kart/issues/58). Cross-milestone (`Star: Sessions & Run Recording`) since the cleanup loop is both a tokio.md compliance task and a Star-cup feature; matches the placement noted in the Issue body.
+- 2026-05-11 — Filed 13 tracking Issues for previously-untracked compliance-plan PRs, all in the `Hardening: Backend compliance plan` milestone with the `enhancement` label: PR-D1 [#122](https://github.com/brendanbyrne/beerio-kart/issues/122), PR-D2 [#133](https://github.com/brendanbyrne/beerio-kart/issues/133), PR-D3 [#120](https://github.com/brendanbyrne/beerio-kart/issues/120), PR-D4 [#119](https://github.com/brendanbyrne/beerio-kart/issues/119), PR-E1 [#137](https://github.com/brendanbyrne/beerio-kart/issues/137), PR-F1 [#124](https://github.com/brendanbyrne/beerio-kart/issues/124), PR-F3 [#132](https://github.com/brendanbyrne/beerio-kart/issues/132), PR-F4 [#123](https://github.com/brendanbyrne/beerio-kart/issues/123), PR-F5 [#127](https://github.com/brendanbyrne/beerio-kart/issues/127), PR-G1 [#138](https://github.com/brendanbyrne/beerio-kart/issues/138), PR-G2 [#136](https://github.com/brendanbyrne/beerio-kart/issues/136), PR-G4 [#129](https://github.com/brendanbyrne/beerio-kart/issues/129), PR-I1 [#131](https://github.com/brendanbyrne/beerio-kart/issues/131). Each PR row now carries a Tracking line for parity with PR-C2 / PR-G3. The remaining unticked rows are PR-D1–D4, PR-E1, PR-F1–F5, PR-G1–G2, PR-G4, PR-I1 — every incomplete row now has either an open Issue or a clear note (PR-F2's cross-milestone exception).
