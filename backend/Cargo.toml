@@ -46,9 +46,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-# `limit` for ConcurrencyLimitLayer (request-level limit per tokio.md § 12).
-# Timeout uses `tower-http`'s HTTP-aware version — see main.rs for why.
-tower = { version = "0.5", features = ["limit"] }
+# `limit` for ConcurrencyLimitLayer, `load-shed` for LoadShedLayer (turns
+# ConcurrencyLimit's "queue indefinitely" into "shed with Overloaded" so the
+# stack returns 503 on saturation instead of hanging). Timeout uses
+# `tower-http`'s HTTP-aware version — see main.rs for why.
+tower = { version = "0.5", features = ["limit", "load-shed"] }
 # `limit` pulls in RequestBodyLimitLayer; `timeout` pulls in TimeoutLayer
 # (the HTTP-aware sibling of `tower::timeout` — see main.rs comment).
 tower-http = { version = "0.6", features = ["trace", "fs", "limit", "timeout"] }

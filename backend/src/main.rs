@@ -4,14 +4,20 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use axum::{
-    Json, Router,
+    BoxError, Json, Router,
+    error_handling::HandleErrorLayer,
+    http::StatusCode,
     routing::{get, post, put},
 };
-use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::Config, db, routes, services};
+use beerio_kart::{
+    ARGON2_MAX_CONCURRENT, AppState,
+    config::{self, Config},
+    db, routes, services,
+};
 use migration::{Migrator, MigratorTrait};
 use serde::Serialize;
 use tokio::sync::Semaphore;
-use tower::limit::ConcurrencyLimitLayer;
+use tower::{ServiceBuilder, limit::ConcurrencyLimitLayer, load_shed::LoadShedLayer};
 use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 // `tower::timeout::TimeoutLayer` (cited in tokio.md § 12) produces a service
 // whose error type is `BoxError`, which `axum::Router::layer` refuses because
@@ -93,22 +99,28 @@ async fn main() -> anyhow::Result<()> {
     // If we ever sit behind a *trusted* reverse proxy, swap to
     // `SmartIpKeyExtractor` so the limit keys on the real client IP via
     // `X-Forwarded-For` / `X-Real-IP` instead of the proxy's address.
-    let per_second = std::cmp::max(1, u64::from(rate_limit_per_minute) / 60);
+    //
+    // Period (not rate) goes into `per_millisecond` — see
+    // `config::governor_period_ms` for the math + unit tests.
     let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(per_second)
+            .per_millisecond(config::governor_period_ms(rate_limit_per_minute))
             .burst_size(rate_limit_per_minute)
             .finish()
-            .context("invalid rate-limit config")?,
+            .context("Invalid rate-limit config")?,
     );
     // The governor caches one entry per observed IP. Without periodic
     // pruning, that map grows unbounded across the process lifetime; the
     // standard `retain_recent()` cleanup loop is from `tower-governor`'s
-    // README. The background thread lives for the process lifetime.
+    // README. Uses `tokio::time::interval` with `MissedTickBehavior::Skip`
+    // (tokio.md § 8) — same pattern as the stale-session loop below, and
+    // a real OS thread is overkill for a once-a-minute janitor.
     let governor_limiter = governor_conf.limiter().clone();
-    std::thread::spawn(move || {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(60));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            std::thread::sleep(Duration::from_secs(60));
+            tick.tick().await;
             governor_limiter.retain_recent();
         }
     });
@@ -195,16 +207,36 @@ async fn main() -> anyhow::Result<()> {
         )
         // Request-shape limits (tokio.md § 12). Order is request-flow:
         // trace wraps everything (so rejections are still logged), governor
-        // is next so abusive IPs lose nothing else, body-size and
-        // concurrency reject before any handler work, timeout is innermost
-        // so it budgets the actual handler — not the wait for a permit.
-        // `.layer()` adds layers as outer wrappers, so the last call is the
-        // outermost: in code order, innermost first.
+        // sheds abusive IPs, body-size rejects huge POSTs, then the
+        // concurrency cap + load-shed pair turn "would queue" into a 503,
+        // and timeout is innermost so it budgets the handler itself.
+        // `.layer()` adds layers as outer wrappers, so the last call is
+        // the outermost: in code order, innermost first.
+        //
+        // Saturation trade-off: `ConcurrencyLimitLayer` alone *queues* on
+        // saturation — the 101st in-flight request hangs until the client
+        // disconnects. `LoadShedLayer` makes the inner service return
+        // `Overloaded` when no permit is available; `HandleErrorLayer`
+        // maps that to 503. Net: under load, request #101 sees an
+        // immediate 503 instead of an indefinite wait. Matches the Issue's
+        // "503/429" verification contract.
         .layer(TimeoutLayer::with_status_code(
-            axum::http::StatusCode::REQUEST_TIMEOUT,
+            StatusCode::REQUEST_TIMEOUT,
             request_timeout,
         ))
-        .layer(ConcurrencyLimitLayer::new(concurrency_limit))
+        // ConcurrencyLimit alone *queues* on saturation. Wrap it with
+        // LoadShed (returns `Overloaded` when no permit is available) and
+        // HandleError (maps `Overloaded` to 503). ServiceBuilder composes
+        // the three into one stack whose top-level error type is `Infallible`
+        // — axum's `Router::layer` requires that, which is why this group
+        // is bundled into a ServiceBuilder instead of three separate
+        // `.layer()` calls.
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(handle_load_shed_error))
+                .layer(LoadShedLayer::new())
+                .layer(ConcurrencyLimitLayer::new(concurrency_limit)),
+        )
         .layer(RequestBodyLimitLayer::new(max_body_bytes))
         .layer(GovernorLayer {
             config: governor_conf,
@@ -252,4 +284,17 @@ async fn hello() -> Json<HelloResponse> {
     Json(HelloResponse {
         message: "Hello from Beerio Kart!".to_string(),
     })
+}
+
+/// Translate the only error type expected to reach `HandleErrorLayer` —
+/// `tower::load_shed::error::Overloaded` from `LoadShedLayer` — into a 503.
+/// Anything else is a programming bug (no other layer above this one errors),
+/// so map it to 500 rather than panic.
+async fn handle_load_shed_error(err: BoxError) -> (StatusCode, &'static str) {
+    if err.is::<tower::load_shed::error::Overloaded>() {
+        (StatusCode::SERVICE_UNAVAILABLE, "Service overloaded")
+    } else {
+        tracing::error!(error = %err, "unexpected error reached load-shed handler");
+        (StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    }
 }
