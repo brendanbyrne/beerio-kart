@@ -233,6 +233,10 @@ mod tests {
             jwt_refresh_expiry_days: 7,
             admin_user_id: None,
             cookie_secure: false,
+            request_timeout_seconds: 30,
+            request_concurrency_limit: 100,
+            max_request_body_bytes: 10 * 1024 * 1024,
+            rate_limit_per_minute: 60,
         })
     }
 
@@ -397,6 +401,10 @@ mod tests {
             jwt_refresh_expiry_days: 7,
             admin_user_id: None,
             cookie_secure: false,
+            request_timeout_seconds: 30,
+            request_concurrency_limit: 100,
+            max_request_body_bytes: 10 * 1024 * 1024,
+            rate_limit_per_minute: 60,
         });
 
         assert!(validate_access_token(&token, &wrong_config).is_err());
@@ -416,6 +424,10 @@ mod tests {
             jwt_refresh_expiry_days: 7,
             admin_user_id: None,
             cookie_secure: false,
+            request_timeout_seconds: 30,
+            request_concurrency_limit: 100,
+            max_request_body_bytes: 10 * 1024 * 1024,
+            rate_limit_per_minute: 60,
         });
         let token = create_access_token("user-1", "alice", &config).unwrap();
         let claims = validate_access_token(&token, &config).unwrap();
@@ -433,6 +445,10 @@ mod tests {
             jwt_refresh_expiry_days: 7,
             admin_user_id: None,
             cookie_secure: true,
+            request_timeout_seconds: 30,
+            request_concurrency_limit: 100,
+            max_request_body_bytes: 10 * 1024 * 1024,
+            rate_limit_per_minute: 60,
         });
         let cookie = refresh_cookie("tok123", 3600, &config);
         assert!(cookie.contains("HttpOnly"));
@@ -450,6 +466,10 @@ mod tests {
             jwt_refresh_expiry_days: 7,
             admin_user_id: None,
             cookie_secure: false,
+            request_timeout_seconds: 30,
+            request_concurrency_limit: 100,
+            max_request_body_bytes: 10 * 1024 * 1024,
+            rate_limit_per_minute: 60,
         });
         let cookie = refresh_cookie("tok123", 3600, &config);
         assert!(!cookie.contains("Secure"));

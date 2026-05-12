@@ -1,6 +1,6 @@
 mod seed;
 
-use std::{sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use axum::{
@@ -11,8 +11,18 @@ use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::Config, db, routes, s
 use migration::{Migrator, MigratorTrait};
 use serde::Serialize;
 use tokio::sync::Semaphore;
+use tower::limit::ConcurrencyLimitLayer;
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+// `tower::timeout::TimeoutLayer` (cited in tokio.md § 12) produces a service
+// whose error type is `BoxError`, which `axum::Router::layer` refuses because
+// it needs `Into<Infallible>`. `tower_http::timeout::TimeoutLayer` is the
+// HTTP-aware sibling: on elapsed it returns a real `408 Request Timeout`
+// response, which is the right user-facing behavior anyway. Functionally
+// satisfies the same "cap per-request wall time" rule.
 use tower_http::{
+    limit::RequestBodyLimitLayer,
     services::{ServeDir, ServeFile},
+    timeout::TimeoutLayer,
     trace::TraceLayer,
 };
 use tracing_subscriber::EnvFilter;
@@ -60,6 +70,13 @@ async fn main() -> anyhow::Result<()> {
     seed::run(&db).await.context("Seeding database")?;
     tracing::info!("Seeding complete");
 
+    // Snapshot the limit knobs before `config` is moved into `state`. These
+    // power the Tower middleware stack below.
+    let request_timeout = Duration::from_secs(config.request_timeout_seconds);
+    let concurrency_limit = config.request_concurrency_limit;
+    let max_body_bytes = config.max_request_body_bytes;
+    let rate_limit_per_minute = config.rate_limit_per_minute;
+
     let state = AppState {
         db,
         config,
@@ -69,6 +86,32 @@ async fn main() -> anyhow::Result<()> {
     // Clone the DB connection for the background cleanup task before `state`
     // is moved into the router.
     let cleanup_db = state.db.clone();
+
+    // Per-peer-IP rate limit. The default `PeerIpKeyExtractor` reads the
+    // remote address from the `ConnectInfo<SocketAddr>` extension, so the
+    // server below must be served via `into_make_service_with_connect_info`.
+    // If we ever sit behind a *trusted* reverse proxy, swap to
+    // `SmartIpKeyExtractor` so the limit keys on the real client IP via
+    // `X-Forwarded-For` / `X-Real-IP` instead of the proxy's address.
+    let per_second = std::cmp::max(1, u64::from(rate_limit_per_minute) / 60);
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(per_second)
+            .burst_size(rate_limit_per_minute)
+            .finish()
+            .context("invalid rate-limit config")?,
+    );
+    // The governor caches one entry per observed IP. Without periodic
+    // pruning, that map grows unbounded across the process lifetime; the
+    // standard `retain_recent()` cleanup loop is from `tower-governor`'s
+    // README. The background thread lives for the process lifetime.
+    let governor_limiter = governor_conf.limiter().clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_secs(60));
+            governor_limiter.retain_recent();
+        }
+    });
 
     // STATIC_DIR defaults to ../frontend/dist for local dev (running from backend/).
     // In Docker, set to /app/static where the built frontend is copied.
@@ -150,6 +193,22 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/runs/{id}",
             get(routes::runs::get_run).delete(routes::runs::delete_run),
         )
+        // Request-shape limits (tokio.md § 12). Order is request-flow:
+        // trace wraps everything (so rejections are still logged), governor
+        // is next so abusive IPs lose nothing else, body-size and
+        // concurrency reject before any handler work, timeout is innermost
+        // so it budgets the actual handler — not the wait for a permit.
+        // `.layer()` adds layers as outer wrappers, so the last call is the
+        // outermost: in code order, innermost first.
+        .layer(TimeoutLayer::with_status_code(
+            axum::http::StatusCode::REQUEST_TIMEOUT,
+            request_timeout,
+        ))
+        .layer(ConcurrencyLimitLayer::new(concurrency_limit))
+        .layer(RequestBodyLimitLayer::new(max_body_bytes))
+        .layer(GovernorLayer {
+            config: governor_conf,
+        })
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         // Serve frontend static files. If no API route or static file matches,
@@ -176,9 +235,15 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("Binding TCP listener on 0.0.0.0:3000")?;
     tracing::info!("Listening on http://localhost:3000");
-    axum::serve(listener, app)
-        .await
-        .context("HTTP server returned an error")?;
+    // `into_make_service_with_connect_info::<SocketAddr>` populates the
+    // `ConnectInfo<SocketAddr>` request extension that `tower-governor`'s
+    // `PeerIpKeyExtractor` reads to bucket rate-limit counters per IP.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .context("HTTP server returned an error")?;
 
     Ok(())
 }
