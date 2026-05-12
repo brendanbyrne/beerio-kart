@@ -14,6 +14,7 @@ use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectionTrait, Database};
 use serde_json::Value;
 use tokio::sync::Semaphore;
+use uuid::Uuid;
 
 const TEST_SECRET: &str = "middleware-test-secret";
 
@@ -38,7 +39,8 @@ fn make_config(admin_user_id: Option<&str>) -> Arc<Config> {
 }
 
 async fn setup_server(admin_user_id: Option<&str>) -> TestServer {
-    let db = Database::connect("sqlite::memory:").await.expect("connect");
+    let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
+    let db = Database::connect(&url).await.expect("connect");
     db.execute_unprepared("PRAGMA foreign_keys = ON")
         .await
         .expect("pragma");

@@ -34,7 +34,11 @@ async fn protected_hello(user: beerio_kart::middleware::auth::User) -> axum::Jso
 
 /// Create a fresh in-memory `SQLite` database with all migrations applied.
 async fn setup_test_app() -> TestServer {
-    let db = Database::connect("sqlite::memory:")
+    let url = format!(
+        "sqlite:file:{}?mode=memory&cache=shared",
+        uuid::Uuid::new_v4()
+    );
+    let db = Database::connect(&url)
         .await
         .expect("Failed to connect to in-memory SQLite");
 

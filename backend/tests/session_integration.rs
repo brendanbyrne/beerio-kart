@@ -38,7 +38,8 @@ fn test_config() -> Arc<Config> {
 }
 
 async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
-    let db = Database::connect("sqlite::memory:")
+    let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
+    let db = Database::connect(&url)
         .await
         .expect("Failed to connect to in-memory SQLite");
 
