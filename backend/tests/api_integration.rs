@@ -275,12 +275,12 @@ async fn register_and_get_token(server: &TestServer, username: &str) -> (String,
 // still surfaces as its own line in `cargo test` output via the
 // auto-generated suffix (e.g. `test_list_endpoint_returns_seeded_count::case_1`).
 #[rstest]
-#[case("/api/v1/characters", 50)]
-#[case("/api/v1/bodies", 41)]
-#[case("/api/v1/wheels", 22)]
-#[case("/api/v1/gliders", 15)]
-#[case("/api/v1/cups", 24)]
-#[case("/api/v1/tracks", 96)]
+#[case::characters("/api/v1/characters", 50)]
+#[case::bodies("/api/v1/bodies", 41)]
+#[case::wheels("/api/v1/wheels", 22)]
+#[case::gliders("/api/v1/gliders", 15)]
+#[case::cups("/api/v1/cups", 24)]
+#[case::tracks("/api/v1/tracks", 96)]
 #[tokio::test]
 async fn test_list_endpoint_returns_seeded_count(#[case] endpoint: &str, #[case] expected: usize) {
     let (server, _db) = setup_test_app().await;
