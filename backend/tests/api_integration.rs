@@ -273,7 +273,7 @@ async fn register_and_get_token(server: &TestServer, username: &str) -> (String,
 // table-driven case. Adding a new game-data list endpoint here is one
 // `#[case]` line, not a fresh ~12-line `#[tokio::test]` clone. Each case
 // still surfaces as its own line in `cargo test` output via the
-// auto-generated suffix (e.g. `test_list_endpoint_returns_seeded_count::case_1`).
+// auto-generated suffix (e.g. `test_list_endpoint_returns_seeded_count::case_1_characters`).
 #[rstest]
 #[case::characters("/api/v1/characters", 50)]
 #[case::bodies("/api/v1/bodies", 41)]
