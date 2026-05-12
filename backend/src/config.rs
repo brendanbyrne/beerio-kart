@@ -107,3 +107,41 @@ where
         .filter(|v| *v > T::from(0u8))
         .unwrap_or(default)
 }
+
+/// Convert `rate_limit_per_minute` into the millisecond interval between token
+/// replenishments expected by `tower_governor::GovernorConfigBuilder`.
+///
+/// The builder's `per_second` / `per_millisecond` set the *interval between
+/// replenishments*, not the rate — see `tower_governor-0.7.0/src/governor.rs:183`:
+/// "Set the interval after which one element of the quota is replenished".
+/// At sub-second rates that interval needs ms granularity (e.g. 120/min = 500
+/// ms between tokens), so this PR uses `per_millisecond` exclusively rather
+/// than the `per_second` form, which silently rounds to 1 s for any value
+/// `per_minute > 60`.
+///
+/// Clamp to `max(1)` on both the divisor (zero would div-by-zero) and the
+/// result (a sub-millisecond interval is meaningless on real hardware).
+#[must_use]
+pub fn governor_period_ms(per_minute: u32) -> u64 {
+    (60_000_u64 / u64::from(per_minute.max(1))).max(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::default_60_per_min(60, 1000)]
+    #[case::tight_10_per_min(10, 6000)]
+    #[case::loose_120_per_min(120, 500)]
+    #[case::sustained_30_per_min(30, 2000)]
+    #[case::zero_clamps(0, 60_000)]
+    fn governor_period_ms_maps_per_minute_to_interval(
+        #[case] per_minute: u32,
+        #[case] expected_ms: u64,
+    ) {
+        assert_eq!(governor_period_ms(per_minute), expected_ms);
+    }
+}
