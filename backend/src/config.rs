@@ -22,6 +22,23 @@ pub struct Config {
     /// Controls the `Secure` flag on the refresh cookie. Must be `false` for
     /// local `http://localhost` development, `true` in production behind HTTPS.
     pub cookie_secure: bool,
+
+    // Request-level limits applied via Tower middleware. All four are env-tunable
+    // so they can be adjusted from Unraid without a redeploy. See `tokio.md` § 12.
+    /// Hard ceiling on how long any single request can take, end-to-end. After
+    /// this elapses the response becomes 408. Doesn't replace the per-call
+    /// timeouts inside service code — defense in depth.
+    pub request_timeout_seconds: u64,
+    /// Cap on concurrent in-flight requests across the whole router. Requests
+    /// past this limit wait for a permit; this is upstream of the handler.
+    pub request_concurrency_limit: usize,
+    /// Max request body size in bytes. Rejected with 413 before the body is
+    /// fully read. Default matches the 10 MiB upload cap from `design.md`.
+    pub max_request_body_bytes: usize,
+    /// Per-peer-IP rate limit, in requests per minute. Used as both the
+    /// sustained rate and the burst capacity (`per_second = max(1, n / 60)`,
+    /// `burst_size = n`). Excess requests get 429.
+    pub rate_limit_per_minute: u32,
 }
 
 impl Config {
@@ -58,12 +75,35 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(true);
 
+        let request_timeout_seconds = parse_positive_env("REQUEST_TIMEOUT_SECONDS", 30);
+        let request_concurrency_limit = parse_positive_env("REQUEST_CONCURRENCY_LIMIT", 100);
+        let max_request_body_bytes = parse_positive_env("MAX_REQUEST_BODY_BYTES", 10 * 1024 * 1024);
+        let rate_limit_per_minute = parse_positive_env("RATE_LIMIT_PER_MINUTE", 60);
+
         Ok(Arc::new(Self {
             jwt_secret,
             jwt_access_expiry_minutes,
             jwt_refresh_expiry_days,
             admin_user_id,
             cookie_secure,
+            request_timeout_seconds,
+            request_concurrency_limit,
+            max_request_body_bytes,
+            rate_limit_per_minute,
         }))
     }
+}
+
+/// Parse a positive integer from the named env var, falling back to `default`
+/// on missing, unparseable, or zero values. Used for limits where zero or
+/// negative would silently disable the protection.
+fn parse_positive_env<T>(name: &str, default: T) -> T
+where
+    T: std::str::FromStr + PartialOrd + From<u8>,
+{
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse::<T>().ok())
+        .filter(|v| *v > T::from(0u8))
+        .unwrap_or(default)
 }

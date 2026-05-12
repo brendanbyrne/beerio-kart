@@ -388,7 +388,8 @@ The 5-minute "close stale sessions" task is the canonical example for this proje
     ```
   - **Pitfall:** Writing `let _ = limiter.acquire().await?;` with a bare `_` instead of `_permit` drops the permit *immediately* — the limiter becomes a no-op. Always name the binding.
 
-- **Rule:** Use Tower middleware for request-level limits: `tower::timeout::TimeoutLayer`, `tower::limit::ConcurrencyLimitLayer`, `tower_http::limit::RequestBodyLimitLayer`.
+- **Rule:** Use Tower middleware for request-level limits: `tower_http::timeout::TimeoutLayer` (via `TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, ...)`), `tower::limit::ConcurrencyLimitLayer`, `tower_http::limit::RequestBodyLimitLayer`.
+  - **Why timeout comes from `tower-http`, not `tower`:** `tower::timeout::TimeoutLayer` produces a service whose error type is `tower::BoxError`. Axum's `Router::layer` requires `Error: Into<Infallible>` (Axum converts errors into responses *itself*; the layer can't fail at the service-error level). `tower-http`'s HTTP-aware version maps elapsed timeouts to a real `408 Request Timeout` response, which is the right user-facing behavior and satisfies the bound.
 
 - **Rule:** For rate limiting, use `tower-governor`, not `tower::limit::RateLimitLayer`.
   - **Why:** `RateLimitLayer` produces a service that isn't `Clone`, which Axum requires. Wrapping it in `BufferLayer` defeats the purpose.
@@ -480,3 +481,4 @@ Anyone modifying async code in this repo should have read at least the first thr
 - 2026-05-02 — Initial draft as part of `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into `docs/coding-standards/tokio.md`. Added `'static` discussion + scoped-task-trilemma reference in § 9. Held § 12 timeout rule strict (per project's "no corner cutting" stance). Took position on async traits in § 11 (native + trait-variant for spawn).
 - 2026-05-04 — § 12 semaphore example: switched from `let permit = …; drop(permit);` to the idiomatic `let _permit = …;` RAII binding, and added a pitfall callout for the bare-`_` foot-gun. Surfaced during PR #27 review (back-and-forth on which form to use); the explicit-drop form was the anti-RAII pattern. Standard now matches what idiomatic Rust would write.
+- 2026-05-12 — § 12 request-level limits rule: corrected the timeout layer from `tower::timeout::TimeoutLayer` to `tower_http::timeout::TimeoutLayer` (constructed via `TimeoutLayer::with_status_code`). The tower version's `BoxError` doesn't compose with `axum::Router::layer`, which requires `Error: Into<Infallible>`. Added a "Why" paragraph explaining the bound + the cleaner 408-response behavior of the tower-http sibling. Surfaced while implementing PR-F3 ([#132](https://github.com/brendanbyrne/beerio-kart/issues/132)) — the original rule didn't compile.
