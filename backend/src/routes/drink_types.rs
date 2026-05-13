@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    domain::{DrinkTypeId, UserId},
+    domain::{DrinkTypeId, DrinkTypeName, UserId},
     drink_type_id::drink_type_uuid,
     entities::drink_types,
     error::Error,
@@ -66,7 +66,7 @@ pub struct Filters {
 ///
 /// # Errors
 ///
-/// Returns `BadRequest` if the trimmed name is empty or >200 chars;
+/// Returns `BadRequest` if the trimmed name isn't 1-200 characters;
 /// `Internal` for unexpected DB failures.
 #[tracing::instrument(
     skip_all,
@@ -77,18 +77,11 @@ pub async fn create_drink_type(
     State(state): State<AppState>,
     Json(req): Json<CreateDrinkTypeRequest>,
 ) -> Result<Json<DrinkTypeResponse>, Error> {
-    let name = req.name.trim().to_string();
-    if name.is_empty() {
-        return Err(Error::bad_request("Drink type name cannot be empty"));
-    }
-    if name.len() > 200 {
-        return Err(Error::bad_request(
-            "Drink type name must be 200 characters or fewer",
-        ));
-    }
+    let name = DrinkTypeName::try_from(req.name)
+        .map_err(|_| Error::bad_request("Drink type name must be 1-200 characters"))?;
 
     // Deterministic UUID from uppercased name — case-insensitive dedup
-    let id = drink_type_uuid(&name);
+    let id = drink_type_uuid(name.as_ref());
 
     // Check if this drink type already exists (by UUID)
     if let Some(existing) = drink_types::Entity::find_by_id(id).one(&state.db).await? {
@@ -99,7 +92,7 @@ pub async fn create_drink_type(
     // `created_at` is populated by `drink_types::ActiveModelBehavior::before_save`.
     let model = drink_types::ActiveModel {
         id: Set((&id).into()),
-        name: Set(name),
+        name: Set(name.into_inner()),
         alcoholic: Set(req.alcoholic),
         created_at: NotSet,
         created_by: Set(Some((&user.user_id).into())),

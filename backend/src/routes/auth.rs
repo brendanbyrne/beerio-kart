@@ -11,7 +11,11 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AppState, domain::UserId, entities::users, error::Error, middleware::auth::User,
+    AppState,
+    domain::{Password, PasswordHash, UserId, Username},
+    entities::users,
+    error::Error,
+    middleware::auth::User,
     services::auth as auth_service,
 };
 
@@ -104,18 +108,14 @@ pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
 ) -> Result<impl IntoResponse, Error> {
-    let username = body.username.trim();
-    if username.is_empty() || username.chars().count() > 30 {
-        return Err(Error::bad_request("Username must be 1-30 characters"));
-    }
-
-    if body.password.len() < 8 || body.password.len() > 128 {
-        return Err(Error::bad_request("Password must be 8-128 characters"));
-    }
+    let username = Username::try_from(body.username)
+        .map_err(|_| Error::bad_request("Username must be 1-30 characters"))?;
+    let password = Password::try_from(body.password)
+        .map_err(|_| Error::bad_request("Password must be 8-128 characters"))?;
 
     // Check if username already exists (nicer error than a DB constraint violation)
     let existing = users::Entity::find()
-        .filter(users::Column::Username.eq(username))
+        .filter(users::Column::Username.eq(username.as_ref()))
         .one(&state.db)
         .await?;
 
@@ -124,7 +124,7 @@ pub async fn register(
     }
 
     // Hash password (offloaded to the blocking pool, capped by argon2_limit)
-    let password_hash = auth_service::hash_password(&state.argon2_limit, body.password).await?;
+    let password_hash = auth_service::hash_password(&state.argon2_limit, password).await?;
 
     let user_id = UserId::new_v4();
     tracing::Span::current().record("user_id", tracing::field::display(&user_id));
@@ -132,9 +132,9 @@ pub async fn register(
     // Timestamps are populated by `users::ActiveModelBehavior::before_save`.
     let new_user = users::ActiveModel {
         id: Set((&user_id).into()),
-        username: Set(username.to_string()),
+        username: Set(username.as_ref().to_string()),
         email: Set(None),
-        password_hash: Set(password_hash),
+        password_hash: Set(password_hash.into_inner()),
         preferred_character_id: Set(None),
         preferred_body_id: Set(None),
         preferred_wheel_id: Set(None),
@@ -148,7 +148,8 @@ pub async fn register(
     new_user.insert(&state.db).await?;
 
     // Generate tokens
-    let access_token = auth_service::create_access_token(&user_id, username, &state.config)?;
+    let access_token =
+        auth_service::create_access_token(&user_id, username.as_ref(), &state.config)?;
     let refresh_token = auth_service::create_refresh_token(&user_id, 0, &state.config)?;
     let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
@@ -159,7 +160,7 @@ pub async fn register(
             access_token,
             user: UserInfo {
                 id: user_id,
-                username: username.to_string(),
+                username: username.as_ref().to_string(),
             },
         }),
     ))
@@ -191,26 +192,33 @@ pub async fn login(
         .await?
     else {
         // Hash a dummy password so the timing is similar to the "wrong password"
-        // path. Prevents username enumeration via response-time analysis.
-        let _ = auth_service::verify_password(
-            &state.argon2_limit,
-            "dummy".to_string(),
+        // path. Prevents username enumeration via response-time analysis. The
+        // literal starts with `$argon2id$` so the boundary check passes; the
+        // `?` here is purely to keep clippy happy about `expect_used` —
+        // construction can't actually fail.
+        let dummy_hash = PasswordHash::try_from(
             "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
                 .to_string(),
         )
-        .await;
+        .map_err(|e| {
+            Error::Internal(
+                anyhow::Error::msg(e.to_string())
+                    .context("Dummy timing-equalization hash failed validation"),
+            )
+        })?;
+        let _ = auth_service::verify_password(&state.argon2_limit, "dummy".to_string(), dummy_hash)
+            .await;
         return Err(Error::Unauthorized("Invalid username or password".into()));
     };
     let user_id = UserId::from_db(&user.id)?;
     tracing::Span::current().record("user_id", tracing::field::display(&user_id));
 
-    // Verify password (offloaded to the blocking pool, capped by argon2_limit)
-    let password_ok = auth_service::verify_password(
-        &state.argon2_limit,
-        body.password,
-        user.password_hash.clone(),
-    )
-    .await?;
+    // Verify password (offloaded to the blocking pool, capped by argon2_limit).
+    // Stored hash is validated at the boundary; a corrupt value surfaces as
+    // Internal (data corruption, not a wrong-password 401).
+    let stored_hash = PasswordHash::from_db(user.password_hash.clone())?;
+    let password_ok =
+        auth_service::verify_password(&state.argon2_limit, body.password, stored_hash).await?;
     if !password_ok {
         return Err(Error::Unauthorized("Invalid username or password".into()));
     }
@@ -355,10 +363,9 @@ pub async fn change_password(
     user: User,
     Json(body): Json<ChangePasswordRequest>,
 ) -> Result<impl IntoResponse, Error> {
-    // Validate new password length
-    if body.new_password.len() < 8 || body.new_password.len() > 128 {
-        return Err(Error::bad_request("New password must be 8-128 characters"));
-    }
+    // Validate new password length via the newtype boundary.
+    let new_password = Password::try_from(body.new_password)
+        .map_err(|_| Error::bad_request("New password must be 8-128 characters"))?;
 
     // Look up user
     let db_user = users::Entity::find_by_id(user.user_id)
@@ -366,19 +373,17 @@ pub async fn change_password(
         .await?
         .ok_or_else(|| Error::NotFound("User not found".into()))?;
 
-    // Verify current password
-    let current_ok = auth_service::verify_password(
-        &state.argon2_limit,
-        body.current_password,
-        db_user.password_hash.clone(),
-    )
-    .await?;
+    // Verify current password against the stored hash.
+    let stored_hash = PasswordHash::from_db(db_user.password_hash.clone())?;
+    let current_ok =
+        auth_service::verify_password(&state.argon2_limit, body.current_password, stored_hash)
+            .await?;
     if !current_ok {
         return Err(Error::Unauthorized("Current password is incorrect".into()));
     }
 
     // Hash new password
-    let new_hash = auth_service::hash_password(&state.argon2_limit, body.new_password).await?;
+    let new_hash = auth_service::hash_password(&state.argon2_limit, new_password).await?;
 
     // Update password and bump version (invalidates all other sessions).
     // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
@@ -386,7 +391,7 @@ pub async fn change_password(
     let username = db_user.username.clone();
     let user_id = UserId::from_db(&db_user.id)?;
     let mut active: users::ActiveModel = db_user.into_active_model();
-    active.password_hash = Set(new_hash);
+    active.password_hash = Set(new_hash.into_inner());
     active.refresh_token_version = Set(new_version);
 
     active.update(&state.db).await?;
