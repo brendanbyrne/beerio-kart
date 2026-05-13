@@ -16,6 +16,7 @@ use crate::{
 // ── Response types ───────────────────────────────────────────────────
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct CharacterResponse {
     pub id: CharacterId,
     pub name: String,
@@ -23,6 +24,7 @@ pub struct CharacterResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct BodyResponse {
     pub id: BodyId,
     pub name: String,
@@ -30,6 +32,7 @@ pub struct BodyResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct WheelResponse {
     pub id: WheelId,
     pub name: String,
@@ -37,6 +40,7 @@ pub struct WheelResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct GliderResponse {
     pub id: GliderId,
     pub name: String,
@@ -44,6 +48,7 @@ pub struct GliderResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct CupResponse {
     pub id: CupId,
     pub name: String,
@@ -51,6 +56,7 @@ pub struct CupResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct TrackResponse {
     pub id: TrackId,
     pub name: String,
@@ -60,6 +66,7 @@ pub struct TrackResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct CupWithTracksResponse {
     pub id: CupId,
     pub name: String,

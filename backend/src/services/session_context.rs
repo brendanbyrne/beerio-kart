@@ -13,16 +13,19 @@ use crate::{
     services::helpers,
 };
 
-/// A loaded session plus its ID in typed form.
+/// A loaded session plus its IDs in typed form.
 ///
-/// `session_id` mirrors `session.id` as a typed `SessionId` so the helper
-/// methods can borrow `&self.session_id` instead of allocating a fresh wrapper
-/// on every call. Both fields hold the same UUID; the typed copy is the one
-/// callers borrow when they need a `&SessionId`.
+/// `session_id` mirrors `session.id` and `host_id` mirrors `session.host_id`
+/// — both parsed once in [`load_active`](SessionContext::load_active) so
+/// helper methods can borrow them instead of reparsing on every call. The
+/// entity-side `String` fields stay authoritative for serialization; the
+/// typed copies are what callers reach for when they need a `&SessionId` /
+/// `&UserId`.
 #[derive(Debug, Clone)]
 pub struct SessionContext {
     pub session: sessions::Model,
     pub session_id: SessionId,
+    pub host_id: UserId,
 }
 
 impl SessionContext {
@@ -32,6 +35,9 @@ impl SessionContext {
     ///
     /// Propagates the errors of [`helpers::load_active_session`]: `NotFound`
     /// if the session doesn't exist, `Conflict` if it's not active.
+    /// Returns `Internal` if the stored `session.id` or `session.host_id` is
+    /// not a valid UUID — both are FK-protected, so this only fires on data
+    /// corruption.
     #[tracing::instrument(level = "debug", skip(db), fields(session_id = %session_id))]
     pub async fn load_active<C: ConnectionTrait>(
         db: &C,
@@ -39,9 +45,11 @@ impl SessionContext {
     ) -> Result<Self, Error> {
         let session = helpers::load_active_session(db, session_id).await?;
         let session_id = SessionId::from_db(&session.id)?;
+        let host_id = UserId::from_db(&session.host_id)?;
         Ok(Self {
             session,
             session_id,
+            host_id,
         })
     }
 
@@ -51,8 +59,7 @@ impl SessionContext {
     ///
     /// Returns `Forbidden` if `user_id` is not the host.
     pub fn require_host(&self, user_id: &UserId) -> Result<(), Error> {
-        let host_id = UserId::from_db(&self.session.host_id)?;
-        if host_id != *user_id {
+        if self.host_id != *user_id {
             return Err(Error::Forbidden("Only the host can do that".into()));
         }
         Ok(())
