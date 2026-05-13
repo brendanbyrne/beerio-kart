@@ -85,7 +85,7 @@ pub async fn get_user(
 /// doesn't exist, `BadRequest` for invalid race-setup or drink-type IDs.
 #[tracing::instrument(
     skip_all,
-    fields(actor_user_id = %auth_user.user_id, target_user_id = %id),
+    fields(user_id = %auth_user.user_id, target_user_id = %id),
 )]
 pub async fn update_user(
     auth_user: User,
