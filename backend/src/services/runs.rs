@@ -158,6 +158,10 @@ fn validate_time_fields(body: &CreateRunRequest) -> Result<(), Error> {
 /// is closed, the user already submitted, the user skipped the race, or an
 /// older pending race blocks the submission; `Forbidden` if the user is not
 /// an active participant; `Internal` for unexpected DB failures.
+#[tracing::instrument(
+    skip(db, body),
+    fields(user_id = %user_id, session_race_id = %body.session_race_id),
+)]
 pub async fn create_run(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -321,6 +325,7 @@ async fn insert_run(
 ///
 /// Returns `NotFound` if no run with that ID exists; `Internal` for
 /// unexpected DB failures.
+#[tracing::instrument(skip(db), fields(run_id = %run_id))]
 pub async fn get_run(db: &impl ConnectionTrait, run_id: &RunId) -> Result<RunDetail, Error> {
     let row = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -349,6 +354,14 @@ pub async fn get_run(db: &impl ConnectionTrait, run_id: &RunId) -> Result<RunDet
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(
+    skip(db, filters),
+    fields(
+        session_race_id = ?filters.session_race_id,
+        user_id = ?filters.user_id,
+        track_id = ?filters.track_id,
+    ),
+)]
 pub async fn list_runs(
     db: &impl ConnectionTrait,
     filters: RunFilters,
@@ -413,6 +426,7 @@ pub async fn list_runs(
 /// caller is not the run's owner; `Conflict` if the run's session is closed;
 /// `Internal` for unexpected DB failures or data-corruption invariants (e.g.,
 /// missing session for an existing run).
+#[tracing::instrument(skip(db), fields(run_id = %run_id, user_id = %user_id))]
 pub async fn delete_run(
     db: &DatabaseConnection,
     run_id: &RunId,
@@ -465,6 +479,7 @@ pub async fn delete_run(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip(db), fields(user_id = %user_id))]
 pub async fn get_run_defaults(
     db: &impl ConnectionTrait,
     user_id: &UserId,

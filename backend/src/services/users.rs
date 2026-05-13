@@ -66,6 +66,10 @@ where
 /// the target user doesn't exist; `BadRequest` if race setup is provided as
 /// a partial set (not all-or-nothing) or any of the character / body / wheel
 /// / glider / drink-type IDs doesn't exist; `Internal` for DB failures.
+#[tracing::instrument(
+    skip(db, req),
+    fields(actor_user_id = %actor_user_id, target_user_id = %target_user_id),
+)]
 pub async fn update_profile(
     db: &impl ConnectionTrait,
     actor_user_id: &UserId,
@@ -127,6 +131,7 @@ pub async fn update_profile(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(level = "debug", skip(db, user), fields(user_id = %user.id))]
 pub async fn build_detail_profile(
     db: &impl ConnectionTrait,
     user: users::Model,

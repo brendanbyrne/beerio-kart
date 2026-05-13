@@ -77,8 +77,9 @@ pub struct TracksQuery {
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_characters(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, Error> {
     let items = characters::Entity::find().all(&state.db).await?;
@@ -90,8 +91,9 @@ pub async fn list_characters(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_bodies(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, Error> {
     let items = bodies::Entity::find().all(&state.db).await?;
@@ -103,8 +105,9 @@ pub async fn list_bodies(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_wheels(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, Error> {
     let items = wheels::Entity::find().all(&state.db).await?;
@@ -116,8 +119,9 @@ pub async fn list_wheels(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_gliders(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, Error> {
     let items = gliders::Entity::find().all(&state.db).await?;
@@ -129,8 +133,9 @@ pub async fn list_gliders(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_cups(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SimpleItem>>, Error> {
     let items = cups::Entity::find().all(&state.db).await?;
@@ -143,8 +148,9 @@ pub async fn list_cups(
 ///
 /// Returns `NotFound` if `id` doesn't match a cup; `Internal` for unexpected
 /// DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, cup_id = id))]
 pub async fn get_cup(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<CupWithTracksResponse>, Error> {
@@ -175,8 +181,12 @@ pub async fn get_cup(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(
+    skip_all,
+    fields(user_id = %user.user_id, cup_id = ?params.cup_id),
+)]
 pub async fn list_tracks(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Query(params): Query<TracksQuery>,
 ) -> Result<Json<Vec<TrackResponse>>, Error> {
@@ -195,8 +205,9 @@ pub async fn list_tracks(
 ///
 /// Returns `NotFound` if `id` doesn't match a track; `Internal` for
 /// unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, track_id = id))]
 pub async fn get_track(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<TrackResponse>, Error> {

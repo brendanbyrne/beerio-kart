@@ -59,6 +59,10 @@ pub struct Filters {
 ///
 /// Returns `BadRequest` if the trimmed name is empty or >200 chars;
 /// `Internal` for unexpected DB failures.
+#[tracing::instrument(
+    skip_all,
+    fields(user_id = %user.user_id, name = %req.name, alcoholic = req.alcoholic),
+)]
 pub async fn create_drink_type(
     user: User,
     State(state): State<AppState>,
@@ -103,8 +107,12 @@ pub async fn create_drink_type(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(
+    skip_all,
+    fields(user_id = %user.user_id, alcoholic = ?params.alcoholic),
+)]
 pub async fn list_drink_types(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Query(params): Query<Filters>,
 ) -> Result<Json<Vec<DrinkTypeResponse>>, Error> {
@@ -125,8 +133,9 @@ pub async fn list_drink_types(
 ///
 /// Returns `NotFound` if `id` doesn't match a drink type; `Internal` for
 /// unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, drink_type_id = %id))]
 pub async fn get_drink_type(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<DrinkTypeResponse>, Error> {

@@ -23,6 +23,10 @@ use crate::{
 /// doesn't exist, `Conflict` if the session is closed, the user already
 /// submitted, or an older pending race is blocking, `Forbidden` if the user
 /// is not an active participant.
+#[tracing::instrument(
+    skip_all,
+    fields(user_id = %user.user_id, session_race_id = %body.session_race_id),
+)]
 pub async fn create_run(
     user: User,
     State(state): State<AppState>,
@@ -45,8 +49,17 @@ pub struct ListRunsQuery {
 ///
 /// Propagates the errors of [`runs::list_runs`] — currently only `Internal`
 /// for unexpected DB failures.
+#[tracing::instrument(
+    skip_all,
+    fields(
+        user_id = %user.user_id,
+        session_race_id = ?query.session_race_id,
+        filter_user_id = ?query.user_id,
+        track_id = ?query.track_id,
+    ),
+)]
 pub async fn list_runs(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Query(query): Query<ListRunsQuery>,
 ) -> Result<Json<Vec<runs::RunDetail>>, Error> {
@@ -65,6 +78,7 @@ pub async fn list_runs(
 ///
 /// Propagates the errors of [`runs::get_run_defaults`] — currently only
 /// `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn get_defaults(
     user: User,
     State(state): State<AppState>,
@@ -79,8 +93,9 @@ pub async fn get_defaults(
 ///
 /// Propagates the errors of [`runs::get_run`]: `NotFound` if the run doesn't
 /// exist.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, run_id = %id))]
 pub async fn get_run(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<runs::RunDetail>, Error> {
@@ -96,6 +111,7 @@ pub async fn get_run(
 /// Propagates the errors of [`runs::delete_run`]: `NotFound` if the run
 /// doesn't exist, `Forbidden` if the caller is not the run's owner,
 /// `Conflict` if the run's session is closed.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, run_id = %id))]
 pub async fn delete_run(
     user: User,
     State(state): State<AppState>,

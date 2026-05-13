@@ -65,6 +65,7 @@ async fn check_not_in_any_session(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip(db), fields(user_id = %user_id))]
 pub async fn get_active_session_id(
     db: &impl ConnectionTrait,
     user_id: &UserId,
@@ -96,6 +97,7 @@ pub async fn get_active_session_id(
 /// Returns `BadRequest` if `ruleset` doesn't parse as a known `Ruleset`;
 /// `Conflict` if the user is already in another active session; `Internal`
 /// for unexpected DB failures.
+#[tracing::instrument(skip(db), fields(user_id = %user_id, ruleset = %ruleset))]
 pub async fn create_session(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -169,6 +171,7 @@ struct SessionSummaryRow {
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip(db))]
 pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<SessionSummary>, Error> {
     let rows = SessionSummaryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
         db.get_database_backend(),
@@ -504,6 +507,10 @@ struct PendingRaceRow {
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures on the JOIN query.
+#[tracing::instrument(
+    skip(db),
+    fields(session_id = %session_id, user_id = %user_id),
+)]
 pub async fn get_pending_races(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
@@ -593,6 +600,14 @@ pub async fn get_pending_races(
 /// Returns the variants enumerated in the doc above, plus `NotFound` if the
 /// race or session-race-participation row doesn't exist, and `Internal` for
 /// unexpected DB failures.
+#[tracing::instrument(
+    skip(db),
+    fields(
+        session_id = %session_id,
+        session_race_id = %session_race_id,
+        user_id = %user_id,
+    ),
+)]
 pub async fn skip_pending_race(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -678,6 +693,10 @@ pub async fn skip_pending_race(
 ///
 /// Returns `NotFound` if no session with that ID exists; `Internal` for
 /// unexpected DB failures on any of the helper queries.
+#[tracing::instrument(
+    skip(db),
+    fields(session_id = %session_id, requesting_user_id = ?requesting_user_id),
+)]
 pub async fn get_session_detail(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
@@ -754,6 +773,7 @@ pub const REJOIN_GRACE_MINUTES: i64 = 5;
 /// Returns `NotFound` if the session doesn't exist; `Conflict` if the
 /// session is closed or the user is already in another active session;
 /// `Internal` for unexpected DB failures.
+#[tracing::instrument(skip(db), fields(session_id = %session_id, user_id = %user_id))]
 pub async fn join_session(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -905,6 +925,7 @@ async fn transfer_host_or_close(
 /// user is not currently in the session; `Internal` for unexpected DB
 /// failures or invariant violations (e.g., last-active-participant flow
 /// failing to find any remaining participant to promote).
+#[tracing::instrument(skip(db), fields(session_id = %session_id, user_id = %user_id))]
 pub async fn leave_session(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -959,6 +980,7 @@ pub async fn leave_session(
 /// Returns `NotFound` if the session doesn't exist; `Conflict` if the
 /// session is closed; `Forbidden` if `user_id` isn't the host; `Internal`
 /// for unexpected DB failures or an empty `tracks` table.
+#[tracing::instrument(skip(db), fields(session_id = %session_id, user_id = %user_id))]
 pub async fn next_track(
     db: &DatabaseConnection,
     session_id: &SessionId,
@@ -1045,10 +1067,14 @@ pub async fn next_track(
 /// session is closed; `BadRequest` if there is no track to skip; `Conflict`
 /// if any runs were already submitted for the current race; `Internal` for
 /// unexpected DB failures.
+#[tracing::instrument(
+    skip(db, user_id),
+    fields(session_id = %session_id, user_id = %user_id),
+)]
 pub async fn skip_turn(
     db: &DatabaseConnection,
     session_id: &SessionId,
-    _user_id: &UserId,
+    user_id: &UserId,
 ) -> Result<SessionRaceInfo, Error> {
     helpers::load_active_session(db, session_id).await?;
 
@@ -1140,6 +1166,7 @@ pub async fn skip_turn(
 ///
 /// Returns `NotFound` if the session doesn't exist; `Internal` for
 /// unexpected DB failures.
+#[tracing::instrument(skip(db), fields(session_id = %session_id))]
 pub async fn list_races(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
@@ -1193,6 +1220,7 @@ pub async fn list_races(
 ///
 /// Returns `Internal` for unexpected DB failures on any of the SELECT or
 /// UPDATE statements that drive the cleanup.
+#[tracing::instrument(skip(db))]
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error> {
     let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).naive_utc();
 
