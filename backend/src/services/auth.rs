@@ -1,13 +1,20 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    // Alias the argon2 PHC parser type so it doesn't collide with our
+    // domain newtype `PasswordHash` (which represents a validated stored
+    // hash string, not a parsed argon2 value).
+    password_hash::{PasswordHash as Argon2Hash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use chrono::{TimeDelta, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
-use crate::{config::Config, domain::UserId, error::Error};
+use crate::{
+    config::Config,
+    domain::{Password, PasswordHash, UserId},
+    error::Error,
+};
 
 /// Claims for short-lived access tokens (sent in response body, stored in JS memory).
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,17 +66,27 @@ pub struct RefreshClaims {
 /// e.g., RNG failure during salt generation); `Error::Internal` if the
 /// blocking task panics or the limiter semaphore is closed.
 #[tracing::instrument(skip(limiter, password))]
-pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<String, Error> {
+pub async fn hash_password(limiter: &Semaphore, password: Password) -> Result<PasswordHash, Error> {
     let _permit = limiter
         .acquire()
         .await
         .map_err(|e| Error::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed")))?;
     tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(&mut rand_core::OsRng);
-        Argon2::default()
-            .hash_password(password.as_bytes(), &salt)
+        let plaintext = password.into_inner();
+        let hash_string = Argon2::default()
+            .hash_password(plaintext.as_bytes(), &salt)
             .map(|h| h.to_string())
-            .map_err(Error::from)
+            .map_err(Error::from)?;
+        // The argon2 crate just produced this string — it's guaranteed to
+        // satisfy our PHC prefix check, so the `TryFrom` cannot fail in
+        // practice. Map any divergence to Internal rather than swallow it.
+        PasswordHash::try_from(hash_string).map_err(|e| {
+            Error::Internal(
+                anyhow::Error::msg(e.to_string())
+                    .context("argon2 produced a hash that doesn't match the PHC prefix"),
+            )
+        })
     })
     .await
     .map_err(|e| Error::Internal(anyhow::Error::new(e).context("Argon2 hash task panicked")))?
@@ -89,14 +106,17 @@ pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<Stri
 pub async fn verify_password(
     limiter: &Semaphore,
     password: String,
-    hash: String,
+    hash: PasswordHash,
 ) -> Result<bool, Error> {
     let _permit = limiter
         .acquire()
         .await
         .map_err(|e| Error::Internal(anyhow::Error::new(e).context("Argon2 semaphore closed")))?;
     tokio::task::spawn_blocking(move || {
-        let parsed = PasswordHash::new(&hash).map_err(Error::from)?;
+        // PHC parse runs inside the blocking pool: this is the strict check
+        // (full structure, base64 fields, params) that complements our
+        // newtype's prefix-only constructor invariant.
+        let parsed = Argon2Hash::new(hash.as_ref()).map_err(Error::from)?;
         Ok(Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
             .is_ok())
@@ -248,34 +268,39 @@ mod tests {
         Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT))
     }
 
+    fn password(s: &str) -> Password {
+        Password::try_from(s.to_string()).expect("test password must be 8-128 chars")
+    }
+
     #[tokio::test]
     async fn test_hash_password_produces_argon2id_hash() {
         let limiter = test_limiter();
-        let hash = hash_password(&limiter, "mysecretpassword".to_string())
+        let hash = hash_password(&limiter, password("mysecretpassword"))
             .await
             .unwrap();
         assert!(
-            hash.starts_with("$argon2id$"),
-            "Expected argon2id hash, got: {hash}"
+            hash.as_ref().starts_with("$argon2id$"),
+            "Expected argon2id hash, got: {}",
+            hash.as_ref()
         );
     }
 
     #[tokio::test]
     async fn test_hash_password_produces_different_hashes_for_same_input() {
         let limiter = test_limiter();
-        let hash1 = hash_password(&limiter, "samepassword".to_string())
+        let hash1 = hash_password(&limiter, password("samepassword"))
             .await
             .unwrap();
-        let hash2 = hash_password(&limiter, "samepassword".to_string())
+        let hash2 = hash_password(&limiter, password("samepassword"))
             .await
             .unwrap();
-        assert_ne!(hash1, hash2);
+        assert_ne!(hash1.as_ref(), hash2.as_ref());
     }
 
     #[tokio::test]
     async fn test_verify_password_correct() {
         let limiter = test_limiter();
-        let hash = hash_password(&limiter, "correctpassword".to_string())
+        let hash = hash_password(&limiter, password("correctpassword"))
             .await
             .unwrap();
         assert!(
@@ -288,7 +313,7 @@ mod tests {
     #[tokio::test]
     async fn test_verify_password_wrong() {
         let limiter = test_limiter();
-        let hash = hash_password(&limiter, "correctpassword".to_string())
+        let hash = hash_password(&limiter, password("correctpassword"))
             .await
             .unwrap();
         assert!(
@@ -339,7 +364,7 @@ mod tests {
         for _ in 0..TASKS {
             let limiter = limiter.clone();
             handles.push(tokio::spawn(async move {
-                hash_password(&limiter, "password123".to_string())
+                hash_password(&limiter, password("password123"))
                     .await
                     .unwrap();
                 start.elapsed()

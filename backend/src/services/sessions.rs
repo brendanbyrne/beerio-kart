@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        SessionId, SessionRaceId, UserId,
+        ImagePath, SessionId, SessionRaceId, UserId,
         enums::{Ruleset, SessionStatus},
     },
     entities::{
@@ -254,7 +254,7 @@ pub struct SessionRaceInfo {
     pub track_id: i32,
     pub track_name: String,
     pub cup_name: String,
-    pub image_path: String,
+    pub image_path: ImagePath,
     pub created_at: DateTime<Utc>,
     pub submissions: Vec<RaceSubmission>,
 }
@@ -420,7 +420,7 @@ async fn load_current_race_with_submissions(
         track_id: row.track_id,
         track_name: row.track_name,
         cup_name: row.cup_name,
-        image_path: row.image_path,
+        image_path: ImagePath::from_db(row.image_path, "tracks.image_path")?,
         created_at: row.created_at.and_utc(),
         submissions,
     }))
@@ -563,7 +563,7 @@ pub async fn get_pending_races(
                 track_id: r.track_id,
                 track_name: r.track_name,
                 cup_name: r.cup_name,
-                image_path: r.image_path,
+                image_path: ImagePath::from_db(r.image_path, "tracks.image_path")?,
                 created_at: r.created_at.and_utc(),
                 submissions: Vec::new(),
             })
@@ -1059,7 +1059,7 @@ pub async fn next_track(
         track_id: chosen.id,
         track_name: chosen.name.clone(),
         cup_name: cup,
-        image_path: chosen.image_path.clone(),
+        image_path: ImagePath::from_db(chosen.image_path.clone(), "tracks.image_path")?,
         created_at: inserted.created_at.and_utc(),
         submissions: Vec::new(),
     })
@@ -1166,7 +1166,7 @@ pub async fn skip_turn(
         track_id: chosen.id,
         track_name: chosen.name.clone(),
         cup_name: cup,
-        image_path: chosen.image_path.clone(),
+        image_path: ImagePath::from_db(chosen.image_path.clone(), "tracks.image_path")?,
         created_at: inserted.created_at.and_utc(),
         submissions: Vec::new(),
     })
