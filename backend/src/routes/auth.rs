@@ -261,6 +261,11 @@ pub async fn refresh(
     // Validate the JWT signature and expiry
     let claims = auth_service::validate_refresh_token(&cookie_value, &state.config)
         .map_err(|_| Error::Unauthorized("Invalid or expired refresh token".into()))?;
+    // Record `user_id` here — JWT signature has been verified, so `claims.sub`
+    // is trustworthy. Earlier failure modes (wrong token type, user not found,
+    // version mismatch) all surface with `user_id` populated, which is exactly
+    // the diagnostic info you want for "investigate failed refresh for X".
+    tracing::Span::current().record("user_id", tracing::field::display(&claims.sub));
 
     // Reject if token_type is not "refresh"
     if claims.token_type != "refresh" {
@@ -272,7 +277,6 @@ pub async fn refresh(
         .one(&state.db)
         .await?
         .ok_or_else(|| Error::Unauthorized("User not found".into()))?;
-    tracing::Span::current().record("user_id", tracing::field::display(&user.id));
 
     // Version mismatch means the token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
