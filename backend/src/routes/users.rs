@@ -32,8 +32,9 @@ pub struct UserPublicProfile {
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_users(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<UserPublicProfile>>, Error> {
     let all_users = users::Entity::find().all(&state.db).await?;
@@ -60,8 +61,9 @@ pub async fn list_users(
 ///
 /// Returns `NotFound` if `id` doesn't match a user; propagates the errors
 /// of [`user_service::build_detail_profile`] for DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, target_user_id = %id))]
 pub async fn get_user(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<user_service::UserDetailProfile>, Error> {
@@ -81,6 +83,10 @@ pub async fn get_user(
 /// Propagates the errors of [`user_service::update_profile`]: `Forbidden`
 /// if a user tries to modify another user, `NotFound` if the target user
 /// doesn't exist, `BadRequest` for invalid race-setup or drink-type IDs.
+#[tracing::instrument(
+    skip_all,
+    fields(actor_user_id = %auth_user.user_id, target_user_id = %id),
+)]
 pub async fn update_user(
     auth_user: User,
     State(state): State<AppState>,

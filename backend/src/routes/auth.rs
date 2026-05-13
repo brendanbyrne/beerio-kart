@@ -96,6 +96,7 @@ fn extract_refresh_cookie(headers: &HeaderMap) -> Option<String> {
 /// Returns `BadRequest` if the username is empty / >30 chars or the password
 /// is <8 / >128 chars; `Conflict` if the username is taken; `Internal` for
 /// password-hash, token-issue, or DB failures.
+#[tracing::instrument(skip_all, fields(username = %body.username))]
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
@@ -170,6 +171,7 @@ pub async fn register(
 /// Returns `Unauthorized` if the username doesn't exist or the password is
 /// wrong (both surfaced as the same generic message to prevent username
 /// enumeration); `Internal` for password-verify, token-issue, or DB failures.
+#[tracing::instrument(skip_all, fields(username = %body.username))]
 pub async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
@@ -238,6 +240,7 @@ pub async fn login(
 /// validation, the token type is not `refresh`, the user no longer exists,
 /// or the token's `refresh_token_version` doesn't match the DB (revoked via
 /// logout or password change). `Internal` for token-issue or DB failures.
+#[tracing::instrument(skip_all)]
 pub async fn refresh(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -288,6 +291,7 @@ pub async fn refresh(
 ///
 /// Returns `Internal` if the authenticated user no longer exists in the DB
 /// (invariant violation), or for DB / cookie-build failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, Error> {
     // Look up user to get current version
     let db_user = users::Entity::find_by_id(&user.user_id)
@@ -330,6 +334,7 @@ pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl In
 /// if the authenticated user no longer exists; `Unauthorized` if the current
 /// password is wrong; `Internal` for password-hash, token-issue, or DB
 /// failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn change_password(
     State(state): State<AppState>,
     user: User,

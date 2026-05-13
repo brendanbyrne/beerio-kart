@@ -23,6 +23,7 @@ use crate::{
 /// - `NotFound` if no row with that ID exists.
 /// - `Conflict` if the session exists but is closed.
 /// - `Internal` for unexpected DB failures.
+#[tracing::instrument(level = "debug", skip(db), fields(session_id = %session_id))]
 pub async fn load_active_session<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
@@ -44,6 +45,11 @@ pub async fn load_active_session<C: ConnectionTrait>(
 ///
 /// Returns `Forbidden` if the user has no active participant row for this
 /// session; `Internal` for unexpected DB failures.
+#[tracing::instrument(
+    level = "debug",
+    skip(db),
+    fields(session_id = %session_id, user_id = %user_id),
+)]
 pub async fn require_active_participant<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
@@ -77,6 +83,11 @@ pub async fn require_active_participant<C: ConnectionTrait>(
 ///
 /// Returns `Internal` for unexpected DB failures on either the SELECT of
 /// present participants or the bulk insert of participation rows.
+#[tracing::instrument(
+    level = "debug",
+    skip(txn),
+    fields(session_id = %session_id, session_race_id = %session_race_id),
+)]
 pub async fn insert_race_participations<C: ConnectionTrait>(
     txn: &C,
     session_id: &SessionId,
@@ -129,6 +140,7 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures.
+#[tracing::instrument(level = "debug", skip(db), fields(session_id = %session_id))]
 pub async fn touch_session<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
@@ -151,6 +163,7 @@ pub async fn touch_session<C: ConnectionTrait>(
 ///
 /// Returns `BadRequest` with a formatted message on miss (e.g., "Invalid
 /// `character_id`"); `Internal` for unexpected DB failures.
+#[tracing::instrument(level = "debug", skip(db, id), fields(entity = %entity_label))]
 pub async fn require_exists<E, C>(
     db: &C,
     id: <<E as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType,
@@ -180,6 +193,14 @@ where
 /// Returns `Internal` if the `tracks` table is empty (seed error) or if the
 /// pool is empty after a reset (e.g., every track is in `always_exclude`);
 /// `Internal` for unexpected DB failures.
+#[tracing::instrument(
+    level = "debug",
+    skip(db, exclude, always_exclude),
+    fields(
+        excluded = exclude.len(),
+        always_excluded = always_exclude.len(),
+    ),
+)]
 pub async fn pick_random_track<C: ConnectionTrait>(
     db: &C,
     exclude: &[i32],

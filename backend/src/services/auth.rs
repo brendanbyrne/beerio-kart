@@ -58,6 +58,7 @@ pub struct RefreshClaims {
 /// Returns `Error::Hash` if Argon2 rejects the input (extremely unusual —
 /// e.g., RNG failure during salt generation); `Error::Internal` if the
 /// blocking task panics or the limiter semaphore is closed.
+#[tracing::instrument(skip(limiter, password))]
 pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<String, Error> {
     let _permit = limiter
         .acquire()
@@ -84,6 +85,7 @@ pub async fn hash_password(limiter: &Semaphore, password: String) -> Result<Stri
 /// Returns `Error::Hash` if `hash` doesn't parse as a valid Argon2 string;
 /// `Error::Internal` if the blocking task panics or the semaphore is closed.
 /// Note: a wrong password is `Ok(false)`, not an error.
+#[tracing::instrument(skip(limiter, password, hash))]
 pub async fn verify_password(
     limiter: &Semaphore,
     password: String,

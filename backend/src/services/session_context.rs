@@ -32,6 +32,7 @@ impl SessionContext {
     ///
     /// Propagates the errors of [`helpers::load_active_session`]: `NotFound`
     /// if the session doesn't exist, `Conflict` if it's not active.
+    #[tracing::instrument(level = "debug", skip(db), fields(session_id = %session_id))]
     pub async fn load_active<C: ConnectionTrait>(
         db: &C,
         session_id: &SessionId,
@@ -62,6 +63,11 @@ impl SessionContext {
     ///
     /// Propagates the errors of [`helpers::require_active_participant`]:
     /// `Forbidden` if the user is not an active participant of this session.
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, db),
+        fields(session_id = %self.session_id, user_id = %user_id),
+    )]
     pub async fn require_participant<C: ConnectionTrait>(
         &self,
         db: &C,
@@ -79,6 +85,11 @@ impl SessionContext {
     ///
     /// Propagates the errors of [`helpers::touch_session`] — currently only
     /// `Internal` for unexpected DB failures.
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, db),
+        fields(session_id = %self.session_id),
+    )]
     pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), Error> {
         helpers::touch_session(db, &self.session_id).await?;
         self.session.last_activity_at = chrono::Utc::now().naive_utc();

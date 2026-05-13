@@ -25,6 +25,7 @@ pub struct CreateSessionRequest {
 ///
 /// Propagates the errors of [`sessions::create_session`]: `BadRequest` for an
 /// unknown ruleset, `Conflict` if the user is already in another active session.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, ruleset = %body.ruleset))]
 pub async fn create_session(
     user: User,
     State(state): State<AppState>,
@@ -45,6 +46,7 @@ pub struct MySessionResponse {
 ///
 /// Propagates the errors of [`sessions::get_active_session_id`] — currently
 /// only `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn my_session(
     user: User,
     State(state): State<AppState>,
@@ -59,8 +61,9 @@ pub async fn my_session(
 ///
 /// Propagates the errors of [`sessions::list_active_sessions`] — currently
 /// only `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_sessions(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<sessions::SessionSummary>>, Error> {
     let summaries = sessions::list_active_sessions(&state.db).await?;
@@ -73,6 +76,7 @@ pub async fn list_sessions(
 ///
 /// Propagates the errors of [`sessions::get_session_detail`]: `NotFound` if
 /// the session does not exist.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
 pub async fn get_session(
     user: User,
     State(state): State<AppState>,
@@ -90,6 +94,7 @@ pub async fn get_session(
 /// Propagates the errors of [`sessions::join_session`]: `NotFound` if the
 /// session doesn't exist, `Conflict` if the session is closed or the user is
 /// already in another session.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
 pub async fn join_session(
     user: User,
     State(state): State<AppState>,
@@ -106,6 +111,7 @@ pub async fn join_session(
 ///
 /// Propagates the errors of [`sessions::leave_session`]: `NotFound` if the
 /// session doesn't exist, `BadRequest` if the user is not currently in it.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
 pub async fn leave_session(
     user: User,
     State(state): State<AppState>,
@@ -123,6 +129,7 @@ pub async fn leave_session(
 /// Propagates the errors of [`sessions::next_track`]: `NotFound` if the
 /// session doesn't exist, `Conflict` if it's closed, `Forbidden` if the user
 /// is not an active participant.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
 pub async fn next_track(
     user: User,
     State(state): State<AppState>,
@@ -141,6 +148,7 @@ pub async fn next_track(
 /// session doesn't exist, `Conflict` if it's closed or if runs have already
 /// been submitted for the current race, `BadRequest` if there is no track to
 /// skip.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
 pub async fn skip_turn(
     user: User,
     State(state): State<AppState>,
@@ -160,6 +168,10 @@ pub async fn skip_turn(
 /// the session or race doesn't exist, `Conflict` if the session is closed or
 /// the user already submitted a run for the race, `Forbidden` if the user is
 /// not an active participant.
+#[tracing::instrument(
+    skip_all,
+    fields(user_id = %user.user_id, session_id = %session_id, race_id = %race_id),
+)]
 pub async fn skip_pending_race(
     user: User,
     State(state): State<AppState>,
@@ -177,8 +189,9 @@ pub async fn skip_pending_race(
 ///
 /// Propagates the errors of [`sessions::list_races`] — currently only
 /// `Internal` for unexpected DB failures.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
 pub async fn list_races(
-    _user: User,
+    user: User,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<sessions::RaceInfo>>, Error> {
