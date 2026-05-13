@@ -2,7 +2,7 @@ use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::{UserId, race_setup},
+    domain::{BodyId, CharacterId, DrinkTypeId, GliderId, UserId, WheelId, race_setup},
     entities::{bodies, characters, drink_types, gliders, users, wheels},
     error::Error,
     services::helpers,
@@ -12,7 +12,7 @@ use crate::{
 
 #[derive(Serialize)]
 pub struct DrinkTypeInfo {
-    pub id: String,
+    pub id: DrinkTypeId,
     pub name: String,
     pub alcoholic: bool,
 }
@@ -21,27 +21,27 @@ pub struct DrinkTypeInfo {
 pub struct UserDetailProfile {
     pub id: UserId,
     pub username: String,
-    pub preferred_character_id: Option<i32>,
-    pub preferred_body_id: Option<i32>,
-    pub preferred_wheel_id: Option<i32>,
-    pub preferred_glider_id: Option<i32>,
+    pub preferred_character_id: Option<CharacterId>,
+    pub preferred_body_id: Option<BodyId>,
+    pub preferred_wheel_id: Option<WheelId>,
+    pub preferred_glider_id: Option<GliderId>,
     pub preferred_drink_type: Option<DrinkTypeInfo>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Request body for `PUT /users/:id`.
 ///
-/// `preferred_drink_type_id` uses `Option<Option<String>>` to distinguish
-/// three states: key absent (don't change), key present with null (clear),
-/// key present with value (set).
+/// `preferred_drink_type_id` uses `Option<Option<DrinkTypeId>>` to
+/// distinguish three states: key absent (don't change), key present with
+/// null (clear), key present with value (set).
 #[derive(Deserialize)]
 pub struct UpdateProfileRequest {
-    pub preferred_character_id: Option<i32>,
-    pub preferred_body_id: Option<i32>,
-    pub preferred_wheel_id: Option<i32>,
-    pub preferred_glider_id: Option<i32>,
+    pub preferred_character_id: Option<CharacterId>,
+    pub preferred_body_id: Option<BodyId>,
+    pub preferred_wheel_id: Option<WheelId>,
+    pub preferred_glider_id: Option<GliderId>,
     #[serde(default, deserialize_with = "deserialize_optional_field")]
-    pub preferred_drink_type_id: Option<Option<String>>,
+    pub preferred_drink_type_id: Option<Option<DrinkTypeId>>,
 }
 
 /// Deserializer that distinguishes between "key absent" (None) and
@@ -76,7 +76,7 @@ pub async fn update_profile(
     target_user_id: &UserId,
     req: UpdateProfileRequest,
 ) -> Result<UserDetailProfile, Error> {
-    if actor_user_id.as_str() != target_user_id.as_str() {
+    if actor_user_id != target_user_id {
         return Err(Error::Forbidden(
             "You can only update your own profile".to_string(),
         ));
@@ -96,25 +96,29 @@ pub async fn update_profile(
         req.preferred_wheel_id,
         req.preferred_glider_id,
     )? {
-        helpers::require_exists::<characters::Entity, _>(db, setup.character_id, "character")
-            .await?;
-        helpers::require_exists::<bodies::Entity, _>(db, setup.body_id, "body").await?;
-        helpers::require_exists::<wheels::Entity, _>(db, setup.wheel_id, "wheel").await?;
-        helpers::require_exists::<gliders::Entity, _>(db, setup.glider_id, "glider").await?;
+        helpers::require_exists::<characters::Entity, _>(
+            db,
+            setup.character_id.into(),
+            "character",
+        )
+        .await?;
+        helpers::require_exists::<bodies::Entity, _>(db, setup.body_id.into(), "body").await?;
+        helpers::require_exists::<wheels::Entity, _>(db, setup.wheel_id.into(), "wheel").await?;
+        helpers::require_exists::<gliders::Entity, _>(db, setup.glider_id.into(), "glider").await?;
 
-        active.preferred_character_id = Set(Some(setup.character_id));
-        active.preferred_body_id = Set(Some(setup.body_id));
-        active.preferred_wheel_id = Set(Some(setup.wheel_id));
-        active.preferred_glider_id = Set(Some(setup.glider_id));
+        active.preferred_character_id = Set(Some(setup.character_id.into()));
+        active.preferred_body_id = Set(Some(setup.body_id.into()));
+        active.preferred_wheel_id = Set(Some(setup.wheel_id.into()));
+        active.preferred_glider_id = Set(Some(setup.glider_id.into()));
     }
 
     // Drink type: independent, can be set or cleared
     if let Some(dt_id_option) = req.preferred_drink_type_id {
         if let Some(ref dt_id) = dt_id_option {
-            helpers::require_exists::<drink_types::Entity, _>(db, dt_id.clone(), "drink_type")
+            helpers::require_exists::<drink_types::Entity, _>(db, dt_id.into(), "drink_type")
                 .await?;
         }
-        active.preferred_drink_type_id = Set(dt_id_option);
+        active.preferred_drink_type_id = Set(dt_id_option.as_ref().map(Into::into));
     }
 
     // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
@@ -137,25 +141,26 @@ pub async fn build_detail_profile(
     user: users::Model,
 ) -> Result<UserDetailProfile, Error> {
     let drink_type = if let Some(ref dt_id) = user.preferred_drink_type_id {
-        drink_types::Entity::find_by_id(dt_id)
-            .one(db)
-            .await?
-            .map(|dt| DrinkTypeInfo {
-                id: dt.id,
+        let row = drink_types::Entity::find_by_id(dt_id).one(db).await?;
+        row.map(|dt| {
+            Ok::<_, Error>(DrinkTypeInfo {
+                id: DrinkTypeId::from_db(&dt.id)?,
                 name: dt.name,
                 alcoholic: dt.alcoholic,
             })
+        })
+        .transpose()?
     } else {
         None
     };
 
     Ok(UserDetailProfile {
-        id: UserId::new(user.id),
+        id: UserId::from_db(&user.id)?,
         username: user.username,
-        preferred_character_id: user.preferred_character_id,
-        preferred_body_id: user.preferred_body_id,
-        preferred_wheel_id: user.preferred_wheel_id,
-        preferred_glider_id: user.preferred_glider_id,
+        preferred_character_id: user.preferred_character_id.map(CharacterId::new),
+        preferred_body_id: user.preferred_body_id.map(BodyId::new),
+        preferred_wheel_id: user.preferred_wheel_id.map(WheelId::new),
+        preferred_glider_id: user.preferred_glider_id.map(GliderId::new),
         preferred_drink_type: drink_type,
         created_at: user.created_at.and_utc(),
     })
@@ -163,10 +168,12 @@ pub async fn build_detail_profile(
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use super::*;
     use crate::test_helpers::{create_user, seed_game_data, setup_db};
 
-    fn drink_id() -> String {
+    fn drink_id() -> DrinkTypeId {
         crate::drink_type_id::drink_type_uuid("Test Beer")
     }
 
@@ -197,7 +204,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_profile_user_not_found() {
         let db = setup_db().await;
-        let nonexistent = UserId::new("nonexistent");
+        let nonexistent = UserId::new(Uuid::new_v4());
 
         let result = update_profile(
             &db,
@@ -227,20 +234,20 @@ mod tests {
             &user_id,
             &user_id,
             UpdateProfileRequest {
-                preferred_character_id: Some(1),
-                preferred_body_id: Some(1),
-                preferred_wheel_id: Some(1),
-                preferred_glider_id: Some(1),
+                preferred_character_id: Some(CharacterId::new(1)),
+                preferred_body_id: Some(BodyId::new(1)),
+                preferred_wheel_id: Some(WheelId::new(1)),
+                preferred_glider_id: Some(GliderId::new(1)),
                 preferred_drink_type_id: None,
             },
         )
         .await
         .unwrap();
 
-        assert_eq!(profile.preferred_character_id, Some(1));
-        assert_eq!(profile.preferred_body_id, Some(1));
-        assert_eq!(profile.preferred_wheel_id, Some(1));
-        assert_eq!(profile.preferred_glider_id, Some(1));
+        assert_eq!(profile.preferred_character_id, Some(CharacterId::new(1)));
+        assert_eq!(profile.preferred_body_id, Some(BodyId::new(1)));
+        assert_eq!(profile.preferred_wheel_id, Some(WheelId::new(1)));
+        assert_eq!(profile.preferred_glider_id, Some(GliderId::new(1)));
     }
 
     #[tokio::test]
@@ -254,7 +261,7 @@ mod tests {
             &user_id,
             &user_id,
             UpdateProfileRequest {
-                preferred_character_id: Some(1),
+                preferred_character_id: Some(CharacterId::new(1)),
                 preferred_body_id: None,
                 preferred_wheel_id: None,
                 preferred_glider_id: None,
@@ -277,10 +284,10 @@ mod tests {
             &user_id,
             &user_id,
             UpdateProfileRequest {
-                preferred_character_id: Some(999),
-                preferred_body_id: Some(1),
-                preferred_wheel_id: Some(1),
-                preferred_glider_id: Some(1),
+                preferred_character_id: Some(CharacterId::new(999)),
+                preferred_body_id: Some(BodyId::new(1)),
+                preferred_wheel_id: Some(WheelId::new(1)),
+                preferred_glider_id: Some(GliderId::new(1)),
                 preferred_drink_type_id: None,
             },
         )
@@ -304,7 +311,9 @@ mod tests {
                 preferred_body_id: None,
                 preferred_wheel_id: None,
                 preferred_glider_id: None,
-                preferred_drink_type_id: Some(Some("bad-uuid".to_string())),
+                // Random unrelated UUID — passes the type-level parse but
+                // misses the FK in the database, so the boundary returns 400.
+                preferred_drink_type_id: Some(Some(DrinkTypeId::new_v4())),
             },
         )
         .await;
@@ -406,10 +415,10 @@ mod tests {
             &user_id,
             &user_id,
             UpdateProfileRequest {
-                preferred_character_id: Some(1),
-                preferred_body_id: Some(1),
-                preferred_wheel_id: Some(1),
-                preferred_glider_id: Some(1),
+                preferred_character_id: Some(CharacterId::new(1)),
+                preferred_body_id: Some(BodyId::new(1)),
+                preferred_wheel_id: Some(WheelId::new(1)),
+                preferred_glider_id: Some(GliderId::new(1)),
                 preferred_drink_type_id: None, // absent = don't change
             },
         )

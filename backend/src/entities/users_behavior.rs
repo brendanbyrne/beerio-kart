@@ -48,7 +48,7 @@ mod tests {
         let db = setup_db().await;
         let user_id = create_user(&db, "alice").await;
 
-        let user = users::Entity::find_by_id(user_id.as_str())
+        let user = users::Entity::find_by_id(user_id)
             .one(&db)
             .await
             .expect("query user")
@@ -67,7 +67,7 @@ mod tests {
         let db = setup_db().await;
         let user_id = create_user(&db, "bob").await;
 
-        let user_t0 = users::Entity::find_by_id(user_id.as_str())
+        let user_t0 = users::Entity::find_by_id(user_id)
             .one(&db)
             .await
             .expect("query user")
@@ -84,7 +84,7 @@ mod tests {
         active.refresh_token_version = Set(1);
         active.update(&db).await.expect("update user");
 
-        let user_t1 = users::Entity::find_by_id(user_id.as_str())
+        let user_t1 = users::Entity::find_by_id(user_id)
             .one(&db)
             .await
             .expect("query user")

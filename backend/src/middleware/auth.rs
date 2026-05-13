@@ -1,6 +1,9 @@
 use axum::{extract::FromRequestParts, http::request::Parts};
 
-use crate::{domain::UserId, error::Error};
+use crate::{
+    domain::{UserId, ids::parse_db_id},
+    error::Error,
+};
 
 /// Extractor that validates the JWT from the `Authorization: Bearer <token>`
 /// header and makes the authenticated user's info available to handlers.
@@ -51,8 +54,15 @@ impl FromRequestParts<crate::AppState> for User {
             return Err(Error::Unauthorized("Invalid token type".to_string()));
         }
 
+        // `sub` is mint-controlled by `create_access_token`, which always
+        // serializes a real `UserId`. A non-UUID `sub` here means a forged or
+        // foreign-issued token slipped past signature validation — treat it
+        // as unauthorized, not internal, so we don't leak corruption details.
+        let user_id = parse_db_id::<UserId>(&claims.sub, "access token sub claim")
+            .map_err(|_| Error::Unauthorized("Invalid user id in token".to_string()))?;
+
         Ok(Self {
-            user_id: UserId::new(claims.sub),
+            user_id,
             username: claims.username,
         })
     }
@@ -86,7 +96,7 @@ impl FromRequestParts<crate::AppState> for AdminUser {
             .as_ref()
             .ok_or_else(|| Error::Forbidden("Admin access not configured".to_string()))?;
 
-        if auth_user.user_id.as_str() != admin_id {
+        if auth_user.user_id != *admin_id {
             return Err(Error::Forbidden("Admin access required".to_string()));
         }
 

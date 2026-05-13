@@ -1,4 +1,7 @@
-use crate::error::Error;
+use crate::{
+    domain::{BodyId, CharacterId, GliderId, WheelId},
+    error::Error,
+};
 
 /// A fully-specified race setup update (all four IDs required together).
 ///
@@ -8,10 +11,10 @@ use crate::error::Error;
 /// compile time so call sites can't read only some of the fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Update {
-    pub character_id: i32,
-    pub body_id: i32,
-    pub wheel_id: i32,
-    pub glider_id: i32,
+    pub character_id: CharacterId,
+    pub body_id: BodyId,
+    pub wheel_id: WheelId,
+    pub glider_id: GliderId,
 }
 
 impl Update {
@@ -26,10 +29,10 @@ impl Update {
     /// Returns `Error::BadRequest` if the four arguments are a mix of `Some`
     /// and `None` — race setup is all-or-nothing.
     pub fn try_from_optional(
-        character_id: Option<i32>,
-        body_id: Option<i32>,
-        wheel_id: Option<i32>,
-        glider_id: Option<i32>,
+        character_id: Option<CharacterId>,
+        body_id: Option<BodyId>,
+        wheel_id: Option<WheelId>,
+        glider_id: Option<GliderId>,
     ) -> Result<Option<Self>, Error> {
         match (character_id, body_id, wheel_id, glider_id) {
             (None, None, None, None) => Ok(None),
@@ -60,16 +63,21 @@ mod tests {
 
     #[test]
     fn all_some_returns_ok_some() {
-        let result = Update::try_from_optional(Some(1), Some(2), Some(3), Some(4))
-            .unwrap()
-            .unwrap();
+        let result = Update::try_from_optional(
+            Some(CharacterId::new(1)),
+            Some(BodyId::new(2)),
+            Some(WheelId::new(3)),
+            Some(GliderId::new(4)),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(
             result,
             Update {
-                character_id: 1,
-                body_id: 2,
-                wheel_id: 3,
-                glider_id: 4,
+                character_id: CharacterId::new(1),
+                body_id: BodyId::new(2),
+                wheel_id: WheelId::new(3),
+                glider_id: GliderId::new(4),
             }
         );
     }
@@ -85,16 +93,31 @@ mod tests {
 
     #[test]
     fn single_some_is_bad_request() {
-        assert_bad_request(Update::try_from_optional(Some(1), None, None, None));
+        assert_bad_request(Update::try_from_optional(
+            Some(CharacterId::new(1)),
+            None,
+            None,
+            None,
+        ));
     }
 
     #[test]
     fn three_some_one_none_is_bad_request() {
-        assert_bad_request(Update::try_from_optional(Some(1), Some(2), Some(3), None));
+        assert_bad_request(Update::try_from_optional(
+            Some(CharacterId::new(1)),
+            Some(BodyId::new(2)),
+            Some(WheelId::new(3)),
+            None,
+        ));
     }
 
     #[test]
     fn interior_none_is_bad_request() {
-        assert_bad_request(Update::try_from_optional(Some(1), None, Some(3), Some(4)));
+        assert_bad_request(Update::try_from_optional(
+            Some(CharacterId::new(1)),
+            None,
+            Some(WheelId::new(3)),
+            Some(GliderId::new(4)),
+        ));
     }
 }

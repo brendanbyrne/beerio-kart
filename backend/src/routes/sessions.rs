@@ -76,13 +76,12 @@ pub async fn list_sessions(
 ///
 /// Propagates the errors of [`sessions::get_session_detail`]: `NotFound` if
 /// the session does not exist.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %session_id))]
 pub async fn get_session(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(session_id): Path<SessionId>,
 ) -> Result<Json<sessions::SessionDetail>, Error> {
-    let session_id = SessionId::new(id);
     let detail = sessions::get_session_detail(&state.db, &session_id, Some(&user.user_id)).await?;
     Ok(Json(detail))
 }
@@ -94,13 +93,12 @@ pub async fn get_session(
 /// Propagates the errors of [`sessions::join_session`]: `NotFound` if the
 /// session doesn't exist, `Conflict` if the session is closed or the user is
 /// already in another session.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %session_id))]
 pub async fn join_session(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(session_id): Path<SessionId>,
 ) -> Result<impl IntoResponse, Error> {
-    let session_id = SessionId::new(id);
     sessions::join_session(&state.db, &session_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -111,13 +109,12 @@ pub async fn join_session(
 ///
 /// Propagates the errors of [`sessions::leave_session`]: `NotFound` if the
 /// session doesn't exist, `BadRequest` if the user is not currently in it.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %session_id))]
 pub async fn leave_session(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(session_id): Path<SessionId>,
 ) -> Result<impl IntoResponse, Error> {
-    let session_id = SessionId::new(id);
     sessions::leave_session(&state.db, &session_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -129,13 +126,12 @@ pub async fn leave_session(
 /// Propagates the errors of [`sessions::next_track`]: `NotFound` if the
 /// session doesn't exist, `Conflict` if it's closed, `Forbidden` if the user
 /// is not an active participant.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %session_id))]
 pub async fn next_track(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(session_id): Path<SessionId>,
 ) -> Result<(StatusCode, Json<sessions::SessionRaceInfo>), Error> {
-    let session_id = SessionId::new(id);
     let race = sessions::next_track(&state.db, &session_id, &user.user_id).await?;
     Ok((StatusCode::CREATED, Json(race)))
 }
@@ -148,13 +144,12 @@ pub async fn next_track(
 /// session doesn't exist, `Conflict` if it's closed or if runs have already
 /// been submitted for the current race, `BadRequest` if there is no track to
 /// skip.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %session_id))]
 pub async fn skip_turn(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(session_id): Path<SessionId>,
 ) -> Result<(StatusCode, Json<sessions::SessionRaceInfo>), Error> {
-    let session_id = SessionId::new(id);
     let race = sessions::skip_turn(&state.db, &session_id, &user.user_id).await?;
     Ok((StatusCode::CREATED, Json(race)))
 }
@@ -175,10 +170,8 @@ pub async fn skip_turn(
 pub async fn skip_pending_race(
     user: User,
     State(state): State<AppState>,
-    Path((session_id, race_id)): Path<(String, String)>,
+    Path((session_id, race_id)): Path<(SessionId, SessionRaceId)>,
 ) -> Result<impl IntoResponse, Error> {
-    let session_id = SessionId::new(session_id);
-    let race_id = SessionRaceId::new(race_id);
     sessions::skip_pending_race(&state.db, &session_id, &race_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -189,13 +182,12 @@ pub async fn skip_pending_race(
 ///
 /// Propagates the errors of [`sessions::list_races`] — currently only
 /// `Internal` for unexpected DB failures.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, session_id = %session_id))]
 pub async fn list_races(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(session_id): Path<SessionId>,
 ) -> Result<Json<Vec<sessions::RaceInfo>>, Error> {
-    let session_id = SessionId::new(id);
     let races = sessions::list_races(&state.db, &session_id).await?;
     Ok(Json(races))
 }

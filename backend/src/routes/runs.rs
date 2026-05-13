@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     AppState,
-    domain::{RunId, SessionRaceId, UserId},
+    domain::{RunId, SessionRaceId, TrackId, UserId},
     error::Error,
     middleware::auth::User,
     services::runs,
@@ -38,9 +38,9 @@ pub async fn create_run(
 
 #[derive(Deserialize)]
 pub struct ListRunsQuery {
-    pub session_race_id: Option<String>,
-    pub user_id: Option<String>,
-    pub track_id: Option<i32>,
+    pub session_race_id: Option<SessionRaceId>,
+    pub user_id: Option<UserId>,
+    pub track_id: Option<TrackId>,
 }
 
 /// GET /runs — list runs with optional filters.
@@ -64,8 +64,8 @@ pub async fn list_runs(
     Query(query): Query<ListRunsQuery>,
 ) -> Result<Json<Vec<runs::RunDetail>>, Error> {
     let filters = runs::RunFilters {
-        session_race_id: query.session_race_id.map(SessionRaceId::new),
-        user_id: query.user_id.map(UserId::new),
+        session_race_id: query.session_race_id,
+        user_id: query.user_id,
         track_id: query.track_id,
     };
     let results = runs::list_runs(&state.db, filters).await?;
@@ -93,13 +93,12 @@ pub async fn get_defaults(
 ///
 /// Propagates the errors of [`runs::get_run`]: `NotFound` if the run doesn't
 /// exist.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, run_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, run_id = %run_id))]
 pub async fn get_run(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(run_id): Path<RunId>,
 ) -> Result<Json<runs::RunDetail>, Error> {
-    let run_id = RunId::new(id);
     let detail = runs::get_run(&state.db, &run_id).await?;
     Ok(Json(detail))
 }
@@ -111,13 +110,12 @@ pub async fn get_run(
 /// Propagates the errors of [`runs::delete_run`]: `NotFound` if the run
 /// doesn't exist, `Forbidden` if the caller is not the run's owner,
 /// `Conflict` if the run's session is closed.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, run_id = %id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, run_id = %run_id))]
 pub async fn delete_run(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(run_id): Path<RunId>,
 ) -> Result<impl IntoResponse, Error> {
-    let run_id = RunId::new(id);
     runs::delete_run(&state.db, &run_id, &user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

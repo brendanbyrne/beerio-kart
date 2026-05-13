@@ -38,7 +38,7 @@ impl SessionContext {
         session_id: &SessionId,
     ) -> Result<Self, Error> {
         let session = helpers::load_active_session(db, session_id).await?;
-        let session_id = SessionId::new(session.id.clone());
+        let session_id = SessionId::from_db(&session.id)?;
         Ok(Self {
             session,
             session_id,
@@ -51,7 +51,8 @@ impl SessionContext {
     ///
     /// Returns `Forbidden` if `user_id` is not the host.
     pub fn require_host(&self, user_id: &UserId) -> Result<(), Error> {
-        if self.session.host_id.as_str() != user_id.as_str() {
+        let host_id = UserId::from_db(&self.session.host_id)?;
+        if host_id != *user_id {
             return Err(Error::Forbidden("Only the host can do that".into()));
         }
         Ok(())
@@ -111,14 +112,14 @@ mod tests {
         let session_id = insert_session(&db, &host, "active").await;
 
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
-        assert_eq!(ctx.session.id, session_id.as_str());
-        assert_eq!(ctx.session.host_id, host.as_str());
+        assert_eq!(ctx.session.id, session_id.to_string());
+        assert_eq!(ctx.session.host_id, host.to_string());
     }
 
     #[tokio::test]
     async fn load_active_missing_propagates_not_found() {
         let db = setup_db().await;
-        let err = SessionContext::load_active(&db, &SessionId::new("missing"))
+        let err = SessionContext::load_active(&db, &SessionId::new_v4())
             .await
             .unwrap_err();
         assert!(matches!(err, Error::NotFound(_)));
@@ -168,7 +169,7 @@ mod tests {
 
         // Happy path: host is a participant.
         let row = ctx.require_participant(&db, &host).await.unwrap();
-        assert_eq!(row.user_id, host.as_str());
+        assert_eq!(row.user_id, host.to_string());
 
         // Forbidden path: another user isn't.
         let outsider = create_user(&db, "outsider").await;
@@ -195,7 +196,7 @@ mod tests {
         );
 
         // DB is also updated.
-        let db_value = sessions::Entity::find_by_id(&session_id)
+        let db_value = sessions::Entity::find_by_id(session_id)
             .one(&db)
             .await
             .unwrap()

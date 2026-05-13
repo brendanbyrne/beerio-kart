@@ -126,12 +126,12 @@ pub async fn register(
     // Hash password (offloaded to the blocking pool, capped by argon2_limit)
     let password_hash = auth_service::hash_password(&state.argon2_limit, body.password).await?;
 
-    let user_id = uuid::Uuid::new_v4().to_string();
+    let user_id = UserId::new_v4();
     tracing::Span::current().record("user_id", tracing::field::display(&user_id));
 
     // Timestamps are populated by `users::ActiveModelBehavior::before_save`.
     let new_user = users::ActiveModel {
-        id: Set(user_id.clone()),
+        id: Set((&user_id).into()),
         username: Set(username.to_string()),
         email: Set(None),
         password_hash: Set(password_hash),
@@ -158,7 +158,7 @@ pub async fn register(
         Json(Response {
             access_token,
             user: UserInfo {
-                id: UserId::new(user_id),
+                id: user_id,
                 username: username.to_string(),
             },
         }),
@@ -201,7 +201,8 @@ pub async fn login(
         .await;
         return Err(Error::Unauthorized("Invalid username or password".into()));
     };
-    tracing::Span::current().record("user_id", tracing::field::display(&user.id));
+    let user_id = UserId::from_db(&user.id)?;
+    tracing::Span::current().record("user_id", tracing::field::display(&user_id));
 
     // Verify password (offloaded to the blocking pool, capped by argon2_limit)
     let password_ok = auth_service::verify_password(
@@ -215,9 +216,9 @@ pub async fn login(
     }
 
     // Generate tokens
-    let access_token = auth_service::create_access_token(&user.id, &user.username, &state.config)?;
+    let access_token = auth_service::create_access_token(&user_id, &user.username, &state.config)?;
     let refresh_token =
-        auth_service::create_refresh_token(&user.id, user.refresh_token_version, &state.config)?;
+        auth_service::create_refresh_token(&user_id, user.refresh_token_version, &state.config)?;
     let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
     Ok((
@@ -225,7 +226,7 @@ pub async fn login(
         Json(Response {
             access_token,
             user: UserInfo {
-                id: UserId::new(user.id),
+                id: user_id,
                 username: user.username,
             },
         }),
@@ -277,6 +278,7 @@ pub async fn refresh(
         .one(&state.db)
         .await?
         .ok_or_else(|| Error::Unauthorized("User not found".into()))?;
+    let user_id = UserId::from_db(&user.id)?;
 
     // Version mismatch means the token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
@@ -284,11 +286,11 @@ pub async fn refresh(
     }
 
     // Issue new tokens
-    let access_token = auth_service::create_access_token(&user.id, &user.username, &state.config)?;
+    let access_token = auth_service::create_access_token(&user_id, &user.username, &state.config)?;
 
     // Rotate: issue a fresh refresh token with same version but new expiry
     let new_refresh =
-        auth_service::create_refresh_token(&user.id, user.refresh_token_version, &state.config)?;
+        auth_service::create_refresh_token(&user_id, user.refresh_token_version, &state.config)?;
     let resp_headers = make_refresh_headers(&new_refresh, &state.config)?;
 
     Ok((resp_headers, Json(RefreshResponse { access_token })))
@@ -307,7 +309,7 @@ pub async fn refresh(
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, Error> {
     // Look up user to get current version
-    let db_user = users::Entity::find_by_id(&user.user_id)
+    let db_user = users::Entity::find_by_id(String::from(&user.user_id))
         .one(&state.db)
         .await?
         .ok_or_else(|| {
@@ -359,7 +361,7 @@ pub async fn change_password(
     }
 
     // Look up user
-    let db_user = users::Entity::find_by_id(&user.user_id)
+    let db_user = users::Entity::find_by_id(String::from(&user.user_id))
         .one(&state.db)
         .await?
         .ok_or_else(|| Error::NotFound("User not found".into()))?;
@@ -382,7 +384,7 @@ pub async fn change_password(
     // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
     let new_version = db_user.refresh_token_version + 1;
     let username = db_user.username.clone();
-    let user_id = db_user.id.clone();
+    let user_id = UserId::from_db(&db_user.id)?;
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.password_hash = Set(new_hash);
     active.refresh_token_version = Set(new_version);

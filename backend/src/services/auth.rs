@@ -7,7 +7,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode}
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
-use crate::{config::Config, error::Error};
+use crate::{config::Config, domain::UserId, error::Error};
 
 /// Claims for short-lived access tokens (sent in response body, stored in JS memory).
 #[derive(Debug, Serialize, Deserialize)]
@@ -112,7 +112,7 @@ pub async fn verify_password(
 /// Returns `jsonwebtoken::errors::Error` if HMAC signing fails — in practice
 /// only possible if `config.jwt_secret` is empty or otherwise unusable.
 pub fn create_access_token(
-    user_id: &str,
+    user_id: &UserId,
     username: &str,
     config: &Config,
 ) -> Result<String, jsonwebtoken::errors::Error> {
@@ -120,7 +120,7 @@ pub fn create_access_token(
     let expiry = now + TimeDelta::minutes(config.jwt_access_expiry_minutes);
 
     let claims = AccessClaims {
-        sub: user_id.to_string(),
+        sub: user_id.into(),
         username: username.to_string(),
         exp: expiry.timestamp(),
         iat: now.timestamp(),
@@ -141,7 +141,7 @@ pub fn create_access_token(
 /// Returns `jsonwebtoken::errors::Error` if HMAC signing fails — in practice
 /// only possible if `config.jwt_secret` is empty or otherwise unusable.
 pub fn create_refresh_token(
-    user_id: &str,
+    user_id: &UserId,
     refresh_token_version: i32,
     config: &Config,
 ) -> Result<String, jsonwebtoken::errors::Error> {
@@ -149,7 +149,7 @@ pub fn create_refresh_token(
     let expiry = now + TimeDelta::days(config.jwt_refresh_expiry_days);
 
     let claims = RefreshClaims {
-        sub: user_id.to_string(),
+        sub: user_id.into(),
         refresh_token_version,
         exp: expiry.timestamp(),
         iat: now.timestamp(),
@@ -224,6 +224,8 @@ mod tests {
         },
         time::{Duration, Instant},
     };
+
+    use uuid::Uuid;
 
     use super::*;
     use crate::ARGON2_MAX_CONCURRENT;
@@ -371,10 +373,11 @@ mod tests {
     #[test]
     fn test_create_and_validate_access_token() {
         let config = test_config();
-        let token = create_access_token("user-123", "testuser", &config).unwrap();
+        let user_id = UserId::new(Uuid::new_v4());
+        let token = create_access_token(&user_id, "testuser", &config).unwrap();
         let claims = validate_access_token(&token, &config).unwrap();
 
-        assert_eq!(claims.sub, "user-123");
+        assert_eq!(claims.sub, user_id.as_ref().to_string());
         assert_eq!(claims.username, "testuser");
         assert_eq!(claims.token_type, "access");
         assert!(claims.exp > claims.iat);
@@ -383,10 +386,11 @@ mod tests {
     #[test]
     fn test_create_and_validate_refresh_token() {
         let config = test_config();
-        let token = create_refresh_token("user-123", 0, &config).unwrap();
+        let user_id = UserId::new(Uuid::new_v4());
+        let token = create_refresh_token(&user_id, 0, &config).unwrap();
         let claims = validate_refresh_token(&token, &config).unwrap();
 
-        assert_eq!(claims.sub, "user-123");
+        assert_eq!(claims.sub, user_id.as_ref().to_string());
         assert_eq!(claims.refresh_token_version, 0);
         assert_eq!(claims.token_type, "refresh");
         assert!(claims.exp > claims.iat);
@@ -395,7 +399,8 @@ mod tests {
     #[test]
     fn test_validate_access_token_with_wrong_secret() {
         let config = test_config();
-        let token = create_access_token("user-123", "testuser", &config).unwrap();
+        let user_id = UserId::new(Uuid::new_v4());
+        let token = create_access_token(&user_id, "testuser", &config).unwrap();
 
         let wrong_config = Arc::new(Config {
             jwt_secret: "wrong-secret".to_string(),
@@ -431,7 +436,8 @@ mod tests {
             max_request_body_bytes: 10 * 1024 * 1024,
             rate_limit_per_minute: 60,
         });
-        let token = create_access_token("user-1", "alice", &config).unwrap();
+        let user_id = UserId::new(Uuid::new_v4());
+        let token = create_access_token(&user_id, "alice", &config).unwrap();
         let claims = validate_access_token(&token, &config).unwrap();
 
         let duration_secs = claims.exp - claims.iat;

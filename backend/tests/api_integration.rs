@@ -237,7 +237,7 @@ async fn seed_test_data(db: &sea_orm::DatabaseConnection) {
     for item in &dt_json {
         let id = drink_type_uuid(&item.name);
         drink_types::ActiveModel {
-            id: Set(id),
+            id: Set((&id).into()),
             name: Set(item.name.clone()),
             alcoholic: Set(item.alcoholic),
             created_at: Set(now),
@@ -430,8 +430,13 @@ async fn test_get_nonexistent_user_returns_404() {
     let (server, _db) = setup_test_app().await;
     let (token, _) = register_and_get_token(&server, "alice").await;
 
+    // Valid UUID shape but no matching row — the Path extractor's UUID
+    // validation is satisfied, so the handler runs and produces 404.
+    // A non-UUID path segment is now a 400 from the extractor itself,
+    // which is a different (also-correct) class of error not exercised here.
+    let missing = uuid::Uuid::new_v4();
     let res = server
-        .get("/api/v1/users/nonexistent-id")
+        .get(&format!("/api/v1/users/{missing}"))
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::NOT_FOUND);
@@ -659,8 +664,11 @@ async fn test_get_nonexistent_drink_type_returns_404() {
     let (server, _db) = setup_test_app().await;
     let (token, _) = register_and_get_token(&server, "testuser").await;
 
+    // Valid UUID shape but no matching row — see `test_get_nonexistent_user_returns_404`
+    // for the rationale on the shape vs. non-UUID-path-segment split.
+    let missing = uuid::Uuid::new_v4();
     let res = server
-        .get("/api/v1/drink-types/nonexistent-uuid")
+        .get(&format!("/api/v1/drink-types/{missing}"))
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::NOT_FOUND);
