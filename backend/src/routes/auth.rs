@@ -96,7 +96,10 @@ fn extract_refresh_cookie(headers: &HeaderMap) -> Option<String> {
 /// Returns `BadRequest` if the username is empty / >30 chars or the password
 /// is <8 / >128 chars; `Conflict` if the username is taken; `Internal` for
 /// password-hash, token-issue, or DB failures.
-#[tracing::instrument(skip_all, fields(username = %body.username))]
+#[tracing::instrument(
+    skip_all,
+    fields(username = %body.username, user_id = tracing::field::Empty),
+)]
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
@@ -124,6 +127,7 @@ pub async fn register(
     let password_hash = auth_service::hash_password(&state.argon2_limit, body.password).await?;
 
     let user_id = uuid::Uuid::new_v4().to_string();
+    tracing::Span::current().record("user_id", tracing::field::display(&user_id));
 
     // Timestamps are populated by `users::ActiveModelBehavior::before_save`.
     let new_user = users::ActiveModel {
@@ -171,7 +175,10 @@ pub async fn register(
 /// Returns `Unauthorized` if the username doesn't exist or the password is
 /// wrong (both surfaced as the same generic message to prevent username
 /// enumeration); `Internal` for password-verify, token-issue, or DB failures.
-#[tracing::instrument(skip_all, fields(username = %body.username))]
+#[tracing::instrument(
+    skip_all,
+    fields(username = %body.username, user_id = tracing::field::Empty),
+)]
 pub async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
@@ -194,6 +201,7 @@ pub async fn login(
         .await;
         return Err(Error::Unauthorized("Invalid username or password".into()));
     };
+    tracing::Span::current().record("user_id", tracing::field::display(&user.id));
 
     // Verify password (offloaded to the blocking pool, capped by argon2_limit)
     let password_ok = auth_service::verify_password(
@@ -240,7 +248,7 @@ pub async fn login(
 /// validation, the token type is not `refresh`, the user no longer exists,
 /// or the token's `refresh_token_version` doesn't match the DB (revoked via
 /// logout or password change). `Internal` for token-issue or DB failures.
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(user_id = tracing::field::Empty))]
 pub async fn refresh(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -264,6 +272,7 @@ pub async fn refresh(
         .one(&state.db)
         .await?
         .ok_or_else(|| Error::Unauthorized("User not found".into()))?;
+    tracing::Span::current().record("user_id", tracing::field::display(&user.id));
 
     // Version mismatch means the token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
