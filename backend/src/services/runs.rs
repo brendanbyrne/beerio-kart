@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     domain::{
         BodyId, CharacterId, DrinkTypeId, GliderId, RunId, SessionId, SessionRaceId, TrackId,
-        UserId, WheelId,
+        UserId, Username, WheelId,
     },
     entities::{
         bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
@@ -41,7 +41,7 @@ pub struct CreateRunRequest {
 pub struct RunDetail {
     pub id: RunId,
     pub user_id: UserId,
-    pub username: String,
+    pub username: Username,
     pub session_race_id: SessionRaceId,
     pub track_id: TrackId,
     pub track_time: i32,
@@ -88,7 +88,7 @@ impl RunDetailRow {
         Ok(RunDetail {
             id: RunId::from_db(&self.id)?,
             user_id: UserId::from_db(&self.user_id)?,
-            username: self.username,
+            username: Username::from_db(self.username, "users.username")?,
             session_race_id: SessionRaceId::from_db(&self.session_race_id)?,
             track_id: TrackId::new(self.track_id),
             track_time: self.track_time,
@@ -686,7 +686,7 @@ mod tests {
         assert_eq!(run.user_id, host_id);
         assert_eq!(run.track_time, 120_000);
         assert_eq!(run.lap1_time, 40_000);
-        assert_eq!(run.username, "host");
+        assert_eq!(run.username.as_ref(), "host");
         assert_eq!(run.drink_type_name, "Test Beer");
         assert!(!run.disqualified);
     }
@@ -1035,7 +1035,7 @@ mod tests {
             .unwrap();
         let current = detail.current_race.unwrap();
         assert_eq!(current.submissions.len(), 1);
-        assert_eq!(current.submissions[0].username, "host");
+        assert_eq!(current.submissions[0].username.as_ref(), "host");
         assert_eq!(current.submissions[0].track_time, 120_000);
         assert!(!current.submissions[0].disqualified);
     }

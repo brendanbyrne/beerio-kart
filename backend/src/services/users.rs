@@ -2,7 +2,7 @@ use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::{BodyId, CharacterId, DrinkTypeId, GliderId, UserId, WheelId, race_setup},
+    domain::{BodyId, CharacterId, DrinkTypeId, GliderId, UserId, Username, WheelId, race_setup},
     entities::{bodies, characters, drink_types, gliders, users, wheels},
     error::Error,
     services::helpers,
@@ -20,7 +20,7 @@ pub struct DrinkTypeInfo {
 #[derive(Serialize)]
 pub struct UserDetailProfile {
     pub id: UserId,
-    pub username: String,
+    pub username: Username,
     pub preferred_character_id: Option<CharacterId>,
     pub preferred_body_id: Option<BodyId>,
     pub preferred_wheel_id: Option<WheelId>,
@@ -156,7 +156,7 @@ pub async fn build_detail_profile(
 
     Ok(UserDetailProfile {
         id: UserId::from_db(&user.id)?,
-        username: user.username,
+        username: Username::from_db(user.username, "users.username")?,
         preferred_character_id: user.preferred_character_id.map(CharacterId::new),
         preferred_body_id: user.preferred_body_id.map(BodyId::new),
         preferred_wheel_id: user.preferred_wheel_id.map(WheelId::new),

@@ -8,7 +8,7 @@ use axum_test::TestServer;
 use beerio_kart::{
     ARGON2_MAX_CONCURRENT, AppState,
     config::Config,
-    domain::UserId,
+    domain::{UserId, Username},
     middleware::auth::{AdminUser, User},
 };
 use migration::{Migrator, MigratorTrait};
@@ -68,7 +68,8 @@ async fn setup_server(admin_user_id: Option<UserId>) -> TestServer {
 
 fn create_access_token(user_id: &UserId, username: &str) -> String {
     let config = make_config(None);
-    beerio_kart::services::auth::create_access_token(user_id, username, &config).unwrap()
+    let username = Username::try_from(username.to_string()).expect("valid test username");
+    beerio_kart::services::auth::create_access_token(user_id, &username, &config).unwrap()
 }
 
 fn create_refresh_token(user_id: &UserId) -> String {

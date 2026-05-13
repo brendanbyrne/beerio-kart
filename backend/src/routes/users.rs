@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::{
     AppState,
-    domain::{BodyId, CharacterId, DrinkTypeId, GliderId, UserId, WheelId},
+    domain::{BodyId, CharacterId, DrinkTypeId, GliderId, UserId, Username, WheelId},
     entities::users,
     error::Error,
     middleware::auth::User,
@@ -20,7 +20,7 @@ use crate::{
 #[derive(Serialize)]
 pub struct UserPublicProfile {
     pub id: UserId,
-    pub username: String,
+    pub username: Username,
     pub preferred_character_id: Option<CharacterId>,
     pub preferred_body_id: Option<BodyId>,
     pub preferred_wheel_id: Option<WheelId>,
@@ -48,7 +48,7 @@ pub async fn list_users(
             .map(|u| {
                 Ok::<_, Error>(UserPublicProfile {
                     id: UserId::from_db(&u.id)?,
-                    username: u.username,
+                    username: Username::from_db(u.username, "users.username")?,
                     preferred_character_id: u.preferred_character_id.map(CharacterId::new),
                     preferred_body_id: u.preferred_body_id.map(BodyId::new),
                     preferred_wheel_id: u.preferred_wheel_id.map(WheelId::new),

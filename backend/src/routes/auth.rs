@@ -53,7 +53,7 @@ pub struct RefreshResponse {
 #[derive(Serialize)]
 pub struct UserInfo {
     pub id: UserId,
-    pub username: String,
+    pub username: Username,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -148,8 +148,7 @@ pub async fn register(
     new_user.insert(&state.db).await?;
 
     // Generate tokens
-    let access_token =
-        auth_service::create_access_token(&user_id, username.as_ref(), &state.config)?;
+    let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;
     let refresh_token = auth_service::create_refresh_token(&user_id, 0, &state.config)?;
     let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
@@ -160,7 +159,7 @@ pub async fn register(
             access_token,
             user: UserInfo {
                 id: user_id,
-                username: username.as_ref().to_string(),
+                username,
             },
         }),
     ))
@@ -223,8 +222,13 @@ pub async fn login(
         return Err(Error::Unauthorized("Invalid username or password".into()));
     }
 
+    // Stored username is validated at the boundary for the same reason
+    // (mirrors the PasswordHash / ImagePath from_db pattern).
+    let stored_username = Username::from_db(user.username, "users.username")?;
+
     // Generate tokens
-    let access_token = auth_service::create_access_token(&user_id, &user.username, &state.config)?;
+    let access_token =
+        auth_service::create_access_token(&user_id, &stored_username, &state.config)?;
     let refresh_token =
         auth_service::create_refresh_token(&user_id, user.refresh_token_version, &state.config)?;
     let headers = make_refresh_headers(&refresh_token, &state.config)?;
@@ -235,7 +239,7 @@ pub async fn login(
             access_token,
             user: UserInfo {
                 id: user_id,
-                username: user.username,
+                username: stored_username,
             },
         }),
     ))
@@ -287,6 +291,7 @@ pub async fn refresh(
         .await?
         .ok_or_else(|| Error::Unauthorized("User not found".into()))?;
     let user_id = UserId::from_db(&user.id)?;
+    let username = Username::from_db(user.username, "users.username")?;
 
     // Version mismatch means the token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
@@ -294,7 +299,7 @@ pub async fn refresh(
     }
 
     // Issue new tokens
-    let access_token = auth_service::create_access_token(&user_id, &user.username, &state.config)?;
+    let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;
 
     // Rotate: issue a fresh refresh token with same version but new expiry
     let new_refresh =
@@ -388,7 +393,7 @@ pub async fn change_password(
     // Update password and bump version (invalidates all other sessions).
     // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
     let new_version = db_user.refresh_token_version + 1;
-    let username = db_user.username.clone();
+    let username = Username::from_db(db_user.username.clone(), "users.username")?;
     let user_id = UserId::from_db(&db_user.id)?;
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.password_hash = Set(new_hash.into_inner());

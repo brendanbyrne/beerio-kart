@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        ImagePath, SessionId, SessionRaceId, UserId,
+        ImagePath, SessionId, SessionRaceId, UserId, Username,
         enums::{Ruleset, SessionStatus},
     },
     entities::{
@@ -147,7 +147,7 @@ pub async fn create_session(
 #[derive(serde::Serialize)]
 pub struct SessionSummary {
     pub id: SessionId,
-    pub host_username: String,
+    pub host_username: Username,
     pub participant_count: i64,
     pub race_number: i64,
     pub ruleset: String,
@@ -200,7 +200,7 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
         .map(|r| {
             Ok(SessionSummary {
                 id: SessionId::from_db(&r.id)?,
-                host_username: r.host_username,
+                host_username: Username::from_db(r.host_username, "users.username")?,
                 participant_count: r.participant_count,
                 race_number: r.race_count.max(1),
                 ruleset: r.ruleset,
@@ -214,7 +214,7 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
 #[derive(serde::Serialize)]
 pub struct ParticipantInfo {
     pub user_id: UserId,
-    pub username: String,
+    pub username: Username,
     pub joined_at: DateTime<Utc>,
     pub left_at: Option<DateTime<Utc>>,
 }
@@ -232,7 +232,7 @@ struct ParticipantRow {
 #[derive(serde::Serialize, Clone)]
 pub struct RaceSubmission {
     pub user_id: UserId,
-    pub username: String,
+    pub username: Username,
     pub track_time: i32,
     pub disqualified: bool,
 }
@@ -300,7 +300,7 @@ struct CurrentRaceRow {
 pub struct SessionDetail {
     pub id: SessionId,
     pub host_id: UserId,
-    pub host_username: String,
+    pub host_username: Username,
     pub ruleset: String,
     pub status: String,
     pub created_at: DateTime<Utc>,
@@ -319,15 +319,19 @@ pub struct SessionDetail {
 // ── get_session_detail sub-queries ────────────────────────────────────
 
 /// Look up the host's username. Returns `Internal` if the FK-referenced
-/// user row is missing (data corruption — FKs should prevent this).
-async fn load_host_username(db: &impl ConnectionTrait, host_id: &UserId) -> Result<String, Error> {
-    users::Entity::find_by_id(host_id)
+/// user row is missing (data corruption — FKs should prevent this) or if
+/// the stored username fails the newtype's invariant.
+async fn load_host_username(
+    db: &impl ConnectionTrait,
+    host_id: &UserId,
+) -> Result<Username, Error> {
+    let user = users::Entity::find_by_id(host_id)
         .one(db)
         .await?
-        .map(|u| u.username)
         .ok_or_else(|| {
             Error::Internal(anyhow::anyhow!("Host user not found for host_id {host_id}"))
-        })
+        })?;
+    Username::from_db(user.username, "users.username")
 }
 
 /// Fetch all participants with usernames in a single JOIN query.
@@ -353,7 +357,7 @@ async fn load_participants(
         .map(|r| {
             Ok(ParticipantInfo {
                 user_id: UserId::from_db(&r.user_id)?,
-                username: r.username,
+                username: Username::from_db(r.username, "users.username")?,
                 joined_at: r.joined_at.and_utc(),
                 left_at: r.left_at.map(|t| t.and_utc()),
             })
@@ -407,7 +411,7 @@ async fn load_current_race_with_submissions(
         .map(|s| {
             Ok::<_, Error>(RaceSubmission {
                 user_id: UserId::from_db(&s.user_id)?,
-                username: s.username,
+                username: Username::from_db(s.username, "users.username")?,
                 track_time: s.track_time,
                 disqualified: s.disqualified,
             })
@@ -1291,7 +1295,7 @@ mod tests {
         let db = setup_db().await;
         let user_id = create_user(&db, "alice").await;
         let username = load_host_username(&db, &user_id).await.unwrap();
-        assert_eq!(username, "alice");
+        assert_eq!(username.as_ref(), "alice");
     }
 
     #[tokio::test]
@@ -1513,12 +1517,12 @@ mod tests {
 
         let s1_summary = summaries.iter().find(|s| s.id == s1.id).unwrap();
         assert_eq!(s1_summary.participant_count, 2);
-        assert_eq!(s1_summary.host_username, "host");
+        assert_eq!(s1_summary.host_username.as_ref(), "host");
         assert_eq!(s1_summary.race_number, 1);
 
         let s2_summary = summaries.iter().find(|s| s.id != s1.id).unwrap();
         assert_eq!(s2_summary.participant_count, 1);
-        assert_eq!(s2_summary.host_username, "user2");
+        assert_eq!(s2_summary.host_username.as_ref(), "user2");
     }
 
     #[tokio::test]
@@ -1534,16 +1538,16 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(detail.participants.len(), 2);
-        assert_eq!(detail.host_username, "host");
+        assert_eq!(detail.host_username.as_ref(), "host");
         assert_eq!(detail.race_number, 1);
 
-        let usernames: Vec<&str> = detail
+        let usernames: Vec<String> = detail
             .participants
             .iter()
-            .map(|p| p.username.as_str())
+            .map(|p| p.username.to_string())
             .collect();
-        assert!(usernames.contains(&"host"));
-        assert!(usernames.contains(&"user2"));
+        assert!(usernames.iter().any(|u| u == "host"));
+        assert!(usernames.iter().any(|u| u == "user2"));
     }
 
     #[tokio::test]
