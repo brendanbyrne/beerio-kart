@@ -449,7 +449,13 @@ pub async fn delete_run(
         .await?
         .ok_or_else(|| Error::NotFound("Run not found".to_string()))?;
 
-    if run.user_id != user_id.to_string() {
+    // Lift the entity-layer `String` to a typed `UserId` and compare in the
+    // domain. Stays consistent with `session_context.rs::require_host` and
+    // surfaces a corrupt-UUID-in-DB as 500 instead of a silent false-negative
+    // compare (FK-protected so it should never fire, but the failure mode is
+    // worth surfacing if it ever does).
+    let owner = UserId::from_db(&run.user_id)?;
+    if owner != *user_id {
         return Err(Error::Forbidden(
             "Only the run's owner can delete it".to_string(),
         ));

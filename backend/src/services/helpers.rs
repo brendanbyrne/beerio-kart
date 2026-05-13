@@ -157,13 +157,15 @@ pub async fn touch_session<C: ConnectionTrait>(
 /// Assert that a row with the given primary key exists in entity `E`.
 ///
 /// The generic bounds mirror `EntityTrait::find_by_id` — the primary key's
-/// `ValueType` is what the caller must pass in.
+/// `ValueType` is what the caller must pass in. The PK value is also surfaced
+/// on the span (parked in PR #144 review until the newtype-Display landed in
+/// PR-D1 / #122 made this caller-churn-free).
 ///
 /// # Errors
 ///
 /// Returns `BadRequest` with a formatted message on miss (e.g., "Invalid
 /// `character_id`"); `Internal` for unexpected DB failures.
-#[tracing::instrument(level = "debug", skip(db, id), fields(entity = %entity_label))]
+#[tracing::instrument(level = "debug", skip(db, id), fields(entity = %entity_label, id = %id))]
 pub async fn require_exists<E, C>(
     db: &C,
     id: <<E as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType,
@@ -172,6 +174,7 @@ pub async fn require_exists<E, C>(
 where
     E: EntityTrait,
     C: ConnectionTrait,
+    <<E as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType: std::fmt::Display,
 {
     if E::find_by_id(id).one(db).await?.is_none() {
         return Err(Error::bad_request(format!("Invalid {entity_label}_id")));

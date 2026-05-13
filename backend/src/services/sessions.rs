@@ -957,7 +957,11 @@ pub async fn leave_session(
     active_participant.left_at = Set(Some(now));
     active_participant.update(&txn).await?;
 
-    let is_host_leaving = session.host_id == user_id.to_string();
+    // Lift to typed before comparing — matches the pattern in
+    // `session_context.rs::require_host` and surfaces a malformed UUID in
+    // `sessions.host_id` as 500 rather than a silent false-negative compare.
+    let host_id = UserId::from_db(&session.host_id)?;
+    let is_host_leaving = host_id == *user_id;
     let mut active_session: sessions::ActiveModel = session.into();
     let disposition = transfer_host_or_close(&txn, session_id, user_id, is_host_leaving).await?;
 

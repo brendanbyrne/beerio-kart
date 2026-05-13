@@ -309,7 +309,7 @@ pub async fn refresh(
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, Error> {
     // Look up user to get current version
-    let db_user = users::Entity::find_by_id(String::from(&user.user_id))
+    let db_user = users::Entity::find_by_id(user.user_id)
         .one(&state.db)
         .await?
         .ok_or_else(|| {
@@ -361,7 +361,7 @@ pub async fn change_password(
     }
 
     // Look up user
-    let db_user = users::Entity::find_by_id(String::from(&user.user_id))
+    let db_user = users::Entity::find_by_id(user.user_id)
         .one(&state.db)
         .await?
         .ok_or_else(|| Error::NotFound("User not found".into()))?;

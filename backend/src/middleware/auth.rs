@@ -1,9 +1,6 @@
 use axum::{extract::FromRequestParts, http::request::Parts};
 
-use crate::{
-    domain::{UserId, ids::parse_db_id},
-    error::Error,
-};
+use crate::{domain::UserId, error::Error};
 
 /// Extractor that validates the JWT from the `Authorization: Bearer <token>`
 /// header and makes the authenticated user's info available to handlers.
@@ -58,7 +55,12 @@ impl FromRequestParts<crate::AppState> for User {
         // serializes a real `UserId`. A non-UUID `sub` here means a forged or
         // foreign-issued token slipped past signature validation — treat it
         // as unauthorized, not internal, so we don't leak corruption details.
-        let user_id = parse_db_id::<UserId>(&claims.sub, "access token sub claim")
+        // Goes through the typed `FromStr` surface (nutype-derived) rather
+        // than the internal `parse_db_id` helper, which is for entity-column
+        // reads where the error context should name the column.
+        let user_id: UserId = claims
+            .sub
+            .parse()
             .map_err(|_| Error::Unauthorized("Invalid user id in token".to_string()))?;
 
         Ok(Self {
