@@ -12,7 +12,7 @@ use tokio::sync::Semaphore;
 
 use crate::{
     config::Config,
-    domain::{Password, PasswordHash, UserId},
+    domain::{Password, PasswordHash, UserId, Username},
     error::Error,
 };
 
@@ -127,13 +127,19 @@ pub async fn verify_password(
 
 /// Create a short-lived access token for the given user.
 ///
+/// Takes `&Username` so callers feed a value that has already passed the
+/// boundary check (either freshly built from a request or recovered from
+/// the DB via [`Username::from_db`]). The claim still serializes as a
+/// bare string thanks to `Username`'s transparent serde, so the JWT
+/// payload is unchanged.
+///
 /// # Errors
 ///
 /// Returns `jsonwebtoken::errors::Error` if HMAC signing fails — in practice
 /// only possible if `config.jwt_secret` is empty or otherwise unusable.
 pub fn create_access_token(
     user_id: &UserId,
-    username: &str,
+    username: &Username,
     config: &Config,
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let now = Utc::now();
@@ -141,7 +147,7 @@ pub fn create_access_token(
 
     let claims = AccessClaims {
         sub: user_id.into(),
-        username: username.to_string(),
+        username: username.as_ref().to_string(),
         exp: expiry.timestamp(),
         iat: now.timestamp(),
         token_type: "access".to_string(),
@@ -272,6 +278,10 @@ mod tests {
         Password::try_from(s.to_string()).expect("test password must be 8-128 chars")
     }
 
+    fn username(s: &str) -> Username {
+        Username::try_from(s.to_string()).expect("test username must be 1-30 chars")
+    }
+
     #[tokio::test]
     async fn test_hash_password_produces_argon2id_hash() {
         let limiter = test_limiter();
@@ -399,7 +409,7 @@ mod tests {
     fn test_create_and_validate_access_token() {
         let config = test_config();
         let user_id = UserId::new(Uuid::new_v4());
-        let token = create_access_token(&user_id, "testuser", &config).unwrap();
+        let token = create_access_token(&user_id, &username("testuser"), &config).unwrap();
         let claims = validate_access_token(&token, &config).unwrap();
 
         assert_eq!(claims.sub, user_id.as_ref().to_string());
@@ -425,7 +435,7 @@ mod tests {
     fn test_validate_access_token_with_wrong_secret() {
         let config = test_config();
         let user_id = UserId::new(Uuid::new_v4());
-        let token = create_access_token(&user_id, "testuser", &config).unwrap();
+        let token = create_access_token(&user_id, &username("testuser"), &config).unwrap();
 
         let wrong_config = Arc::new(Config {
             jwt_secret: "wrong-secret".to_string(),
@@ -462,7 +472,7 @@ mod tests {
             rate_limit_per_minute: 60,
         });
         let user_id = UserId::new(Uuid::new_v4());
-        let token = create_access_token(&user_id, "alice", &config).unwrap();
+        let token = create_access_token(&user_id, &username("alice"), &config).unwrap();
         let claims = validate_access_token(&token, &config).unwrap();
 
         let duration_secs = claims.exp - claims.iat;

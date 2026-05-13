@@ -38,14 +38,15 @@ fn looks_like_email(s: &str) -> bool {
     // Intentionally minimal: RFC 5322 is famously not regex-checkable, and
     // the canonical answer is "send a confirmation email." We enforce the
     // bare minimum that catches obvious typos: exactly one `@`, with at
-    // least one character on each side. Total length is bounded by the
-    // `len_char_max` on the newtype itself.
-    let parts: Vec<&str> = s.split('@').collect();
-    parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() && parts[1].contains('.')
-}
-
-fn is_non_empty_path(s: &str) -> bool {
-    !s.trim().is_empty()
+    // least one character on each side, and a `.` in the domain part.
+    // Destructure-on-iterator avoids the per-call `Vec<&str>` allocation
+    // that a `.collect()` form would carry.
+    let mut parts = s.split('@');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(local), Some(domain), None)
+            if !local.is_empty() && !domain.is_empty() && domain.contains('.')
+    )
 }
 
 // ── User-facing string newtypes ──────────────────────────────────────────
@@ -74,6 +75,28 @@ fn is_non_empty_path(s: &str) -> bool {
     )
 )]
 pub struct Username(String);
+
+impl Username {
+    /// Parse a username read from the database (typically `users.username`
+    /// or a JOIN result aliasing it). Mirrors [`PasswordHash::from_db`] and
+    /// [`ImagePath::from_db`]: a stored value that fails the newtype's
+    /// invariant is data corruption, so the failure surfaces as
+    /// [`Error::Internal`] rather than a client-facing `BadRequest`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] if the stored value fails the trim +
+    /// 1–30 character check. The `column` argument is woven into the error
+    /// context so logs name the source column (e.g.
+    /// `"Invalid username in users.username"`).
+    pub fn from_db(s: String, column: &'static str) -> Result<Self, Error> {
+        Self::try_from(s).map_err(|e| {
+            Error::Internal(
+                anyhow::Error::msg(e.to_string()).context(format!("Invalid username in {column}")),
+            )
+        })
+    }
+}
 
 /// An email address. Stored as the lowercased, trimmed form; rejection is
 /// limited to obvious-shape checks (see [`looks_like_email`]). 3–320
@@ -186,8 +209,15 @@ pub struct DrinkTypeName(String);
 /// user-input path that constructs one — but it lets the response DTOs say
 /// `image_path: ImagePath` instead of `image_path: String` and catches
 /// hand-edited seed rows that omit the value.
+///
+/// `sanitize(trim) + len_char_min = 1` matches the shape used by
+/// [`Username`] / [`DrinkTypeName`] / [`RunNotes`]: surrounding whitespace
+/// is normalized, then the trimmed result must be non-empty. A corrupt
+/// seed row like `"  /foo  "` becomes `"/foo"` rather than surviving with
+/// the whitespace intact.
 #[nutype(
-    validate(len_char_min = 1, len_char_max = 500, predicate = is_non_empty_path),
+    sanitize(trim),
+    validate(len_char_min = 1, len_char_max = 500),
     derive(
         Debug,
         Clone,
@@ -199,7 +229,7 @@ pub struct DrinkTypeName(String);
         Serialize,
         Deserialize,
         TryFrom,
-    ),
+    )
 )]
 pub struct ImagePath(String);
 
@@ -294,6 +324,21 @@ mod tests {
         // exactly 30 chars, so it should be accepted.
         let s = "🏎".repeat(30);
         assert!(Username::try_from(s).is_ok());
+    }
+
+    #[test]
+    fn test_username_from_db_round_trip() {
+        let u = Username::from_db("alice".to_string(), "users.username").unwrap();
+        assert_eq!(u.as_ref(), "alice");
+    }
+
+    #[test]
+    fn test_username_from_db_maps_corruption_to_internal_with_column() {
+        let err = Username::from_db(String::new(), "users.username").unwrap_err();
+        let Error::Internal(chain) = err else {
+            panic!("expected Internal, got {err:?}");
+        };
+        assert!(format!("{chain:#}").contains("users.username"));
     }
 
     // ── EmailAddress ────────────────────────────────────────────────
