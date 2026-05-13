@@ -5,10 +5,12 @@ use sea_orm::{
     TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
-    domain::{RunId, SessionId, SessionRaceId, UserId},
+    domain::{
+        BodyId, CharacterId, DrinkTypeId, GliderId, RunId, SessionId, SessionRaceId, TrackId,
+        UserId, WheelId,
+    },
     entities::{
         bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
         users, wheels,
@@ -22,16 +24,16 @@ const MAX_TRACK_TIME_MS: i32 = 600_000;
 
 #[derive(Deserialize)]
 pub struct CreateRunRequest {
-    pub session_race_id: String,
+    pub session_race_id: SessionRaceId,
     pub track_time: i32,
     pub lap1_time: i32,
     pub lap2_time: i32,
     pub lap3_time: i32,
-    pub character_id: i32,
-    pub body_id: i32,
-    pub wheel_id: i32,
-    pub glider_id: i32,
-    pub drink_type_id: String,
+    pub character_id: CharacterId,
+    pub body_id: BodyId,
+    pub wheel_id: WheelId,
+    pub glider_id: GliderId,
+    pub drink_type_id: DrinkTypeId,
     pub disqualified: bool,
 }
 
@@ -41,16 +43,16 @@ pub struct RunDetail {
     pub user_id: UserId,
     pub username: String,
     pub session_race_id: SessionRaceId,
-    pub track_id: i32,
+    pub track_id: TrackId,
     pub track_time: i32,
     pub lap1_time: i32,
     pub lap2_time: i32,
     pub lap3_time: i32,
-    pub character_id: i32,
-    pub body_id: i32,
-    pub wheel_id: i32,
-    pub glider_id: i32,
-    pub drink_type_id: String,
+    pub character_id: CharacterId,
+    pub body_id: BodyId,
+    pub wheel_id: WheelId,
+    pub glider_id: GliderId,
+    pub drink_type_id: DrinkTypeId,
     pub drink_type_name: String,
     pub disqualified: bool,
     pub created_at: DateTime<Utc>,
@@ -78,44 +80,47 @@ struct RunDetailRow {
     created_at: NaiveDateTime,
 }
 
-impl From<RunDetailRow> for RunDetail {
-    fn from(r: RunDetailRow) -> Self {
-        Self {
-            id: RunId::new(r.id),
-            user_id: UserId::new(r.user_id),
-            username: r.username,
-            session_race_id: SessionRaceId::new(r.session_race_id),
-            track_id: r.track_id,
-            track_time: r.track_time,
-            lap1_time: r.lap1_time,
-            lap2_time: r.lap2_time,
-            lap3_time: r.lap3_time,
-            character_id: r.character_id,
-            body_id: r.body_id,
-            wheel_id: r.wheel_id,
-            glider_id: r.glider_id,
-            drink_type_id: r.drink_type_id,
-            drink_type_name: r.drink_type_name,
-            disqualified: r.disqualified,
-            created_at: r.created_at.and_utc(),
-        }
+impl RunDetailRow {
+    /// Parse a row into a typed [`RunDetail`]. Fallible because every UUID
+    /// column has to round-trip through `from_db`; an invalid UUID in any of
+    /// those columns is data corruption and surfaces as `Internal`.
+    fn try_into_detail(self) -> Result<RunDetail, Error> {
+        Ok(RunDetail {
+            id: RunId::from_db(&self.id)?,
+            user_id: UserId::from_db(&self.user_id)?,
+            username: self.username,
+            session_race_id: SessionRaceId::from_db(&self.session_race_id)?,
+            track_id: TrackId::new(self.track_id),
+            track_time: self.track_time,
+            lap1_time: self.lap1_time,
+            lap2_time: self.lap2_time,
+            lap3_time: self.lap3_time,
+            character_id: CharacterId::new(self.character_id),
+            body_id: BodyId::new(self.body_id),
+            wheel_id: WheelId::new(self.wheel_id),
+            glider_id: GliderId::new(self.glider_id),
+            drink_type_id: DrinkTypeId::from_db(&self.drink_type_id)?,
+            drink_type_name: self.drink_type_name,
+            disqualified: self.disqualified,
+            created_at: self.created_at.and_utc(),
+        })
     }
 }
 
 #[derive(Serialize)]
 pub struct RunDefaults {
-    pub drink_type_id: Option<String>,
-    pub character_id: Option<i32>,
-    pub body_id: Option<i32>,
-    pub wheel_id: Option<i32>,
-    pub glider_id: Option<i32>,
+    pub drink_type_id: Option<DrinkTypeId>,
+    pub character_id: Option<CharacterId>,
+    pub body_id: Option<BodyId>,
+    pub wheel_id: Option<WheelId>,
+    pub glider_id: Option<GliderId>,
     pub source: String,
 }
 
 pub struct RunFilters {
     pub session_race_id: Option<SessionRaceId>,
     pub user_id: Option<UserId>,
-    pub track_id: Option<i32>,
+    pub track_id: Option<TrackId>,
 }
 
 /// Validate time fields on a run submission: `track_time` range, lap times
@@ -193,12 +198,12 @@ async fn validate_run_request(
 ) -> Result<session_races::Model, Error> {
     validate_time_fields(body)?;
 
-    let session_race = session_races::Entity::find_by_id(&body.session_race_id)
+    let session_race = session_races::Entity::find_by_id(body.session_race_id)
         .one(db)
         .await?
         .ok_or_else(|| Error::NotFound("Session race not found".to_string()))?;
 
-    let session_id = SessionId::new(session_race.session_id.clone());
+    let session_id = SessionId::from_db(&session_race.session_id)?;
     helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
@@ -211,7 +216,7 @@ async fn validate_run_request(
     let existing = runs::Entity::find()
         .filter(
             Condition::all()
-                .add(runs::Column::SessionRaceId.eq(&body.session_race_id))
+                .add(runs::Column::SessionRaceId.eq(body.session_race_id))
                 .add(runs::Column::UserId.eq(user_id)),
         )
         .one(db)
@@ -229,7 +234,7 @@ async fn validate_run_request(
     let participation = session_race_participations::Entity::find()
         .filter(
             Condition::all()
-                .add(session_race_participations::Column::SessionRaceId.eq(&body.session_race_id))
+                .add(session_race_participations::Column::SessionRaceId.eq(body.session_race_id))
                 .add(session_race_participations::Column::UserId.eq(user_id)),
         )
         .one(db)
@@ -266,12 +271,17 @@ async fn validate_run_request(
     }
 
     // Validate FK references exist
-    helpers::require_exists::<characters::Entity, _>(db, body.character_id, "character").await?;
-    helpers::require_exists::<bodies::Entity, _>(db, body.body_id, "body").await?;
-    helpers::require_exists::<wheels::Entity, _>(db, body.wheel_id, "wheel").await?;
-    helpers::require_exists::<gliders::Entity, _>(db, body.glider_id, "glider").await?;
-    helpers::require_exists::<drink_types::Entity, _>(db, body.drink_type_id.clone(), "drink_type")
+    helpers::require_exists::<characters::Entity, _>(db, body.character_id.into(), "character")
         .await?;
+    helpers::require_exists::<bodies::Entity, _>(db, body.body_id.into(), "body").await?;
+    helpers::require_exists::<wheels::Entity, _>(db, body.wheel_id.into(), "wheel").await?;
+    helpers::require_exists::<gliders::Entity, _>(db, body.glider_id.into(), "glider").await?;
+    helpers::require_exists::<drink_types::Entity, _>(
+        db,
+        (&body.drink_type_id).into(),
+        "drink_type",
+    )
+    .await?;
 
     Ok(session_race)
 }
@@ -285,24 +295,24 @@ async fn insert_run(
     body: CreateRunRequest,
     session_race: &session_races::Model,
 ) -> Result<RunId, Error> {
-    let run_id = RunId::new(Uuid::new_v4().to_string());
+    let run_id = RunId::new_v4();
 
     let txn = db.begin().await?;
 
     runs::ActiveModel {
-        id: Set(run_id.as_str().to_string()),
-        user_id: Set(user_id.as_str().to_string()),
-        session_race_id: Set(body.session_race_id),
+        id: Set((&run_id).into()),
+        user_id: Set(user_id.into()),
+        session_race_id: Set((&body.session_race_id).into()),
         track_id: Set(session_race.track_id),
-        character_id: Set(body.character_id),
-        body_id: Set(body.body_id),
-        wheel_id: Set(body.wheel_id),
-        glider_id: Set(body.glider_id),
+        character_id: Set(body.character_id.into()),
+        body_id: Set(body.body_id.into()),
+        wheel_id: Set(body.wheel_id.into()),
+        glider_id: Set(body.glider_id.into()),
         track_time: Set(body.track_time),
         lap1_time: Set(body.lap1_time),
         lap2_time: Set(body.lap2_time),
         lap3_time: Set(body.lap3_time),
-        drink_type_id: Set(body.drink_type_id),
+        drink_type_id: Set((&body.drink_type_id).into()),
         disqualified: Set(body.disqualified),
         photo_path: Set(None),
         created_at: NotSet,
@@ -311,7 +321,7 @@ async fn insert_run(
     .insert(&txn)
     .await?;
 
-    let session_id = SessionId::new(session_race.session_id.clone());
+    let session_id = SessionId::from_db(&session_race.session_id)?;
     helpers::touch_session(&txn, &session_id).await?;
 
     txn.commit().await?;
@@ -346,7 +356,7 @@ pub async fn get_run(db: &impl ConnectionTrait, run_id: &RunId) -> Result<RunDet
     .await?
     .ok_or_else(|| Error::NotFound("Run not found".to_string()))?;
 
-    Ok(row.into())
+    row.try_into_detail()
 }
 
 /// List runs with optional filters, ordered by `track_time` ASC.
@@ -375,11 +385,11 @@ pub async fn list_runs(
         params.push(value);
     };
 
-    if let Some(ref sr_id) = filters.session_race_id {
-        add_filter("r.session_race_id", sr_id.clone().into());
+    if let Some(sr_id) = filters.session_race_id {
+        add_filter("r.session_race_id", sr_id.into());
     }
-    if let Some(ref uid) = filters.user_id {
-        add_filter("r.user_id", uid.clone().into());
+    if let Some(uid) = filters.user_id {
+        add_filter("r.user_id", uid.into());
     }
     if let Some(tid) = filters.track_id {
         add_filter("r.track_id", tid.into());
@@ -415,7 +425,9 @@ pub async fn list_runs(
     .all(db)
     .await?;
 
-    Ok(rows.into_iter().map(RunDetail::from).collect())
+    rows.into_iter()
+        .map(RunDetailRow::try_into_detail)
+        .collect()
 }
 
 /// Delete a run. Only the run's owner can delete, and the session must be active.
@@ -437,7 +449,7 @@ pub async fn delete_run(
         .await?
         .ok_or_else(|| Error::NotFound("Run not found".to_string()))?;
 
-    if run.user_id.as_str() != user_id.as_str() {
+    if run.user_id != user_id.to_string() {
         return Err(Error::Forbidden(
             "Only the run's owner can delete it".to_string(),
         ));
@@ -449,7 +461,7 @@ pub async fn delete_run(
         .await?
         .ok_or_else(|| Error::Internal(anyhow::anyhow!("Session race not found for run")))?;
 
-    let session_id = SessionId::new(session_race.session_id.clone());
+    let session_id = SessionId::from_db(&session_race.session_id)?;
     // FK guarantees the session exists; NotFound here signals data corruption.
     helpers::load_active_session(db, &session_id)
         .await
@@ -493,11 +505,11 @@ pub async fn get_run_defaults(
 
     if let Some(run) = latest_run {
         return Ok(RunDefaults {
-            drink_type_id: Some(run.drink_type_id),
-            character_id: Some(run.character_id),
-            body_id: Some(run.body_id),
-            wheel_id: Some(run.wheel_id),
-            glider_id: Some(run.glider_id),
+            drink_type_id: Some(DrinkTypeId::from_db(&run.drink_type_id)?),
+            character_id: Some(CharacterId::new(run.character_id)),
+            body_id: Some(BodyId::new(run.body_id)),
+            wheel_id: Some(WheelId::new(run.wheel_id)),
+            glider_id: Some(GliderId::new(run.glider_id)),
             source: "previous_run".to_string(),
         });
     }
@@ -510,11 +522,15 @@ pub async fn get_run_defaults(
 
     if user.preferred_character_id.is_some() || user.preferred_drink_type_id.is_some() {
         return Ok(RunDefaults {
-            drink_type_id: user.preferred_drink_type_id,
-            character_id: user.preferred_character_id,
-            body_id: user.preferred_body_id,
-            wheel_id: user.preferred_wheel_id,
-            glider_id: user.preferred_glider_id,
+            drink_type_id: user
+                .preferred_drink_type_id
+                .as_deref()
+                .map(DrinkTypeId::from_db)
+                .transpose()?,
+            character_id: user.preferred_character_id.map(CharacterId::new),
+            body_id: user.preferred_body_id.map(BodyId::new),
+            wheel_id: user.preferred_wheel_id.map(WheelId::new),
+            glider_id: user.preferred_glider_id.map(GliderId::new),
             source: "preferences".to_string(),
         });
     }
@@ -538,7 +554,7 @@ mod tests {
         test_helpers::{create_user, seed_game_data, setup_db},
     };
 
-    fn test_drink_id() -> String {
+    fn test_drink_id() -> DrinkTypeId {
         crate::drink_type_id::drink_type_uuid("Test Beer")
     }
 
@@ -546,16 +562,16 @@ mod tests {
 
     fn valid_time_request() -> CreateRunRequest {
         CreateRunRequest {
-            session_race_id: String::new(),
+            session_race_id: SessionRaceId::new_v4(),
             track_time: 120_000,
             lap1_time: 40_000,
             lap2_time: 39_000,
             lap3_time: 41_000,
-            character_id: 1,
-            body_id: 1,
-            wheel_id: 1,
-            glider_id: 1,
-            drink_type_id: String::new(),
+            character_id: CharacterId::new(1),
+            body_id: BodyId::new(1),
+            wheel_id: WheelId::new(1),
+            glider_id: GliderId::new(1),
+            drink_type_id: DrinkTypeId::new_v4(),
             disqualified: false,
         }
     }
@@ -622,15 +638,15 @@ mod tests {
 
     fn valid_run_request(session_race_id: &SessionRaceId) -> CreateRunRequest {
         CreateRunRequest {
-            session_race_id: session_race_id.as_str().to_string(),
+            session_race_id: *session_race_id,
             track_time: 120_000,
             lap1_time: 40_000,
             lap2_time: 39_000,
             lap3_time: 41_000,
-            character_id: 1,
-            body_id: 1,
-            wheel_id: 1,
-            glider_id: 1,
+            character_id: CharacterId::new(1),
+            body_id: BodyId::new(1),
+            wheel_id: WheelId::new(1),
+            glider_id: GliderId::new(1),
             drink_type_id: test_drink_id(),
             disqualified: false,
         }
@@ -661,7 +677,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(run.user_id.as_str(), host_id.as_str());
+        assert_eq!(run.user_id, host_id);
         assert_eq!(run.track_time, 120_000);
         assert_eq!(run.lap1_time, 40_000);
         assert_eq!(run.username, "host");
@@ -767,7 +783,7 @@ mod tests {
         let (_, race_id) = setup_session_with_race(&db, &host_id).await;
 
         let mut req = valid_run_request(&race_id);
-        req.character_id = 999;
+        req.character_id = CharacterId::new(999);
         assert!(create_run(&db, &host_id, req).await.is_err());
     }
 
@@ -779,7 +795,9 @@ mod tests {
         let (_, race_id) = setup_session_with_race(&db, &host_id).await;
 
         let mut req = valid_run_request(&race_id);
-        req.drink_type_id = "nonexistent-uuid".to_string();
+        // Valid UUID shape but no matching row — exercises the FK check, not
+        // the type-level parse (which a non-UUID string would short-circuit).
+        req.drink_type_id = DrinkTypeId::new_v4();
         assert!(create_run(&db, &host_id, req).await.is_err());
     }
 
@@ -841,7 +859,7 @@ mod tests {
             .ok();
 
         // Force-close in case leave order was wrong
-        let s = sessions_entity::Entity::find_by_id(&session_id)
+        let s = sessions_entity::Entity::find_by_id(session_id)
             .one(&db)
             .await
             .unwrap();
@@ -945,7 +963,7 @@ mod tests {
 
         let defaults = get_run_defaults(&db, &host_id).await.unwrap();
         assert_eq!(defaults.source, "previous_run");
-        assert_eq!(defaults.character_id, Some(1));
+        assert_eq!(defaults.character_id, Some(CharacterId::new(1)));
         assert_eq!(defaults.drink_type_id, Some(test_drink_id()));
     }
 
@@ -956,7 +974,7 @@ mod tests {
         let host_id = create_user(&db, "host").await;
 
         // Set preferences on the user
-        let user = users::Entity::find_by_id(&host_id)
+        let user = users::Entity::find_by_id(host_id)
             .one(&db)
             .await
             .unwrap()
@@ -966,12 +984,12 @@ mod tests {
         active.preferred_body_id = Set(Some(1));
         active.preferred_wheel_id = Set(Some(1));
         active.preferred_glider_id = Set(Some(1));
-        active.preferred_drink_type_id = Set(Some(test_drink_id()));
+        active.preferred_drink_type_id = Set(Some(test_drink_id().into()));
         active.update(&db).await.unwrap();
 
         let defaults = get_run_defaults(&db, &host_id).await.unwrap();
         assert_eq!(defaults.source, "preferences");
-        assert_eq!(defaults.character_id, Some(1));
+        assert_eq!(defaults.character_id, Some(CharacterId::new(1)));
     }
 
     #[tokio::test]

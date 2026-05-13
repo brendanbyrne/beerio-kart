@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 
+use crate::domain::UserId;
+
 /// Shared application configuration loaded from environment variables.
 ///
 /// Wrapped in `Arc` and stored in Axum's state so all handlers can access it
@@ -18,7 +20,7 @@ pub struct Config {
     /// by bumping `refresh_token_version` in the database. Stored as `i64`
     /// because `chrono::TimeDelta::days` takes `i64`.
     pub jwt_refresh_expiry_days: i64,
-    pub admin_user_id: Option<String>,
+    pub admin_user_id: Option<UserId>,
     /// Controls the `Secure` flag on the refresh cookie. Must be `false` for
     /// local `http://localhost` development, `true` in production behind HTTPS.
     pub cookie_secure: bool,
@@ -68,7 +70,16 @@ impl Config {
             .filter(|&v| v > 0)
             .unwrap_or(7);
 
-        let admin_user_id = std::env::var("ADMIN_USER_ID").ok();
+        // `ADMIN_USER_ID` must be a UUID — parsing it at load time means a
+        // misconfigured value fails fast at startup rather than silently
+        // refusing admin access to whatever user-id was meant.
+        let admin_user_id = std::env::var("ADMIN_USER_ID")
+            .ok()
+            .map(|raw| {
+                raw.parse::<UserId>()
+                    .context("ADMIN_USER_ID must be a valid UUID")
+            })
+            .transpose()?;
 
         let cookie_secure = std::env::var("COOKIE_SECURE")
             .ok()

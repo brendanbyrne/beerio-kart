@@ -157,7 +157,7 @@ async fn seed_minimal_game_data(db: &sea_orm::DatabaseConnection) {
     .expect("insert glider");
 
     drink_types::ActiveModel {
-        id: Set(drink_type_uuid("Test Beer")),
+        id: Set(drink_type_uuid("Test Beer").into()),
         name: Set("Test Beer".to_string()),
         alcoholic: Set(true),
         created_at: Set(Utc::now().naive_utc()),
@@ -462,8 +462,11 @@ async fn test_get_nonexistent_session_returns_404() {
     let (server, _db) = setup_test_app().await;
     let (token, _) = register_and_get_token(&server, "host").await;
 
+    // Valid UUID shape but no matching row. A non-UUID path segment now
+    // produces a 400 from axum's Path extractor before reaching the handler.
+    let missing = uuid::Uuid::new_v4();
     let res = server
-        .get("/api/v1/sessions/nonexistent-id")
+        .get(&format!("/api/v1/sessions/{missing}"))
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::NOT_FOUND);

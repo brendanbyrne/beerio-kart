@@ -7,7 +7,11 @@ use sea_orm::{ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AppState, drink_type_id::drink_type_uuid, entities::drink_types, error::Error,
+    AppState,
+    domain::{DrinkTypeId, UserId},
+    drink_type_id::drink_type_uuid,
+    entities::drink_types,
+    error::Error,
     middleware::auth::User,
 };
 
@@ -15,22 +19,27 @@ use crate::{
 
 #[derive(Serialize)]
 pub struct DrinkTypeResponse {
-    pub id: String,
+    pub id: DrinkTypeId,
     pub name: String,
     pub alcoholic: bool,
-    pub created_by: Option<String>,
+    pub created_by: Option<UserId>,
     pub created_at: DateTime<Utc>,
 }
 
-impl From<drink_types::Model> for DrinkTypeResponse {
-    fn from(m: drink_types::Model) -> Self {
-        Self {
-            id: m.id,
+impl DrinkTypeResponse {
+    /// Parse a `drink_types::Model` into the wire DTO. Fallible because
+    /// the `id` and (optional) `created_by` columns are stored as UUID
+    /// strings and have to round-trip through `from_db`; a bad UUID in
+    /// either column is data corruption and surfaces as `Internal`.
+    fn try_from_model(m: drink_types::Model) -> Result<Self, Error> {
+        let created_by = m.created_by.as_deref().map(UserId::from_db).transpose()?;
+        Ok(Self {
+            id: DrinkTypeId::from_db(&m.id)?,
             name: m.name,
             alcoholic: m.alcoholic,
-            created_by: m.created_by,
+            created_by,
             created_at: m.created_at.and_utc(),
-        }
+        })
     }
 }
 
@@ -82,23 +91,23 @@ pub async fn create_drink_type(
     let id = drink_type_uuid(&name);
 
     // Check if this drink type already exists (by UUID)
-    if let Some(existing) = drink_types::Entity::find_by_id(&id).one(&state.db).await? {
+    if let Some(existing) = drink_types::Entity::find_by_id(id).one(&state.db).await? {
         // Return the existing entry (200, not 409)
-        return Ok(Json(existing.into()));
+        return Ok(Json(DrinkTypeResponse::try_from_model(existing)?));
     }
 
     // `created_at` is populated by `drink_types::ActiveModelBehavior::before_save`.
     let model = drink_types::ActiveModel {
-        id: Set(id),
+        id: Set((&id).into()),
         name: Set(name),
         alcoholic: Set(req.alcoholic),
         created_at: NotSet,
-        created_by: Set(Some(user.user_id.into_string())),
+        created_by: Set(Some((&user.user_id).into())),
     };
 
     let inserted = sea_orm::ActiveModelTrait::insert(model, &state.db).await?;
 
-    Ok(Json(inserted.into()))
+    Ok(Json(DrinkTypeResponse::try_from_model(inserted)?))
 }
 
 /// GET /api/v1/drink-types — list drink types. Optional `alcoholic` query
@@ -123,7 +132,10 @@ pub async fn list_drink_types(
 
     let items = query.all(&state.db).await?;
     Ok(Json(
-        items.into_iter().map(DrinkTypeResponse::from).collect(),
+        items
+            .into_iter()
+            .map(DrinkTypeResponse::try_from_model)
+            .collect::<Result<Vec<_>, _>>()?,
     ))
 }
 
@@ -137,12 +149,12 @@ pub async fn list_drink_types(
 pub async fn get_drink_type(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(id): Path<DrinkTypeId>,
 ) -> Result<Json<DrinkTypeResponse>, Error> {
-    let dt = drink_types::Entity::find_by_id(&id)
+    let dt = drink_types::Entity::find_by_id(id)
         .one(&state.db)
         .await?
         .ok_or_else(|| Error::NotFound(format!("Drink type {id} not found")))?;
 
-    Ok(Json(dt.into()))
+    Ok(Json(DrinkTypeResponse::try_from_model(dt)?))
 }

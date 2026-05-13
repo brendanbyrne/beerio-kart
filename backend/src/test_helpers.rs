@@ -53,11 +53,11 @@ pub async fn setup_db() -> DatabaseConnection {
 /// Insert a user with the given username and a fixed placeholder password
 /// hash. Returns the generated user ID.
 pub async fn create_user(db: &DatabaseConnection, username: &str) -> UserId {
-    let id = Uuid::new_v4().to_string();
+    let id = UserId::new_v4();
     // Placeholder hash — tests don't verify passwords, but the column is NOT NULL.
     let placeholder_hash = "$argon2id$v=19$m=19456,t=2,p=1$dGVzdHNhbHQ$abc123";
     users::ActiveModel {
-        id: Set(id.clone()),
+        id: Set((&id).into()),
         username: Set(username.to_string()),
         email: Set(None),
         password_hash: Set(placeholder_hash.to_string()),
@@ -73,7 +73,7 @@ pub async fn create_user(db: &DatabaseConnection, username: &str) -> UserId {
     .insert(db)
     .await
     .expect("insert user");
-    UserId::new(id)
+    id
 }
 
 /// Seed 3 cups × 2 tracks each (6 tracks total) for tests that exercise
@@ -116,10 +116,10 @@ pub async fn seed_tracks_for_test(db: &DatabaseConnection) {
 /// Insert a session with the given host and status. Returns the generated
 /// session ID.
 pub async fn insert_session(db: &DatabaseConnection, host_id: &UserId, status: &str) -> SessionId {
-    let id = Uuid::new_v4().to_string();
+    let id = SessionId::new_v4();
     sessions::ActiveModel {
-        id: Set(id.clone()),
-        host_id: Set(host_id.as_str().to_string()),
+        id: Set((&id).into()),
+        host_id: Set(host_id.into()),
         ruleset: Set("random".to_string()),
         least_played_drink_category: Set(None),
         status: Set(status.to_string()),
@@ -129,7 +129,7 @@ pub async fn insert_session(db: &DatabaseConnection, host_id: &UserId, status: &
     .insert(db)
     .await
     .expect("insert session");
-    SessionId::new(id)
+    id
 }
 
 /// Insert a participant into a session. Pass `None` for `left_at` to create
@@ -143,8 +143,8 @@ pub async fn insert_participant(
     let now = Utc::now().naive_utc();
     session_participants::ActiveModel {
         id: Set(Uuid::new_v4().to_string()),
-        session_id: Set(session_id.as_str().to_string()),
-        user_id: Set(user_id.as_str().to_string()),
+        session_id: Set(session_id.into()),
+        user_id: Set(user_id.into()),
         joined_at: Set(now),
         left_at: Set(left_at),
     }
@@ -163,10 +163,10 @@ pub async fn insert_session_race(
     track_id: i32,
     created_at: chrono::NaiveDateTime,
 ) -> SessionRaceId {
-    let id = Uuid::new_v4().to_string();
+    let id = SessionRaceId::new_v4();
     session_races::ActiveModel {
-        id: Set(id.clone()),
-        session_id: Set(session_id.as_str().to_string()),
+        id: Set((&id).into()),
+        session_id: Set(session_id.into()),
         race_number: Set(race_number),
         track_id: Set(track_id),
         chosen_by: Set(None),
@@ -175,7 +175,7 @@ pub async fn insert_session_race(
     .insert(db)
     .await
     .expect("insert session race");
-    SessionRaceId::new(id)
+    id
 }
 
 /// Insert a `session_race_participations` row directly. Use this in tests
@@ -187,8 +187,8 @@ pub async fn insert_race_participation(
     skipped_at: Option<chrono::NaiveDateTime>,
 ) {
     session_race_participations::ActiveModel {
-        session_race_id: Set(session_race_id.as_str().to_string()),
-        user_id: Set(user_id.as_str().to_string()),
+        session_race_id: Set(session_race_id.into()),
+        user_id: Set(user_id.into()),
         created_at: NotSet,
         skipped_at: Set(skipped_at),
     }
@@ -288,7 +288,7 @@ pub async fn seed_game_data(db: &DatabaseConnection) {
 
     let drink_id = drink_type_uuid("Test Beer");
     drink_types::ActiveModel {
-        id: Set(drink_id),
+        id: Set((&drink_id).into()),
         name: Set("Test Beer".to_string()),
         alcoholic: Set(true),
         created_at: NotSet,

@@ -121,7 +121,7 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
     let rows = present
         .into_iter()
         .map(|p| session_race_participations::ActiveModel {
-            session_race_id: Set(session_race_id.as_str().to_string()),
+            session_race_id: Set(session_race_id.into()),
             user_id: Set(p.user_id),
             created_at: Set(now),
             skipped_at: Set(None),
@@ -262,14 +262,14 @@ mod tests {
         let session_id = insert_session(&db, &host, "active").await;
 
         let model = load_active_session(&db, &session_id).await.unwrap();
-        assert_eq!(model.id, session_id.as_str());
+        assert_eq!(model.id, session_id.to_string());
         assert_eq!(model.status, "active");
     }
 
     #[tokio::test]
     async fn load_active_session_missing_is_not_found() {
         let db = setup_db().await;
-        let err = load_active_session(&db, &SessionId::new("does-not-exist"))
+        let err = load_active_session(&db, &SessionId::new_v4())
             .await
             .unwrap_err();
         assert!(matches!(err, Error::NotFound(_)));
@@ -297,7 +297,7 @@ mod tests {
         let row = require_active_participant(&db, &session_id, &user)
             .await
             .unwrap();
-        assert_eq!(row.user_id, user.as_str());
+        assert_eq!(row.user_id, user.to_string());
         assert!(row.left_at.is_none());
     }
 
@@ -334,7 +334,7 @@ mod tests {
         let host = create_user(&db, "host").await;
         let session_id = insert_session(&db, &host, "active").await;
 
-        let before = sessions::Entity::find_by_id(&session_id)
+        let before = sessions::Entity::find_by_id(session_id)
             .one(&db)
             .await
             .unwrap()
@@ -348,7 +348,7 @@ mod tests {
 
         touch_session(&db, &session_id).await.unwrap();
 
-        let after = sessions::Entity::find_by_id(&session_id)
+        let after = sessions::Entity::find_by_id(session_id)
             .one(&db)
             .await
             .unwrap()
@@ -492,7 +492,7 @@ mod tests {
             .expect("snapshot succeeds");
 
         let rows = session_race_participations::Entity::find()
-            .filter(session_race_participations::Column::SessionRaceId.eq(&race_id))
+            .filter(session_race_participations::Column::SessionRaceId.eq(race_id))
             .all(&db)
             .await
             .unwrap();
@@ -501,12 +501,12 @@ mod tests {
             2,
             "only the two left_at IS NULL users are snapshotted"
         );
-        let users: std::collections::HashSet<&str> =
-            rows.iter().map(|r| r.user_id.as_str()).collect();
-        assert!(users.contains(host.as_str()));
-        assert!(users.contains(active.as_str()));
+        let users: std::collections::HashSet<String> =
+            rows.iter().map(|r| r.user_id.clone()).collect();
+        assert!(users.contains(&host.to_string()));
+        assert!(users.contains(&active.to_string()));
         assert!(
-            !users.contains(left.as_str()),
+            !users.contains(&left.to_string()),
             "user with left_at set must not be snapshotted"
         );
     }
@@ -532,7 +532,7 @@ mod tests {
             .expect("empty snapshot must not error");
 
         let count = session_race_participations::Entity::find()
-            .filter(session_race_participations::Column::SessionRaceId.eq(&race_id))
+            .filter(session_race_participations::Column::SessionRaceId.eq(race_id))
             .count(&db)
             .await
             .unwrap();

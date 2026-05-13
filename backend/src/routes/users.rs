@@ -7,7 +7,11 @@ use sea_orm::EntityTrait;
 use serde::Serialize;
 
 use crate::{
-    AppState, domain::UserId, entities::users, error::Error, middleware::auth::User,
+    AppState,
+    domain::{BodyId, CharacterId, DrinkTypeId, GliderId, UserId, WheelId},
+    entities::users,
+    error::Error,
+    middleware::auth::User,
     services::users as user_service,
 };
 
@@ -17,11 +21,11 @@ use crate::{
 pub struct UserPublicProfile {
     pub id: UserId,
     pub username: String,
-    pub preferred_character_id: Option<i32>,
-    pub preferred_body_id: Option<i32>,
-    pub preferred_wheel_id: Option<i32>,
-    pub preferred_glider_id: Option<i32>,
-    pub preferred_drink_type_id: Option<String>,
+    pub preferred_character_id: Option<CharacterId>,
+    pub preferred_body_id: Option<BodyId>,
+    pub preferred_wheel_id: Option<WheelId>,
+    pub preferred_glider_id: Option<GliderId>,
+    pub preferred_drink_type_id: Option<DrinkTypeId>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -41,17 +45,23 @@ pub async fn list_users(
     Ok(Json(
         all_users
             .into_iter()
-            .map(|u| UserPublicProfile {
-                id: UserId::new(u.id),
-                username: u.username,
-                preferred_character_id: u.preferred_character_id,
-                preferred_body_id: u.preferred_body_id,
-                preferred_wheel_id: u.preferred_wheel_id,
-                preferred_glider_id: u.preferred_glider_id,
-                preferred_drink_type_id: u.preferred_drink_type_id,
-                created_at: u.created_at.and_utc(),
+            .map(|u| {
+                Ok::<_, Error>(UserPublicProfile {
+                    id: UserId::from_db(&u.id)?,
+                    username: u.username,
+                    preferred_character_id: u.preferred_character_id.map(CharacterId::new),
+                    preferred_body_id: u.preferred_body_id.map(BodyId::new),
+                    preferred_wheel_id: u.preferred_wheel_id.map(WheelId::new),
+                    preferred_glider_id: u.preferred_glider_id.map(GliderId::new),
+                    preferred_drink_type_id: u
+                        .preferred_drink_type_id
+                        .as_deref()
+                        .map(DrinkTypeId::from_db)
+                        .transpose()?,
+                    created_at: u.created_at.and_utc(),
+                })
             })
-            .collect(),
+            .collect::<Result<Vec<_>, _>>()?,
     ))
 }
 
@@ -65,9 +75,9 @@ pub async fn list_users(
 pub async fn get_user(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(id): Path<UserId>,
 ) -> Result<Json<user_service::UserDetailProfile>, Error> {
-    let user = users::Entity::find_by_id(&id)
+    let user = users::Entity::find_by_id(id)
         .one(&state.db)
         .await?
         .ok_or_else(|| Error::NotFound(format!("User {id} not found")))?;
@@ -85,15 +95,14 @@ pub async fn get_user(
 /// doesn't exist, `BadRequest` for invalid race-setup or drink-type IDs.
 #[tracing::instrument(
     skip_all,
-    fields(user_id = %auth_user.user_id, target_user_id = %id),
+    fields(user_id = %auth_user.user_id, target_user_id = %target_user_id),
 )]
 pub async fn update_user(
     auth_user: User,
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(target_user_id): Path<UserId>,
     Json(req): Json<user_service::UpdateProfileRequest>,
 ) -> Result<Json<user_service::UserDetailProfile>, Error> {
-    let target_user_id = UserId::new(id);
     let profile =
         user_service::update_profile(&state.db, &auth_user.user_id, &target_user_id, req).await?;
     Ok(Json(profile))

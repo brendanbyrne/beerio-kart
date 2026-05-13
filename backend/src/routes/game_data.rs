@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
+    domain::{BodyId, CharacterId, CupId, GliderId, TrackId, WheelId},
     entities::{bodies, characters, cups, gliders, tracks, wheels},
     error::Error,
     middleware::auth::User,
@@ -15,50 +16,113 @@ use crate::{
 // ── Response types ───────────────────────────────────────────────────
 
 #[derive(Serialize)]
-pub struct SimpleItem {
-    pub id: i32,
+pub struct CharacterResponse {
+    pub id: CharacterId,
+    pub name: String,
+    pub image_path: String,
+}
+
+#[derive(Serialize)]
+pub struct BodyResponse {
+    pub id: BodyId,
+    pub name: String,
+    pub image_path: String,
+}
+
+#[derive(Serialize)]
+pub struct WheelResponse {
+    pub id: WheelId,
+    pub name: String,
+    pub image_path: String,
+}
+
+#[derive(Serialize)]
+pub struct GliderResponse {
+    pub id: GliderId,
+    pub name: String,
+    pub image_path: String,
+}
+
+#[derive(Serialize)]
+pub struct CupResponse {
+    pub id: CupId,
     pub name: String,
     pub image_path: String,
 }
 
 #[derive(Serialize)]
 pub struct TrackResponse {
-    pub id: i32,
+    pub id: TrackId,
     pub name: String,
-    pub cup_id: i32,
+    pub cup_id: CupId,
     pub position: i32,
     pub image_path: String,
 }
 
 #[derive(Serialize)]
 pub struct CupWithTracksResponse {
-    pub id: i32,
+    pub id: CupId,
     pub name: String,
     pub image_path: String,
     pub tracks: Vec<TrackResponse>,
 }
 
-/// Convert any entity Model with (id: i32, name: String, `image_path`: String) to `SimpleItem`.
-macro_rules! impl_into_simple_item {
-    ($($module:ident),+) => {
-        $(
-            impl From<$module::Model> for SimpleItem {
-                fn from(m: $module::Model) -> Self {
-                    Self { id: m.id, name: m.name, image_path: m.image_path }
-                }
-            }
-        )+
-    };
+impl From<characters::Model> for CharacterResponse {
+    fn from(m: characters::Model) -> Self {
+        Self {
+            id: CharacterId::new(m.id),
+            name: m.name,
+            image_path: m.image_path,
+        }
+    }
 }
 
-impl_into_simple_item!(characters, bodies, wheels, gliders, cups);
+impl From<bodies::Model> for BodyResponse {
+    fn from(m: bodies::Model) -> Self {
+        Self {
+            id: BodyId::new(m.id),
+            name: m.name,
+            image_path: m.image_path,
+        }
+    }
+}
+
+impl From<wheels::Model> for WheelResponse {
+    fn from(m: wheels::Model) -> Self {
+        Self {
+            id: WheelId::new(m.id),
+            name: m.name,
+            image_path: m.image_path,
+        }
+    }
+}
+
+impl From<gliders::Model> for GliderResponse {
+    fn from(m: gliders::Model) -> Self {
+        Self {
+            id: GliderId::new(m.id),
+            name: m.name,
+            image_path: m.image_path,
+        }
+    }
+}
+
+impl From<cups::Model> for CupResponse {
+    fn from(m: cups::Model) -> Self {
+        Self {
+            id: CupId::new(m.id),
+            name: m.name,
+            image_path: m.image_path,
+        }
+    }
+}
 
 impl From<tracks::Model> for TrackResponse {
     fn from(t: tracks::Model) -> Self {
         Self {
-            id: t.id,
+            id: TrackId::new(t.id),
             name: t.name,
-            cup_id: t.cup_id,
+            cup_id: CupId::new(t.cup_id),
             position: t.position,
             image_path: t.image_path,
         }
@@ -67,7 +131,7 @@ impl From<tracks::Model> for TrackResponse {
 
 #[derive(Deserialize)]
 pub struct TracksQuery {
-    pub cup_id: Option<i32>,
+    pub cup_id: Option<CupId>,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
@@ -81,9 +145,11 @@ pub struct TracksQuery {
 pub async fn list_characters(
     user: User,
     State(state): State<AppState>,
-) -> Result<Json<Vec<SimpleItem>>, Error> {
+) -> Result<Json<Vec<CharacterResponse>>, Error> {
     let items = characters::Entity::find().all(&state.db).await?;
-    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
+    Ok(Json(
+        items.into_iter().map(CharacterResponse::from).collect(),
+    ))
 }
 
 /// GET /api/v1/bodies — list all kart bodies.
@@ -95,9 +161,9 @@ pub async fn list_characters(
 pub async fn list_bodies(
     user: User,
     State(state): State<AppState>,
-) -> Result<Json<Vec<SimpleItem>>, Error> {
+) -> Result<Json<Vec<BodyResponse>>, Error> {
     let items = bodies::Entity::find().all(&state.db).await?;
-    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
+    Ok(Json(items.into_iter().map(BodyResponse::from).collect()))
 }
 
 /// GET /api/v1/wheels — list all wheels.
@@ -109,9 +175,9 @@ pub async fn list_bodies(
 pub async fn list_wheels(
     user: User,
     State(state): State<AppState>,
-) -> Result<Json<Vec<SimpleItem>>, Error> {
+) -> Result<Json<Vec<WheelResponse>>, Error> {
     let items = wheels::Entity::find().all(&state.db).await?;
-    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
+    Ok(Json(items.into_iter().map(WheelResponse::from).collect()))
 }
 
 /// GET /api/v1/gliders — list all gliders.
@@ -123,9 +189,9 @@ pub async fn list_wheels(
 pub async fn list_gliders(
     user: User,
     State(state): State<AppState>,
-) -> Result<Json<Vec<SimpleItem>>, Error> {
+) -> Result<Json<Vec<GliderResponse>>, Error> {
     let items = gliders::Entity::find().all(&state.db).await?;
-    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
+    Ok(Json(items.into_iter().map(GliderResponse::from).collect()))
 }
 
 /// GET /api/v1/cups — list all cups.
@@ -137,9 +203,9 @@ pub async fn list_gliders(
 pub async fn list_cups(
     user: User,
     State(state): State<AppState>,
-) -> Result<Json<Vec<SimpleItem>>, Error> {
+) -> Result<Json<Vec<CupResponse>>, Error> {
     let items = cups::Entity::find().all(&state.db).await?;
-    Ok(Json(items.into_iter().map(SimpleItem::from).collect()))
+    Ok(Json(items.into_iter().map(CupResponse::from).collect()))
 }
 
 /// GET /api/v1/cups/:id — get a cup with its tracks.
@@ -148,11 +214,11 @@ pub async fn list_cups(
 ///
 /// Returns `NotFound` if `id` doesn't match a cup; `Internal` for unexpected
 /// DB failures.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, cup_id = id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, cup_id = %id))]
 pub async fn get_cup(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<i32>,
+    Path(id): Path<CupId>,
 ) -> Result<Json<CupWithTracksResponse>, Error> {
     let cup = cups::Entity::find_by_id(id)
         .one(&state.db)
@@ -168,7 +234,7 @@ pub async fn get_cup(
         .collect();
 
     Ok(Json(CupWithTracksResponse {
-        id: cup.id,
+        id: CupId::new(cup.id),
         name: cup.name,
         image_path: cup.image_path,
         tracks: cup_tracks,
@@ -205,11 +271,11 @@ pub async fn list_tracks(
 ///
 /// Returns `NotFound` if `id` doesn't match a track; `Internal` for
 /// unexpected DB failures.
-#[tracing::instrument(skip_all, fields(user_id = %user.user_id, track_id = id))]
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, track_id = %id))]
 pub async fn get_track(
     user: User,
     State(state): State<AppState>,
-    Path(id): Path<i32>,
+    Path(id): Path<TrackId>,
 ) -> Result<Json<TrackResponse>, Error> {
     let track = tracks::Entity::find_by_id(id)
         .one(&state.db)

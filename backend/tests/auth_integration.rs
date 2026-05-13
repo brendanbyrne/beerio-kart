@@ -316,8 +316,12 @@ async fn test_refresh_token_in_authorization_header_rejected_by_middleware() {
 
     // Create a refresh token directly
     let config = test_config();
-    let refresh_jwt =
-        beerio_kart::services::auth::create_refresh_token("fake-user-id", 0, &config).unwrap();
+    let refresh_jwt = beerio_kart::services::auth::create_refresh_token(
+        &beerio_kart::domain::UserId::new_v4(),
+        0,
+        &config,
+    )
+    .unwrap();
 
     // Try to use it as a Bearer token on a protected endpoint
     let response = server
@@ -335,8 +339,12 @@ async fn test_access_token_with_type_refresh_rejected_by_middleware() {
     // Create a refresh token and try to pass it off as an access token.
     // The middleware should check token_type and reject it.
     let config = test_config();
-    let refresh_jwt =
-        beerio_kart::services::auth::create_refresh_token("fake-user-id", 0, &config).unwrap();
+    let refresh_jwt = beerio_kart::services::auth::create_refresh_token(
+        &beerio_kart::domain::UserId::new_v4(),
+        0,
+        &config,
+    )
+    .unwrap();
 
     let response = server
         .get("/api/v1/protected")

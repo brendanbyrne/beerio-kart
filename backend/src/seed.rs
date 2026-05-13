@@ -213,7 +213,7 @@ async fn seed_drink_types(db: &DatabaseConnection) -> anyhow::Result<()> {
         let id = drink_type_uuid(&item.name);
         // `created_at` is populated by `drink_types::ActiveModelBehavior::before_save`.
         let model = drink_types::ActiveModel {
-            id: Set(id),
+            id: Set((&id).into()),
             name: Set(item.name),
             alcoholic: Set(item.alcoholic),
             created_at: NotSet,
