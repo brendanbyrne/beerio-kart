@@ -164,11 +164,17 @@ pub async fn create_session(
 /// Summary info for listing active sessions.
 #[derive(serde::Serialize)]
 pub struct SessionSummary {
+    /// Session's stable UUID.
     pub id: SessionId,
+    /// Display name of the session host (for showing "Bob's session" in lists).
     pub host_username: Username,
+    /// Count of participants who haven't left (`left_at IS NULL`).
     pub participant_count: i64,
+    /// 1-indexed race count: 1 means "no races completed; race 1 is up next".
     pub race_number: i64,
+    /// Track-selection ruleset chosen at session creation.
     pub ruleset: SessionRuleset,
+    /// Most recent activity timestamp, used by the stale-session cleanup.
     pub last_activity_at: DateTime<Utc>,
 }
 

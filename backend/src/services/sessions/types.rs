@@ -15,22 +15,34 @@ use crate::domain::{ImagePath, SessionRaceId, UserId, Username};
 /// Submission info for a single participant in a race.
 #[derive(serde::Serialize, Clone)]
 pub struct RaceSubmission {
+    /// Participant whose submission this is.
     pub user_id: UserId,
+    /// Cached username for display (saves a JOIN on the read path).
     pub username: Username,
+    /// Total race time in milliseconds.
     pub track_time: i32,
+    /// `true` if the run was disqualified per the drink rule.
     pub disqualified: bool,
 }
 
 /// Info about a single race in the session (returned on create / skip / poll).
 #[derive(serde::Serialize, Clone)]
 pub struct SessionRaceInfo {
+    /// Stable UUID of the race row.
     pub id: SessionRaceId,
+    /// 1-indexed position of this race within the session.
     pub race_number: i32,
+    /// FK to `tracks.id`.
     pub track_id: i32,
+    /// Cached track name (saves a JOIN on the read path).
     pub track_name: String,
+    /// Cached parent-cup name for display.
     pub cup_name: String,
+    /// Relative image path for the track's preview thumbnail.
     pub image_path: ImagePath,
+    /// Race-creation timestamp (when `next_track` was called), UTC.
     pub created_at: DateTime<Utc>,
+    /// Per-participant submissions; empty until runs come in.
     pub submissions: Vec<RaceSubmission>,
 }
 

@@ -36,10 +36,15 @@ pub async fn create_run(
     Ok((StatusCode::CREATED, Json(detail)))
 }
 
+/// Query-string filters for `GET /runs`. All four are independent; omitted
+/// fields don't constrain the result.
 #[derive(Deserialize)]
 pub struct ListRunsQuery {
+    /// If set, only return runs against this session race.
     pub session_race_id: Option<SessionRaceId>,
+    /// If set, only return runs submitted by this user.
     pub user_id: Option<UserId>,
+    /// If set, only return runs on this track (regardless of session).
     pub track_id: Option<TrackId>,
 }
 

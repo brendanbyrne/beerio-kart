@@ -19,7 +19,9 @@ use crate::{domain::UserId, error::Error};
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct User {
+    /// Authenticated user's UUID parsed from the access token's `sub` claim.
     pub user_id: UserId,
+    /// Authenticated user's username copied from the token's `username` claim.
     pub username: String,
 }
 
@@ -77,7 +79,9 @@ impl FromRequestParts<crate::AppState> for User {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct AdminUser {
+    /// Authenticated user's UUID, verified to match `Config::admin_user_id`.
     pub user_id: UserId,
+    /// Authenticated user's username copied from the token's `username` claim.
     pub username: String,
 }
 

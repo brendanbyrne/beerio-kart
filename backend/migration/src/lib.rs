@@ -7,6 +7,7 @@
 
 pub use sea_orm_migration::prelude::*;
 
+/// Consolidated initial-schema migration — table, FK, and index DDL.
 pub mod m20260101_000001_initial_schema;
 
 /// Runs the consolidated initial-schema migration.

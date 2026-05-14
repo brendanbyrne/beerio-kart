@@ -24,18 +24,31 @@ use crate::{
     services::{helpers, sessions},
 };
 
+/// Body shape for `POST /runs`.
 #[derive(Deserialize)]
 pub struct CreateRunRequest {
+    /// Race this run is submitted to.
     pub session_race_id: SessionRaceId,
+    /// Total time in ms. Bounds-checked via `RaceTimeMs` in
+    /// [`validate_time_fields`]; #146 will move this to the typed form directly.
     pub track_time: i32,
+    /// Lap 1 time in ms. Bounds-checked via `LapTimeMs`.
     pub lap1_time: i32,
+    /// Lap 2 time in ms. Bounds-checked via `LapTimeMs`.
     pub lap2_time: i32,
+    /// Lap 3 time in ms. Bounds-checked via `LapTimeMs`.
     pub lap3_time: i32,
+    /// Character used for the run.
     pub character_id: CharacterId,
+    /// Kart body used for the run.
     pub body_id: BodyId,
+    /// Wheels used for the run.
     pub wheel_id: WheelId,
+    /// Glider used for the run.
     pub glider_id: GliderId,
+    /// Drink type consumed during the run.
     pub drink_type_id: DrinkTypeId,
+    /// `true` if the run is self-reported DQ.
     pub disqualified: bool,
 }
 

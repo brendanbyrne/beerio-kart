@@ -11,9 +11,13 @@ use crate::{
 /// compile time so call sites can't read only some of the fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Update {
+    /// Character the user races as for this session.
     pub character_id: CharacterId,
+    /// Kart body chassis.
     pub body_id: BodyId,
+    /// Wheels mounted on the kart body.
     pub wheel_id: WheelId,
+    /// Glider used during ramp sections.
     pub glider_id: GliderId,
 }
 

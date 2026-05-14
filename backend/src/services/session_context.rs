@@ -23,8 +23,11 @@ use crate::{
 /// `&UserId`.
 #[derive(Debug, Clone)]
 pub struct SessionContext {
+    /// The loaded session row, authoritative for all field access.
     pub session: sessions::Model,
+    /// Typed copy of `session.id` for borrow-friendly access.
     pub session_id: SessionId,
+    /// Typed copy of `session.host_id` for borrow-friendly access.
     pub host_id: UserId,
 }
 

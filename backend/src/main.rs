@@ -1,3 +1,9 @@
+//! Beerio Kart backend binary entry point.
+//!
+//! Wires config, the `SeaORM` connection pool, migrations, seeded static data,
+//! Tower middleware, and graceful shutdown around `axum::serve`. Library
+//! pieces — handlers, services, entities — live in [`beerio_kart`].
+
 mod seed;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};

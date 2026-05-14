@@ -10,6 +10,8 @@ use crate::domain::UserId;
 /// without cloning the inner data on every request.
 #[derive(Clone, Debug)]
 pub struct Config {
+    /// HMAC signing key for access and refresh tokens. Loaded from
+    /// `JWT_SECRET`; absence is a hard startup failure.
     pub jwt_secret: String,
     /// How long access tokens are valid (minutes). Short-lived because they
     /// can't be revoked — if one leaks, it expires quickly. Stored as `i64`
@@ -20,6 +22,8 @@ pub struct Config {
     /// by bumping `refresh_token_version` in the database. Stored as `i64`
     /// because `chrono::TimeDelta::days` takes `i64`.
     pub jwt_refresh_expiry_days: i64,
+    /// Optional admin user ID — only this user can use admin-gated endpoints.
+    /// `None` disables admin features entirely.
     pub admin_user_id: Option<UserId>,
     /// Controls the `Secure` flag on the refresh cookie. Must be `false` for
     /// local `http://localhost` development, `true` in production behind HTTPS.

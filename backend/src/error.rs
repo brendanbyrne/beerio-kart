@@ -27,7 +27,11 @@ pub enum Error {
     /// via `Error::bad_request("...")`.
     #[error("{client}")]
     BadRequest {
+        /// User-facing message included in the JSON response body.
         client: String,
+        /// Internal-only context (e.g., a raw `DbErr` driver string) logged
+        /// via `tracing::warn!` at the `IntoResponse` boundary and never
+        /// returned to the client.
         detail: Option<String>,
     },
     /// 401 — wrong credentials, expired/missing token
@@ -44,7 +48,11 @@ pub enum Error {
     /// `BadRequest`; construct via `Error::conflict("...")` for the common case.
     #[error("{client}")]
     Conflict {
+        /// User-facing message included in the JSON response body.
         client: String,
+        /// Internal-only context (e.g., a raw `DbErr` driver string) logged
+        /// via `tracing::warn!` at the `IntoResponse` boundary and never
+        /// returned to the client.
         detail: Option<String>,
     },
     /// 500 — unexpected internal failures (DB, invariant violations, etc.).

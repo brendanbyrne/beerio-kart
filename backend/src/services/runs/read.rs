@@ -19,24 +19,43 @@ use crate::{
     error::Error,
 };
 
+/// Full wire view of a single run — JOIN-expanded for username and drink-type
+/// name so the frontend doesn't need follow-up requests.
 #[derive(Serialize)]
 pub struct RunDetail {
+    /// Stable UUID of the run row.
     pub id: RunId,
+    /// User who submitted the run.
     pub user_id: UserId,
+    /// Cached username for display (saves a JOIN on the read path).
     pub username: Username,
+    /// Race this run belongs to.
     pub session_race_id: SessionRaceId,
+    /// Track this run was raced on.
     pub track_id: TrackId,
+    /// Total time in milliseconds.
     pub track_time: i32,
+    /// Lap 1 time in milliseconds.
     pub lap1_time: i32,
+    /// Lap 2 time in milliseconds.
     pub lap2_time: i32,
+    /// Lap 3 time in milliseconds.
     pub lap3_time: i32,
+    /// Character used for the run.
     pub character_id: CharacterId,
+    /// Kart body used for the run.
     pub body_id: BodyId,
+    /// Wheels used for the run.
     pub wheel_id: WheelId,
+    /// Glider used for the run.
     pub glider_id: GliderId,
+    /// Drink type consumed during the run.
     pub drink_type_id: DrinkTypeId,
+    /// Cached drink-type display name (saves a JOIN on the read path).
     pub drink_type_name: String,
+    /// `true` if the run was self-reported DQ.
     pub disqualified: bool,
+    /// Submission timestamp, UTC.
     pub created_at: DateTime<Utc>,
 }
 
@@ -89,19 +108,32 @@ impl RunDetailRow {
     }
 }
 
+/// Pre-fill values for the run-recording UI. Tries the user's last run first;
+/// falls back to their saved profile preferences if they've never raced.
 #[derive(Serialize)]
 pub struct RunDefaults {
+    /// Suggested drink type, or `None` if no history and no profile preference.
     pub drink_type_id: Option<DrinkTypeId>,
+    /// Suggested character.
     pub character_id: Option<CharacterId>,
+    /// Suggested kart body.
     pub body_id: Option<BodyId>,
+    /// Suggested wheels.
     pub wheel_id: Option<WheelId>,
+    /// Suggested glider.
     pub glider_id: Option<GliderId>,
+    /// Which source produced these defaults — `"last_run"` or `"profile"`.
     pub source: String,
 }
 
+/// Optional filters passed to [`list_runs`]. All filters AND together;
+/// omitting a field doesn't constrain the result.
 pub struct RunFilters {
+    /// Only runs from this race.
     pub session_race_id: Option<SessionRaceId>,
+    /// Only runs submitted by this user.
     pub user_id: Option<UserId>,
+    /// Only runs on this track.
     pub track_id: Option<TrackId>,
 }
 

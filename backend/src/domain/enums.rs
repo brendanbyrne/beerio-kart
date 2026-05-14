@@ -31,8 +31,10 @@ use crate::error::Error;
 #[sea_orm(rs_type = "String", db_type = "Text")]
 #[serde(rename_all = "lowercase")]
 pub enum SessionStatus {
+    /// Session is accepting joins / leaves / race submissions.
     #[sea_orm(string_value = "active")]
     Active,
+    /// Session has ended; no further mutations allowed.
     #[sea_orm(string_value = "closed")]
     Closed,
 }
@@ -52,12 +54,17 @@ pub enum SessionStatus {
 #[sea_orm(rs_type = "String", db_type = "Text")]
 #[serde(rename_all = "snake_case")]
 pub enum SessionRuleset {
+    /// Each race's track is picked uniformly at random.
     #[sea_orm(string_value = "random")]
     Random,
+    /// Host selects each track manually. (Not yet implemented.)
     #[sea_orm(string_value = "default")]
     Default,
+    /// Track selection weighted toward tracks the group has played least.
+    /// (Not yet implemented.)
     #[sea_orm(string_value = "least_played")]
     LeastPlayed,
+    /// Cycles deterministically through a fixed playlist. (Not yet implemented.)
     #[sea_orm(string_value = "round_robin")]
     RoundRobin,
 }
@@ -100,8 +107,10 @@ impl FromStr for SessionRuleset {
 #[sea_orm(rs_type = "String", db_type = "Text")]
 #[serde(rename_all = "snake_case")]
 pub enum DrinkCategory {
+    /// Contains alcohol.
     #[sea_orm(string_value = "alcoholic")]
     Alcoholic,
+    /// Does not contain alcohol.
     #[sea_orm(string_value = "non_alcoholic")]
     NonAlcoholic,
 }
@@ -123,16 +132,22 @@ pub enum DrinkCategory {
 #[sea_orm(rs_type = "String", db_type = "Text")]
 #[serde(rename_all = "snake_case")]
 pub enum RunFlagReason {
+    /// User reports the recorded time doesn't match what they actually ran.
     #[sea_orm(string_value = "time_is_incorrect")]
     TimeIsIncorrect,
+    /// User reports the run was assigned to the wrong track.
     #[sea_orm(string_value = "wrong_track")]
     WrongTrack,
+    /// User reports the recorded character/body/wheel/glider don't match.
     #[sea_orm(string_value = "wrong_race_setup")]
     WrongRaceSetup,
+    /// User reports the recorded drink type doesn't match.
     #[sea_orm(string_value = "wrong_drink_type")]
     WrongDrinkType,
+    /// Catch-all for any other dispute.
     #[sea_orm(string_value = "other")]
     Other,
+    /// Auto-generated when a personal-record-bearing run lacks a photo.
     #[sea_orm(string_value = "record_requires_photo_verification")]
     RecordRequiresPhotoVerification,
 }

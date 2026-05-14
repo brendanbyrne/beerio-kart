@@ -17,15 +17,26 @@ use crate::{
 
 // ── Response types (API contract) ───────────────────────────────────
 
+/// Public-facing user profile shape — what other users see.
+///
+/// Email and password hash are deliberately not included.
 #[derive(Serialize)]
 pub struct UserPublicProfile {
+    /// User's stable UUID.
     pub id: UserId,
+    /// User's chosen handle. Unique case-insensitively.
     pub username: Username,
+    /// User's default character pick, if set.
     pub preferred_character_id: Option<CharacterId>,
+    /// User's default kart body, if set.
     pub preferred_body_id: Option<BodyId>,
+    /// User's default wheel set, if set.
     pub preferred_wheel_id: Option<WheelId>,
+    /// User's default glider, if set.
     pub preferred_glider_id: Option<GliderId>,
+    /// User's default drink choice, if set.
     pub preferred_drink_type_id: Option<DrinkTypeId>,
+    /// Account-creation timestamp, UTC.
     pub created_at: DateTime<Utc>,
 }
 
