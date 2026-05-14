@@ -6,6 +6,7 @@ use crate::{
     entities::{bodies, characters, drink_types, gliders, users, wheels},
     error::Error,
     services::helpers,
+    timeout::db_query,
 };
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -103,8 +104,7 @@ pub async fn update_profile(
         ));
     }
 
-    let user = users::Entity::find_by_id(target_user_id)
-        .one(db)
+    let user = db_query(users::Entity::find_by_id(target_user_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound(format!("User {target_user_id} not found")))?;
 
@@ -143,7 +143,7 @@ pub async fn update_profile(
     }
 
     // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
-    let updated = active.update(db).await?;
+    let updated = db_query(active.update(db)).await?;
 
     build_detail_profile(db, updated).await
 }
@@ -162,7 +162,7 @@ pub async fn build_detail_profile(
     user: users::Model,
 ) -> Result<UserDetailProfile, Error> {
     let drink_type = if let Some(ref dt_id) = user.preferred_drink_type_id {
-        let row = drink_types::Entity::find_by_id(dt_id).one(db).await?;
+        let row = db_query(drink_types::Entity::find_by_id(dt_id).one(db)).await?;
         row.map(|dt| {
             Ok::<_, Error>(DrinkTypeInfo {
                 id: DrinkTypeId::from_db(&dt.id)?,
