@@ -41,7 +41,7 @@ pub async fn create_session(
     Ok((StatusCode::CREATED, Json(detail)))
 }
 
-/// Body shape for `GET /sessions/mine`.
+/// Response body for `GET /sessions/mine`.
 #[derive(Serialize)]
 pub struct MySessionResponse {
     /// The user's current active session, or `None` if they're not in one.
