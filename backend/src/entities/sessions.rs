@@ -1,5 +1,7 @@
 use sea_orm::entity::prelude::*;
 
+use crate::domain::enums::{DrinkCategory, SessionRuleset, SessionStatus};
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "sessions")]
 pub struct Model {
@@ -7,12 +9,9 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub host_id: String,
-    #[sea_orm(column_type = "Text")]
-    pub ruleset: String,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub least_played_drink_category: Option<String>,
-    #[sea_orm(column_type = "Text")]
-    pub status: String,
+    pub ruleset: SessionRuleset,
+    pub least_played_drink_category: Option<DrinkCategory>,
+    pub status: SessionStatus,
     pub created_at: DateTime,
     pub last_activity_at: DateTime,
 }

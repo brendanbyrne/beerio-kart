@@ -32,7 +32,7 @@ pub async fn load_active_session<C: ConnectionTrait>(
         .one(db)
         .await?
         .ok_or_else(|| Error::NotFound("Session not found".into()))?;
-    if session.status != SessionStatus::Active.as_str() {
+    if session.status != SessionStatus::Active {
         return Err(Error::conflict("Session is not active"));
     }
     Ok(session)
@@ -262,11 +262,11 @@ mod tests {
     async fn load_active_session_returns_active() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
 
         let model = load_active_session(&db, &session_id).await.unwrap();
         assert_eq!(model.id, session_id.to_string());
-        assert_eq!(model.status, "active");
+        assert_eq!(model.status, SessionStatus::Active);
     }
 
     #[tokio::test]
@@ -282,7 +282,7 @@ mod tests {
     async fn load_active_session_closed_is_conflict() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "closed").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Closed).await;
 
         let err = load_active_session(&db, &session_id).await.unwrap_err();
         assert!(matches!(err, Error::Conflict { .. }));
@@ -294,7 +294,7 @@ mod tests {
     async fn require_active_participant_returns_row_when_active() {
         let db = setup_db().await;
         let user = create_user(&db, "u1").await;
-        let session_id = insert_session(&db, &user, "active").await;
+        let session_id = insert_session(&db, &user, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &user, None).await;
 
         let row = require_active_participant(&db, &session_id, &user)
@@ -308,7 +308,7 @@ mod tests {
     async fn require_active_participant_no_row_is_forbidden() {
         let db = setup_db().await;
         let user = create_user(&db, "u1").await;
-        let session_id = insert_session(&db, &user, "active").await;
+        let session_id = insert_session(&db, &user, SessionStatus::Active).await;
 
         let err = require_active_participant(&db, &session_id, &user)
             .await
@@ -320,7 +320,7 @@ mod tests {
     async fn require_active_participant_left_is_forbidden() {
         let db = setup_db().await;
         let user = create_user(&db, "u1").await;
-        let session_id = insert_session(&db, &user, "active").await;
+        let session_id = insert_session(&db, &user, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &user, Some(Utc::now().naive_utc())).await;
 
         let err = require_active_participant(&db, &session_id, &user)
@@ -335,7 +335,7 @@ mod tests {
     async fn touch_session_updates_last_activity_at() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
 
         let before = sessions::Entity::find_by_id(session_id)
             .one(&db)
@@ -483,7 +483,7 @@ mod tests {
         let active = create_user(&db, "active").await;
         let left = create_user(&db, "left").await;
 
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host, None).await;
         insert_participant(&db, &session_id, &active, None).await;
         insert_participant(&db, &session_id, &left, Some(Utc::now().naive_utc())).await;
@@ -524,7 +524,7 @@ mod tests {
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         // host has already left
         insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
 

@@ -21,7 +21,10 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::{
-    domain::{SessionId, SessionRaceId, UserId},
+    domain::{
+        SessionId, SessionRaceId, UserId,
+        enums::{SessionRuleset, SessionStatus},
+    },
     drink_type_id::drink_type_uuid,
     entities::{
         bodies, characters, cups, drink_types, gliders, session_participants,
@@ -115,14 +118,18 @@ pub async fn seed_tracks_for_test(db: &DatabaseConnection) {
 
 /// Insert a session with the given host and status. Returns the generated
 /// session ID.
-pub async fn insert_session(db: &DatabaseConnection, host_id: &UserId, status: &str) -> SessionId {
+pub async fn insert_session(
+    db: &DatabaseConnection,
+    host_id: &UserId,
+    status: SessionStatus,
+) -> SessionId {
     let id = SessionId::new_v4();
     sessions::ActiveModel {
         id: Set((&id).into()),
         host_id: Set(host_id.into()),
-        ruleset: Set("random".to_string()),
+        ruleset: Set(SessionRuleset::Random),
         least_played_drink_category: Set(None),
-        status: Set(status.to_string()),
+        status: Set(status),
         created_at: NotSet,
         last_activity_at: Set(Utc::now().naive_utc()),
     }

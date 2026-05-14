@@ -1,5 +1,7 @@
 use sea_orm::entity::prelude::*;
 
+use crate::domain::enums::RunFlagReason;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "run_flags")]
 pub struct Model {
@@ -7,8 +9,7 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub run_id: String,
-    #[sea_orm(column_type = "Text")]
-    pub reason: String,
+    pub reason: RunFlagReason,
     #[sea_orm(column_type = "Text", nullable)]
     pub note: Option<String>,
     pub hide_while_pending: bool,
