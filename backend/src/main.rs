@@ -14,11 +14,12 @@ use beerio_kart::{
     config::{self, Config},
     db,
     middleware::limits::handle_load_shed_error,
-    routes, services,
+    routes, services, shutdown,
 };
 use migration::{Migrator, MigratorTrait};
 use serde::Serialize;
 use tokio::sync::Semaphore;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower::{ServiceBuilder, limit::ConcurrencyLimitLayer, load_shed::LoadShedLayer};
 use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 // `tower::timeout::TimeoutLayer` (cited in tokio.md § 12) produces a service
@@ -95,6 +96,13 @@ async fn main() -> anyhow::Result<()> {
     // is moved into the router.
     let cleanup_db = state.db.clone();
 
+    // Graceful-shutdown plumbing (tokio.md § 13). `cancel` is the propagation
+    // signal — every long-lived background task selects on `cancel.cancelled()`
+    // alongside its work-trigger. `tracker` keeps a handle to those tasks so
+    // we can wait for them to wind down after `axum::serve` returns.
+    let cancel = CancellationToken::new();
+    let tracker = TaskTracker::new();
+
     // Per-peer-IP rate limit. The default `PeerIpKeyExtractor` reads the
     // remote address from the `ConnectInfo<SocketAddr>` extension, so the
     // server below must be served via `into_make_service_with_connect_info`.
@@ -118,12 +126,19 @@ async fn main() -> anyhow::Result<()> {
     // (tokio.md § 8) — same pattern as the stale-session loop below, and
     // a real OS thread is overkill for a once-a-minute janitor.
     let governor_limiter = governor_conf.limiter().clone();
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(60));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tick.tick().await;
-            governor_limiter.retain_recent();
+    tracker.spawn({
+        let cancel = cancel.clone();
+        async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => break,
+                    _ = tick.tick() => governor_limiter.retain_recent(),
+                }
+            }
+            tracing::info!("governor cache janitor exited");
         }
     });
 
@@ -253,31 +268,62 @@ async fn main() -> anyhow::Result<()> {
         );
 
     // Spawn background task to close stale sessions (no activity for 1 hour).
-    // Runs every 5 minutes.
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(300)).await;
-            match services::sessions::close_stale_sessions(&cleanup_db).await {
-                Ok(0) => {}
-                Ok(n) => tracing::info!("Closed {n} stale session(s)"),
-                Err(_) => tracing::error!("Stale session cleanup failed"),
+    // Runs every 5 minutes. PR-F2 (#58) extracts this body into
+    // `services::sessions::session_cleanup_loop`; for now it lives inline so
+    // F1 stays focused on the shutdown wiring.
+    tracker.spawn({
+        let cancel = cancel.clone();
+        async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(300));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => break,
+                    _ = tick.tick() => {
+                        match services::sessions::close_stale_sessions(&cleanup_db).await {
+                            Ok(0) => {}
+                            Ok(n) => tracing::info!("Closed {n} stale session(s)"),
+                            Err(_) => tracing::error!("Stale session cleanup failed"),
+                        }
+                    }
+                }
             }
+            tracing::info!("session cleanup task exited");
         }
     });
+
+    // No more tasks are spawned after this; closing lets `tracker.wait()`
+    // return as soon as the spawned tasks finish (tokio.md § 13).
+    tracker.close();
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .context("Binding TCP listener on 0.0.0.0:3000")?;
     tracing::info!("Listening on http://localhost:3000");
+
+    // Install signal handlers up front. Any failure surfaces here as an
+    // `io::Error` (typically a missing capability), not from inside the
+    // shutdown future where it would be hard to recover from.
+    let shutdown_signal =
+        shutdown::signal(cancel.clone()).context("Installing shutdown-signal handlers")?;
+
     // `into_make_service_with_connect_info::<SocketAddr>` populates the
     // `ConnectInfo<SocketAddr>` request extension that `tower-governor`'s
     // `PeerIpKeyExtractor` reads to bucket rate-limit counters per IP.
+    //
+    // `with_graceful_shutdown` waits for in-flight requests to finish once
+    // the shutdown future resolves — no new connections accepted, existing
+    // ones drain. Background tasks drain via the cancellation token below.
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal)
     .await
     .context("HTTP server returned an error")?;
+
+    shutdown::wait(tracker, Duration::from_secs(20)).await;
 
     Ok(())
 }
