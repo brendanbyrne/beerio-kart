@@ -103,7 +103,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn wait_returns_immediately_for_closed_empty_tracker() {
+    async fn test_wait_returns_immediately_for_closed_empty_tracker() {
         let tracker = TaskTracker::new();
         tracker.close();
         let start = tokio::time::Instant::now();
@@ -114,7 +114,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn wait_returns_after_tracked_task_observes_cancel() {
+    async fn test_wait_returns_after_tracked_task_observes_cancel() {
         let tracker = TaskTracker::new();
         let cancel = CancellationToken::new();
         let exited = Arc::new(AtomicBool::new(false));
@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn supervised_runs_clean_future_to_completion() {
+    async fn test_supervised_runs_clean_future_to_completion() {
         let ran = Arc::new(AtomicBool::new(false));
         let ran_inner = ran.clone();
         supervised("test-clean", async move {
@@ -146,7 +146,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn supervised_catches_panic_and_returns() {
+    async fn test_supervised_catches_panic_and_returns() {
         // If `supervised` failed to catch, this test would itself panic and
         // be reported as failed. Reaching the assertion proves the panic
         // was contained — the log path is exercised by hand via smoke tests.
@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn wait_times_out_for_stubborn_task() {
+    async fn test_wait_times_out_for_stubborn_task() {
         let tracker = TaskTracker::new();
         // Task that ignores cancellation and outlives the budget.
         let handle = tracker.spawn(async move {
