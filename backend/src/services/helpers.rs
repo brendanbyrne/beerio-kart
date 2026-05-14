@@ -14,6 +14,7 @@ use crate::{
     domain::{SessionId, SessionRaceId, UserId, enums::SessionStatus},
     entities::{session_participants, session_race_participations, sessions, tracks},
     error::Error,
+    timeout::db_query,
 };
 
 /// Load a session by ID and require that it is in the `Active` state.
@@ -28,8 +29,7 @@ pub async fn load_active_session<C: ConnectionTrait>(
     db: &C,
     session_id: &SessionId,
 ) -> Result<sessions::Model, Error> {
-    let session = sessions::Entity::find_by_id(session_id)
-        .one(db)
+    let session = db_query(sessions::Entity::find_by_id(session_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound("Session not found".into()))?;
     if session.status != SessionStatus::Active {
@@ -55,16 +55,18 @@ pub async fn require_active_participant<C: ConnectionTrait>(
     session_id: &SessionId,
     user_id: &UserId,
 ) -> Result<session_participants::Model, Error> {
-    session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::SessionId.eq(session_id))
-                .add(session_participants::Column::UserId.eq(user_id))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
-        .one(db)
-        .await?
-        .ok_or_else(|| Error::Forbidden("Not a participant in this session".into()))
+    db_query(
+        session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(session_id))
+                    .add(session_participants::Column::UserId.eq(user_id))
+                    .add(session_participants::Column::LeftAt.is_null()),
+            )
+            .one(db),
+    )
+    .await?
+    .ok_or_else(|| Error::Forbidden("Not a participant in this session".into()))
 }
 
 /// Snapshot per-race presence at race-creation time.
@@ -95,14 +97,16 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
 ) -> Result<(), Error> {
     let now = Utc::now().naive_utc();
 
-    let present = session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::SessionId.eq(session_id))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
-        .all(txn)
-        .await?;
+    let present = db_query(
+        session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(session_id))
+                    .add(session_participants::Column::LeftAt.is_null()),
+            )
+            .all(txn),
+    )
+    .await?;
 
     if present.is_empty() {
         // `insert_many` with an empty iterator panics in some SeaORM
@@ -127,9 +131,7 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
             skipped_at: Set(None),
         });
 
-    session_race_participations::Entity::insert_many(rows)
-        .exec(txn)
-        .await?;
+    db_query(session_race_participations::Entity::insert_many(rows).exec(txn)).await?;
 
     Ok(())
 }
@@ -146,11 +148,13 @@ pub async fn touch_session<C: ConnectionTrait>(
     session_id: &SessionId,
 ) -> Result<(), Error> {
     let now = Utc::now().naive_utc();
-    sessions::Entity::update_many()
-        .col_expr(sessions::Column::LastActivityAt, Expr::value(now))
-        .filter(sessions::Column::Id.eq(session_id))
-        .exec(db)
-        .await?;
+    db_query(
+        sessions::Entity::update_many()
+            .col_expr(sessions::Column::LastActivityAt, Expr::value(now))
+            .filter(sessions::Column::Id.eq(session_id))
+            .exec(db),
+    )
+    .await?;
     Ok(())
 }
 
@@ -176,7 +180,7 @@ where
     C: ConnectionTrait,
     <<E as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType: std::fmt::Display,
 {
-    if E::find_by_id(id).one(db).await?.is_none() {
+    if db_query(E::find_by_id(id).one(db)).await?.is_none() {
         return Err(Error::bad_request(format!("Invalid {entity_label}_id")));
     }
     Ok(())
@@ -209,7 +213,7 @@ pub async fn pick_random_track<C: ConnectionTrait>(
     exclude: &[i32],
     always_exclude: &[i32],
 ) -> Result<tracks::Model, Error> {
-    let all_tracks = tracks::Entity::find().all(db).await?;
+    let all_tracks = db_query(tracks::Entity::find().all(db)).await?;
     if all_tracks.is_empty() {
         return Err(Error::Internal(anyhow::anyhow!("No tracks configured")));
     }
