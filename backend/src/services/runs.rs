@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     domain::{
-        BodyId, CharacterId, DrinkTypeId, GliderId, RunId, SessionId, SessionRaceId, TrackId,
-        UserId, Username, WheelId,
+        BodyId, CharacterId, DrinkTypeId, GliderId, LapTimeMs, MAX_TIME_MS, RaceTimeMs, RunId,
+        SessionId, SessionRaceId, TrackId, UserId, Username, WheelId, numeric::assert_lap_sum,
     },
     entities::{
         bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
@@ -18,9 +18,6 @@ use crate::{
     error::Error,
     services::{helpers, sessions},
 };
-
-/// Maximum allowed track time: 10 minutes in milliseconds.
-const MAX_TRACK_TIME_MS: i32 = 600_000;
 
 #[derive(Deserialize)]
 pub struct CreateRunRequest {
@@ -123,33 +120,53 @@ pub struct RunFilters {
     pub track_id: Option<TrackId>,
 }
 
-/// Validate time fields on a run submission: `track_time` range, lap times
-/// positive and within range, and lap sum equals `track_time`.
-fn validate_time_fields(body: &CreateRunRequest) -> Result<(), Error> {
-    if body.track_time <= 0 || body.track_time > MAX_TRACK_TIME_MS {
-        return Err(Error::bad_request(format!(
-            "track_time must be between 1 and {MAX_TRACK_TIME_MS} ms"
-        )));
-    }
-    if body.lap1_time <= 0 || body.lap2_time <= 0 || body.lap3_time <= 0 {
-        return Err(Error::bad_request("All lap times must be positive"));
-    }
-    if body.lap1_time > MAX_TRACK_TIME_MS
-        || body.lap2_time > MAX_TRACK_TIME_MS
-        || body.lap3_time > MAX_TRACK_TIME_MS
-    {
-        return Err(Error::bad_request(format!(
-            "Each lap time must be at most {MAX_TRACK_TIME_MS} ms"
-        )));
-    }
-    let lap_sum = body.lap1_time + body.lap2_time + body.lap3_time;
-    if lap_sum != body.track_time {
-        let diff = (lap_sum - body.track_time).abs();
-        return Err(Error::bad_request(format!(
-            "Lap times must add up to total time (off by {diff}ms)"
-        )));
-    }
-    Ok(())
+/// Times on a run submission parsed into their typed forms.
+///
+/// Returned by [`validate_time_fields`] so the caller doesn't have to
+/// re-parse the raw `i32`s when building the entity row — the typed
+/// values are already bounds-checked by construction, and unwrapping
+/// back to `i32` for the entity column is a single `.as_ref()` per
+/// field. Clippy's `struct_field_names` lint flags the shared `_time`
+/// suffix; the redundancy is load-bearing because the field names line
+/// up with the API contract's `track_time` / `lap{1,2,3}_time` and the
+/// entity columns of the same name.
+#[allow(clippy::struct_field_names)]
+struct ValidatedRunTimes {
+    track_time: RaceTimeMs,
+    lap1_time: LapTimeMs,
+    lap2_time: LapTimeMs,
+    lap3_time: LapTimeMs,
+}
+
+/// Validate the four time fields on a run submission.
+///
+/// Parses each `i32` into its typed newtype (enforcing the `1..=MAX_TIME_MS`
+/// bound at construction time), then delegates the lap-sum invariant
+/// (`lap1 + lap2 + lap3 == track_time`) to [`assert_lap_sum`]. The
+/// invariant lives in one place — see `domain/numeric.rs` — and this
+/// function is the boundary that translates `nutype` errors into the
+/// user-facing `BadRequest` messages the API contract expects.
+fn validate_time_fields(body: &CreateRunRequest) -> Result<ValidatedRunTimes, Error> {
+    let track_time = RaceTimeMs::try_from(body.track_time).map_err(|_| {
+        Error::bad_request(format!("track_time must be between 1 and {MAX_TIME_MS} ms"))
+    })?;
+    let parse_lap = |value: i32, label: &str| -> Result<LapTimeMs, Error> {
+        LapTimeMs::try_from(value).map_err(|_| {
+            Error::bad_request(format!("{label} must be between 1 and {MAX_TIME_MS} ms"))
+        })
+    };
+    let lap1_time = parse_lap(body.lap1_time, "lap1_time")?;
+    let lap2_time = parse_lap(body.lap2_time, "lap2_time")?;
+    let lap3_time = parse_lap(body.lap3_time, "lap3_time")?;
+
+    assert_lap_sum([lap1_time, lap2_time, lap3_time], track_time)?;
+
+    Ok(ValidatedRunTimes {
+        track_time,
+        lap1_time,
+        lap2_time,
+        lap3_time,
+    })
 }
 
 /// Create a run for a session race. Top-level orchestrator: validate, insert,
@@ -172,8 +189,8 @@ pub async fn create_run(
     user_id: &UserId,
     body: CreateRunRequest,
 ) -> Result<RunDetail, Error> {
-    let session_race = validate_run_request(db, user_id, &body).await?;
-    let run_id = insert_run(db, user_id, body, &session_race).await?;
+    let (session_race, times) = validate_run_request(db, user_id, &body).await?;
+    let run_id = insert_run(db, user_id, body, &times, &session_race).await?;
     get_run(db, &run_id).await
 }
 
@@ -195,8 +212,8 @@ async fn validate_run_request(
     db: &impl ConnectionTrait,
     user_id: &UserId,
     body: &CreateRunRequest,
-) -> Result<session_races::Model, Error> {
-    validate_time_fields(body)?;
+) -> Result<(session_races::Model, ValidatedRunTimes), Error> {
+    let times = validate_time_fields(body)?;
 
     let session_race = session_races::Entity::find_by_id(body.session_race_id)
         .one(db)
@@ -283,7 +300,7 @@ async fn validate_run_request(
     )
     .await?;
 
-    Ok(session_race)
+    Ok((session_race, times))
 }
 
 /// Insert the run row and bump the session's `last_activity_at`, atomically.
@@ -293,6 +310,7 @@ async fn insert_run(
     db: &DatabaseConnection,
     user_id: &UserId,
     body: CreateRunRequest,
+    times: &ValidatedRunTimes,
     session_race: &session_races::Model,
 ) -> Result<RunId, Error> {
     let run_id = RunId::new_v4();
@@ -308,10 +326,10 @@ async fn insert_run(
         body_id: Set(body.body_id.into()),
         wheel_id: Set(body.wheel_id.into()),
         glider_id: Set(body.glider_id.into()),
-        track_time: Set(body.track_time),
-        lap1_time: Set(body.lap1_time),
-        lap2_time: Set(body.lap2_time),
-        lap3_time: Set(body.lap3_time),
+        track_time: Set(*times.track_time.as_ref()),
+        lap1_time: Set(*times.lap1_time.as_ref()),
+        lap2_time: Set(*times.lap2_time.as_ref()),
+        lap3_time: Set(*times.lap3_time.as_ref()),
         drink_type_id: Set((&body.drink_type_id).into()),
         disqualified: Set(body.disqualified),
         photo_path: Set(None),
@@ -605,7 +623,7 @@ mod tests {
     #[test]
     fn test_validate_time_fields_rejects_track_time_over_max() {
         let mut req = valid_time_request();
-        req.track_time = MAX_TRACK_TIME_MS + 1;
+        req.track_time = MAX_TIME_MS + 1;
         req.lap1_time = 200_001;
         req.lap2_time = 200_000;
         req.lap3_time = 200_000;
@@ -629,7 +647,7 @@ mod tests {
     #[test]
     fn test_validate_time_fields_rejects_lap_time_over_max() {
         let mut req = valid_time_request();
-        req.lap1_time = MAX_TRACK_TIME_MS + 1;
+        req.lap1_time = MAX_TIME_MS + 1;
         assert!(validate_time_fields(&req).is_err());
     }
 
