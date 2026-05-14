@@ -275,6 +275,7 @@ dependencies = [
  "chrono",
  "cookie",
  "dotenvy",
+ "futures-util",
  "insta",
  "jsonwebtoken",
  "log",
