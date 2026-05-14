@@ -7,8 +7,8 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, Condition, ConnectionTrait,
-    DatabaseConnection, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, Set,
-    TransactionTrait, sea_query::Expr,
+    DatabaseConnection, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect, Set, TransactionTrait, sea_query::Expr,
 };
 use uuid::Uuid;
 
@@ -453,6 +453,12 @@ pub async fn leave_session(
 /// users from being soft-locked out of creating/joining new sessions.
 /// Returns the number of sessions closed.
 ///
+/// The cleanup runs as two set-based `UPDATE`s in one transaction
+/// (`seaorm.md` § 1) — one to flip the matching session rows to
+/// `Closed`, one to settle their still-active participants. The list
+/// of stale ids is fetched once up front so both `UPDATE`s can scope
+/// to the same set without re-querying.
+///
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures on any of the SELECT or
@@ -460,41 +466,55 @@ pub async fn leave_session(
 #[tracing::instrument(skip(db))]
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error> {
     let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).naive_utc();
+    let now = Utc::now().naive_utc();
 
-    let stale = sessions::Entity::find()
+    let txn = db.begin().await?;
+
+    // Capture the stale ids once. We can't derive them from the sessions
+    // `update_many`'s result (it returns a count, not a row set), and using
+    // a subquery in the participants filter pulls the same SELECT into the
+    // engine implicitly. The explicit form keeps the filter expressions
+    // readable and short-circuits cleanly when the cleanup has nothing to
+    // do (the common case).
+    let stale_ids: Vec<String> = sessions::Entity::find()
+        .select_only()
+        .column(sessions::Column::Id)
         .filter(
             Condition::all()
                 .add(sessions::Column::Status.eq(SessionStatus::Active))
                 .add(sessions::Column::LastActivityAt.lt(one_hour_ago)),
         )
-        .all(db)
+        .into_tuple()
+        .all(&txn)
         .await?;
 
-    let count = stale.len() as u64;
-    let now = Utc::now().naive_utc();
-
-    let txn = db.begin().await?;
-    for session in stale {
-        let session_id = session.id.clone();
-
-        // Mark all still-active participants as left
-        session_participants::Entity::update_many()
-            .col_expr(session_participants::Column::LeftAt, Expr::value(now))
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(&session_id))
-                    .add(session_participants::Column::LeftAt.is_null()),
-            )
-            .exec(&txn)
-            .await?;
-
-        let mut active: sessions::ActiveModel = session.into();
-        active.status = Set(SessionStatus::Closed);
-        active.update(&txn).await?;
+    if stale_ids.is_empty() {
+        txn.commit().await?;
+        return Ok(0);
     }
+
+    // Mark all still-active participants of the stale sessions as left.
+    session_participants::Entity::update_many()
+        .col_expr(session_participants::Column::LeftAt, Expr::value(now))
+        .filter(
+            Condition::all()
+                .add(session_participants::Column::SessionId.is_in(stale_ids.clone()))
+                .add(session_participants::Column::LeftAt.is_null()),
+        )
+        .exec(&txn)
+        .await?;
+
+    // Close the stale sessions in one statement (seaorm.md § 1 — the
+    // exemplar for the set-based-update rule names this exact cleanup).
+    let result = sessions::Entity::update_many()
+        .col_expr(sessions::Column::Status, Expr::value(SessionStatus::Closed))
+        .filter(sessions::Column::Id.is_in(stale_ids))
+        .exec(&txn)
+        .await?;
+
     txn.commit().await?;
 
-    Ok(count)
+    Ok(result.rows_affected)
 }
 
 #[cfg(test)]
