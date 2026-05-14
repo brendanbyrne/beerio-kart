@@ -155,6 +155,14 @@ Exception: chore PRs without a linked Issue can be milestoned if you want them t
 
 Issue number first lets `git checkout 42<TAB>` complete fast and gives tooling a clean lookup key.
 
+### Title
+
+PR title format: `<issue_number>: <Title>` — e.g., `42: Add leaderboard`, `87: Fix lap-time validation off-by-one`.
+
+Mirrors the commit-message convention below; keeps the Issue number visible in the PR list and in merge-commit history on `main`.
+
+For chore PRs without an Issue, omit the prefix (just the title).
+
 ### Linked work
 
 `Closes #NN` mandatory for any PR closing an Issue. Chore PRs without Issues skip the reference (nothing to reference).
@@ -287,3 +295,4 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 - 2026-05-05 — Removed the now-stale parenthetical from the workflow-step-blocker rule that gave "handoff to Cowork for project-board mutations Claude Code can't do" as the example. Closes the loop with #44 — Claude Code's `gh` token now has `project` scope, so project mutations are no longer routed through Cowork.
 - 2026-05-08 — Renamed file from `workflow.md` to `project-workflow.md`. The s/no-s distinction with the new sibling `user-workflows.md` (added in PR 4) was too fragile (grep noise, easy typos, tab-completion ambiguity); the rename makes intent explicit and matches the doc's `# Project workflow` title. Cross-references updated in `.claude/CLAUDE.md`, `docs/CLAUDE.md`, `docs/README.md`, `docs/handoffs/README.md`, `docs/roadmap.md`, and `docs/user-workflows.md`.
 - 2026-05-08 — Updated handoff and self-notes path references throughout (`docs/handoffs/` → `.agents/handoffs/`, `.claude/*-notes.md` → `.agents/memory/*.md`) per the AI-state reorg in [#79](https://github.com/brendanbyrne/beerio-kart/issues/79).
+- 2026-05-14 — Added `### Title` subsection under `## PR conventions` documenting the `<issue_number>: <Title>` PR title format (mirrors the existing commit-message convention). Captured so Claude Code applies the format when creating PRs.
