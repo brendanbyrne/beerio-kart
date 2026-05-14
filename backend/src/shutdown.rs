@@ -1,0 +1,125 @@
+//! Graceful-shutdown wiring for the HTTP server and background tasks.
+//!
+//! See `coding-standards/tokio.md` § 5 (`TaskTracker` for long-lived tasks),
+//! § 8 (background task shape), and § 13 (the canonical
+//! signal → cancel → wait sequence).
+
+use std::time::Duration;
+
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+
+/// Build the shutdown-signal future for `axum::serve(...).with_graceful_shutdown(...)`.
+///
+/// Resolves when Ctrl-C **or** SIGTERM (Unix) is received, then calls
+/// [`CancellationToken::cancel`] so every tracked background task can wind
+/// down via its own `cancel.cancelled()` branch.
+///
+/// SIGTERM-handler installation can fail; that's surfaced as an `io::Error`
+/// from this constructor rather than from inside the returned future.
+/// `with_graceful_shutdown` only accepts `impl Future<Output = ()>`, so
+/// failing fast at install time keeps `main`'s error path normal.
+///
+/// # Errors
+///
+/// Returns the OS error from `tokio::signal::unix::signal` on Unix if the
+/// SIGTERM handler cannot be installed (typically a missing capability or a
+/// resource limit). On non-Unix platforms this is currently infallible.
+pub fn signal(
+    cancel: CancellationToken,
+) -> std::io::Result<impl std::future::Future<Output = ()> + Send + 'static> {
+    #[cfg(unix)]
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+
+    Ok(async move {
+        #[cfg(unix)]
+        tokio::select! {
+            res = tokio::signal::ctrl_c() => match res {
+                Ok(()) => tracing::info!("ctrl-c received, shutting down"),
+                Err(e) => tracing::error!(?e, "ctrl-c handler error, shutting down anyway"),
+            },
+            _ = sigterm.recv() => tracing::info!("sigterm received, shutting down"),
+        }
+        #[cfg(not(unix))]
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => tracing::info!("ctrl-c received, shutting down"),
+            Err(e) => tracing::error!(?e, "ctrl-c handler error, shutting down anyway"),
+        }
+        cancel.cancel();
+    })
+}
+
+/// Wait for all [`TaskTracker`]-spawned tasks to wind down, with a hard timeout.
+///
+/// Call this *after* `axum::serve(...).with_graceful_shutdown(...)` returns —
+/// the cancellation token has been triggered by then, so each tracked
+/// background task should observe its `cancel.cancelled()` branch and exit.
+/// The caller is responsible for `tracker.close()`-ing before calling this;
+/// `wait()` doesn't close so it stays composable.
+pub async fn wait(tracker: TaskTracker, timeout: Duration) {
+    if tokio::time::timeout(timeout, tracker.wait()).await.is_ok() {
+        tracing::info!("clean shutdown");
+    } else {
+        tracing::warn!(
+            timeout_secs = timeout.as_secs(),
+            "shutdown timed out, abandoning tasks"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn wait_returns_immediately_for_closed_empty_tracker() {
+        let tracker = TaskTracker::new();
+        tracker.close();
+        let start = tokio::time::Instant::now();
+        // 1s is well above any real schedule jitter and well under the
+        // production 20s budget — distinguishes "returned" from "timed out".
+        wait(tracker, Duration::from_secs(1)).await;
+        assert!(start.elapsed() < Duration::from_millis(500));
+    }
+
+    #[tokio::test]
+    async fn wait_returns_after_tracked_task_observes_cancel() {
+        let tracker = TaskTracker::new();
+        let cancel = CancellationToken::new();
+        let exited = Arc::new(AtomicBool::new(false));
+
+        tracker.spawn({
+            let cancel = cancel.clone();
+            let exited = exited.clone();
+            async move {
+                cancel.cancelled().await;
+                exited.store(true, Ordering::SeqCst);
+            }
+        });
+        tracker.close();
+
+        cancel.cancel();
+        wait(tracker, Duration::from_secs(1)).await;
+        assert!(exited.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn wait_times_out_for_stubborn_task() {
+        let tracker = TaskTracker::new();
+        // Task that ignores cancellation and outlives the budget.
+        let handle = tracker.spawn(async move {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        tracker.close();
+
+        let start = tokio::time::Instant::now();
+        wait(tracker, Duration::from_millis(50)).await;
+        // Timeout fired — we didn't wait for the stubborn task.
+        assert!(start.elapsed() < Duration::from_secs(1));
+        handle.abort();
+    }
+}

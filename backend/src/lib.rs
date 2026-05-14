@@ -22,6 +22,7 @@ pub mod error;
 pub mod middleware;
 pub mod routes;
 pub mod services;
+pub mod shutdown;
 
 #[cfg(test)]
 pub mod test_helpers;
