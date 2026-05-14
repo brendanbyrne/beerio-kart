@@ -56,6 +56,17 @@ pub fn signal(
 /// background task should observe its `cancel.cancelled()` branch and exit.
 /// The caller is responsible for `tracker.close()`-ing before calling this;
 /// `wait()` doesn't close so it stays composable.
+pub async fn wait(tracker: TaskTracker, timeout: Duration) {
+    if tokio::time::timeout(timeout, tracker.wait()).await.is_ok() {
+        tracing::info!("clean shutdown");
+    } else {
+        tracing::warn!(
+            timeout_secs = timeout.as_secs(),
+            "shutdown timed out, abandoning tasks"
+        );
+    }
+}
+
 /// Wrap a background task with entry/exit logs and panic capture.
 ///
 /// Per `coding-standards/tokio.md` § 5 ("spawn a wrapper that logs panics
@@ -79,17 +90,6 @@ where
         tracing::info!(task = name, "exited cleanly");
     } else {
         tracing::error!(task = name, "task panicked");
-    }
-}
-
-pub async fn wait(tracker: TaskTracker, timeout: Duration) {
-    if tokio::time::timeout(timeout, tracker.wait()).await.is_ok() {
-        tracing::info!("clean shutdown");
-    } else {
-        tracing::warn!(
-            timeout_secs = timeout.as_secs(),
-            "shutdown timed out, abandoning tasks"
-        );
     }
 }
 
