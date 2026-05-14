@@ -36,6 +36,8 @@ pub mod routes;
 pub mod services;
 /// Graceful-shutdown wiring: signal handling, task supervision, and drain.
 pub mod shutdown;
+/// Per-call timeout helpers wrapping `SeaORM` futures with `Error::Timeout`.
+pub mod timeout;
 
 /// Test fixtures and helpers shared across integration tests.
 #[cfg(test)]

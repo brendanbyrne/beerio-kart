@@ -118,3 +118,7 @@ rstest = "0.23"
 # Snapshot assertions for HTTP response bodies in integration tests
 # (rust.md § 7). Updates land via `cargo insta accept`.
 insta = { version = "1.41", features = ["json"] }
+# `start_paused = true` on `#[tokio::test]` for deterministic timeout tests in
+# `timeout.rs`. Edition 2024 uses resolver 3, so the `test-util` feature does
+# not leak into the non-test build.
+tokio = { version = "1", features = ["test-util"] }
