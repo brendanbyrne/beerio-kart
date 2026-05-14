@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{
     domain::{
         ImagePath, SessionId, SessionRaceId, UserId, Username,
-        enums::{Ruleset, SessionStatus},
+        enums::{SessionRuleset, SessionStatus},
     },
     entities::{
         cups, runs, session_participants, session_race_participations, session_races, sessions,
@@ -94,16 +94,27 @@ pub async fn get_active_session_id(
 ///
 /// # Errors
 ///
-/// Returns `BadRequest` if `ruleset` doesn't parse as a known `Ruleset`;
-/// `Conflict` if the user is already in another active session; `Internal`
-/// for unexpected DB failures.
+/// Returns `BadRequest` if `ruleset` doesn't parse as a known
+/// [`SessionRuleset`], or if it parses to a variant whose track-selection
+/// logic isn't implemented yet (everything except `Random` — see
+/// [`SessionRuleset`] for the gate); `Conflict` if the user is already in
+/// another active session; `Internal` for unexpected DB failures.
 #[tracing::instrument(skip(db), fields(user_id = %user_id, ruleset = %ruleset))]
 pub async fn create_session(
     db: &DatabaseConnection,
     user_id: &UserId,
     ruleset: &str,
 ) -> Result<SessionDetail, Error> {
-    let parsed: Ruleset = ruleset.parse()?;
+    let parsed: SessionRuleset = ruleset.parse()?;
+    if parsed != SessionRuleset::Random {
+        // The DB column accepts every variant, but the service layer only
+        // knows how to drive `Random` sessions today. Reject the others
+        // here rather than creating a structurally-broken session whose
+        // ruleset the rest of the code has no path to honor.
+        return Err(Error::bad_request(format!(
+            "Ruleset '{ruleset}' is not yet supported",
+        )));
+    }
 
     check_not_in_any_session(db, user_id).await?;
 
@@ -119,9 +130,9 @@ pub async fn create_session(
     sessions::ActiveModel {
         id: Set(session_id.into()),
         host_id: Set(user_id.into()),
-        ruleset: Set(parsed.to_string()),
+        ruleset: Set(parsed),
         least_played_drink_category: Set(None),
-        status: Set(SessionStatus::Active.to_string()),
+        status: Set(SessionStatus::Active),
         created_at: NotSet,
         last_activity_at: Set(now),
     }
@@ -150,7 +161,7 @@ pub struct SessionSummary {
     pub host_username: Username,
     pub participant_count: i64,
     pub race_number: i64,
-    pub ruleset: String,
+    pub ruleset: SessionRuleset,
     pub last_activity_at: DateTime<Utc>,
 }
 
@@ -161,7 +172,7 @@ struct SessionSummaryRow {
     host_username: String,
     participant_count: i64,
     race_count: i64,
-    ruleset: String,
+    ruleset: SessionRuleset,
     last_activity_at: NaiveDateTime,
 }
 
@@ -301,8 +312,8 @@ pub struct SessionDetail {
     pub id: SessionId,
     pub host_id: UserId,
     pub host_username: Username,
-    pub ruleset: String,
-    pub status: String,
+    pub ruleset: SessionRuleset,
+    pub status: SessionStatus,
     pub created_at: DateTime<Utc>,
     pub last_activity_at: DateTime<Utc>,
     pub participants: Vec<ParticipantInfo>,
@@ -974,7 +985,7 @@ pub async fn leave_session(
             active_session.host_id = Set((&new_host_id).into());
         }
         HostDisposition::SessionClosed => {
-            active_session.status = Set(SessionStatus::Closed.to_string());
+            active_session.status = Set(SessionStatus::Closed);
         }
         HostDisposition::NoChange => {}
     }
@@ -1244,7 +1255,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
     let stale = sessions::Entity::find()
         .filter(
             Condition::all()
-                .add(sessions::Column::Status.eq(SessionStatus::Active.as_str()))
+                .add(sessions::Column::Status.eq(SessionStatus::Active))
                 .add(sessions::Column::LastActivityAt.lt(one_hour_ago)),
         )
         .all(db)
@@ -1269,7 +1280,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
             .await?;
 
         let mut active: sessions::ActiveModel = session.into();
-        active.status = Set(SessionStatus::Closed.to_string());
+        active.status = Set(SessionStatus::Closed);
         active.update(&txn).await?;
     }
     txn.commit().await?;
@@ -1314,7 +1325,7 @@ mod tests {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
         let user2 = create_user(&db, "user2").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         // host has already left (left_at set in the real flow before this call)
         insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
         insert_participant(&db, &session_id, &user2, None).await;
@@ -1329,7 +1340,7 @@ mod tests {
     async fn test_transfer_host_leaves_alone_closes_session() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         // host's participant row has left_at set
         insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
 
@@ -1344,7 +1355,7 @@ mod tests {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
         let user2 = create_user(&db, "user2").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host, None).await;
         // user2 has already left (left_at set in the real flow)
         insert_participant(&db, &session_id, &user2, Some(Utc::now().naive_utc())).await;
@@ -1360,7 +1371,7 @@ mod tests {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
         let user2 = create_user(&db, "user2").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         // Both have left_at set (host left first, then user2)
         insert_participant(&db, &session_id, &host, Some(Utc::now().naive_utc())).await;
         insert_participant(&db, &session_id, &user2, Some(Utc::now().naive_utc())).await;
@@ -1393,7 +1404,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(updated.host_id, user2_id.to_string());
-        assert_eq!(updated.status, "active");
+        assert_eq!(updated.status, SessionStatus::Active);
     }
 
     #[tokio::test]
@@ -1410,7 +1421,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(updated.status, "closed");
+        assert_eq!(updated.status, SessionStatus::Closed);
     }
 
     #[tokio::test]
@@ -1496,6 +1507,34 @@ mod tests {
 
         let result = create_session(&db, &host_id, "invalid_ruleset").await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_with_parseable_but_unsupported_ruleset_is_bad_request() {
+        // `default` / `least_played` / `round_robin` are valid
+        // `SessionRuleset` variants (the enum carries all four per the
+        // compliance plan), but only `Random` is wired through the service.
+        // Until the others land, the service rejects them at the gate with
+        // a 400 carrying the offending name — distinct from the
+        // "Invalid ruleset" message produced by `FromStr` on garbage input.
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+
+        for ruleset in ["default", "least_played", "round_robin"] {
+            let result = create_session(&db, &host_id, ruleset).await;
+            let Err(err) = result else {
+                panic!("expected BadRequest for {ruleset}, got Ok(_)");
+            };
+            match err {
+                Error::BadRequest { client, .. } => {
+                    assert!(
+                        client.contains(ruleset) && client.contains("not yet supported"),
+                        "expected gate message for {ruleset}, got {client:?}",
+                    );
+                }
+                other => panic!("expected BadRequest for {ruleset}, got {other:?}"),
+            }
+        }
     }
 
     #[tokio::test]
@@ -1938,7 +1977,7 @@ mod tests {
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host_id, "active").await;
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
 
         let txn = db.begin().await.unwrap();
@@ -2009,7 +2048,7 @@ mod tests {
         let db = setup_db().await;
         seed_game_data(&db).await;
         let host_id = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host_id, "active").await;
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
         let race_id = insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
         insert_race_participation(&db, &race_id, &host_id, None).await;
@@ -2057,7 +2096,7 @@ mod tests {
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host_id, "active").await;
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
         let race_id = insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
 

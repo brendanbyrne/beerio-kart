@@ -24,7 +24,9 @@ pub struct CreateSessionRequest {
 /// # Errors
 ///
 /// Propagates the errors of [`sessions::create_session`]: `BadRequest` for an
-/// unknown ruleset, `Conflict` if the user is already in another active session.
+/// unknown ruleset or for a known-but-not-yet-implemented variant of
+/// [`crate::domain::enums::SessionRuleset`]; `Conflict` if the user is already
+/// in another active session.
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id, ruleset = %body.ruleset))]
 pub async fn create_session(
     user: User,

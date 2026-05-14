@@ -110,13 +110,16 @@ mod tests {
     use sea_orm::EntityTrait;
 
     use super::*;
-    use crate::test_helpers::{create_user, insert_participant, insert_session, setup_db};
+    use crate::{
+        domain::enums::SessionStatus,
+        test_helpers::{create_user, insert_participant, insert_session, setup_db},
+    };
 
     #[tokio::test]
     async fn load_active_populates_session() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
 
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
         assert_eq!(ctx.session.id, session_id.to_string());
@@ -136,7 +139,7 @@ mod tests {
     async fn load_active_closed_propagates_conflict() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "closed").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Closed).await;
 
         let err = SessionContext::load_active(&db, &session_id)
             .await
@@ -148,7 +151,7 @@ mod tests {
     async fn require_host_matches() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
         ctx.require_host(&host).expect("host matches");
@@ -159,7 +162,7 @@ mod tests {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
         let other = create_user(&db, "other").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
         let err = ctx.require_host(&other).unwrap_err();
@@ -170,7 +173,7 @@ mod tests {
     async fn require_participant_happy_and_forbidden_paths() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host, None).await;
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
@@ -188,7 +191,7 @@ mod tests {
     async fn touch_bumps_last_activity_at_in_db_and_struct() {
         let db = setup_db().await;
         let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, "active").await;
+        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
         let mut ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
         let before = ctx.session.last_activity_at;

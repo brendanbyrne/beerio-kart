@@ -555,6 +555,7 @@ pub async fn get_run_defaults(
 mod tests {
     use super::*;
     use crate::{
+        domain::enums::SessionStatus,
         entities::sessions as sessions_entity,
         services::sessions,
         test_helpers::{create_user, seed_game_data, setup_db},
@@ -871,7 +872,7 @@ mod tests {
             .unwrap();
         if let Some(s) = s {
             let mut active: sessions_entity::ActiveModel = s.into();
-            active.status = Set("closed".to_string());
+            active.status = Set(SessionStatus::Closed);
             active.update(&db).await.unwrap();
         }
 
