@@ -247,22 +247,23 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 ### PR-F1: TaskTracker + CancellationToken + graceful shutdown
 
 - **Scope:**
-  - Add `tokio-util` to `[dependencies]` (with `task` feature).
-  - In `main.rs`: create a `CancellationToken` and `TaskTracker` at startup, store both in app state (or pass into background-task spawners).
+  - Add `tokio-util` to `[dependencies]` with the `rt` feature (gates `TaskTracker`; `CancellationToken` is feature-flag-free). Add the `signal` feature on `tokio` for `tokio::signal::unix::signal`.
+  - In `main.rs`: create a `CancellationToken` and `TaskTracker` at startup and pass them into background-task spawners.
   - Wire `axum::serve(...).with_graceful_shutdown(...)` to a `select!` over `tokio::signal::ctrl_c()` and (on Unix) `SIGTERM`.
   - On shutdown: cancel the token, then `tokio::time::timeout(20s, tracker.wait())`.
-- **Standards refs:** `tokio.md` § 5, § 13.
+  - Add a `shutdown::supervised(name, fut)` helper that wraps each detached task with entry/exit logs (`tokio.md` § 8) and `AssertUnwindSafe(...).catch_unwind()` panic capture (`tokio.md` § 5). Both background spawn sites use it.
+- **Standards refs:** `tokio.md` § 5, § 8, § 13.
 - **Effort:** M.
 - **Dependencies:** None.
 - **Risk:** Medium — first time shutdown is exercised end-to-end. Test on Unraid before tagging release.
 - **Verification:** Send SIGTERM during a long-running request; confirm in-flight requests complete (or the timeout triggers cleanly).
 - **Tracking:** Issue [#124](https://github.com/brendanbyrne/beerio-kart/issues/124).
-- **Sign-off:** [ ]
+- **Sign-off:** [x] Closed 2026-05-14 via PR [#152](https://github.com/brendanbyrne/beerio-kart/pull/152).
 
 ### PR-F2: Implement `session_cleanup_loop` as a tracked background task
 
 - **Scope:**
-  - Implement the 5-minute stale-session cleanup task per `tokio.md` § 8.
+  - Implement the 5-minute stale-session cleanup task per `tokio.md` § 8 — `tokio::time::interval` with `MissedTickBehavior::Skip`, `biased;` select over the cancellation token, `shutdown::supervised` wrapper for entry/exit + panic logs.
   - Spawn it via `TaskTracker::spawn` from PR-F1.
   - Integrate the `Entity::update_many()` set-based update for closing stale sessions (`seaorm.md` § 1).
 - **Standards refs:** `tokio.md` § 8, `seaorm.md` § 1.
@@ -270,8 +271,8 @@ The largest phase. Each PR is independently reviewable; sequence keeps blast rad
 - **Dependencies:** PR-F1, PR-D3 (`SessionStatus` enum).
 - **Risk:** Low.
 - **Verification:** Insert a session with `last_activity_at` 2h ago; let the cleanup tick fire; confirm status flipped to `closed`.
-- **Tracking:** Issue [#58](https://github.com/brendanbyrne/beerio-kart/issues/58) (open; cross-milestone in `Star: Sessions & Run Recording` since this PR is both a tokio.md compliance task and a Star-cup feature).
-- **Sign-off:** [ ]
+- **Tracking:** Issue [#58](https://github.com/brendanbyrne/beerio-kart/issues/58) (cross-milestone in `Star: Sessions & Run Recording` since this PR is both a tokio.md compliance task and a Star-cup feature).
+- **Sign-off:** [x] Closed 2026-05-14 via PR [#152](https://github.com/brendanbyrne/beerio-kart/pull/152). Body still lives inline in `main.rs`; extracting it into `services::sessions::session_cleanup_loop` is the only piece of the original scope deferred (no behavioral change, follow-up not tracked separately — fold into the next sessions/-area PR).
 
 ### PR-F3: Tower middleware — request limits
 
@@ -514,3 +515,5 @@ Some PRs (B1, B3, E3, X1) have no dependencies and can land in parallel with A1/
 - 2026-05-11 — Filed 13 tracking Issues for previously-untracked compliance-plan PRs, all in the `Hardening: Backend compliance plan` milestone with the `enhancement` label: PR-D1 [#122](https://github.com/brendanbyrne/beerio-kart/issues/122), PR-D2 [#133](https://github.com/brendanbyrne/beerio-kart/issues/133), PR-D3 [#120](https://github.com/brendanbyrne/beerio-kart/issues/120), PR-D4 [#119](https://github.com/brendanbyrne/beerio-kart/issues/119), PR-E1 [#137](https://github.com/brendanbyrne/beerio-kart/issues/137), PR-F1 [#124](https://github.com/brendanbyrne/beerio-kart/issues/124), PR-F3 [#132](https://github.com/brendanbyrne/beerio-kart/issues/132), PR-F4 [#123](https://github.com/brendanbyrne/beerio-kart/issues/123), PR-F5 [#127](https://github.com/brendanbyrne/beerio-kart/issues/127), PR-G1 [#138](https://github.com/brendanbyrne/beerio-kart/issues/138), PR-G2 [#136](https://github.com/brendanbyrne/beerio-kart/issues/136), PR-G4 [#129](https://github.com/brendanbyrne/beerio-kart/issues/129), PR-I1 [#131](https://github.com/brendanbyrne/beerio-kart/issues/131). Each PR row now carries a Tracking line for parity with PR-C2 / PR-G3. The remaining unticked rows are PR-D1–D4, PR-E1, PR-F1–F5, PR-G1–G2, PR-G4, PR-I1 — every incomplete row now has either an open Issue or a clear note (PR-F2's cross-milestone exception).
 - 2026-05-12 — PR-G2 scope trim. Dropped `proptest` from PR-G2's dev-deps list; moved to whichever D-stream PR introduces the first round-trip invariant test (PR-D1 / [#122](https://github.com/brendanbyrne/beerio-kart/issues/122) or PR-D2 / [#133](https://github.com/brendanbyrne/beerio-kart/issues/133)). Per `rust.md` § 7, proptest is reserved for algebraic invariants — adding it with no consumer was the "introduce dep before there's a need" anti-pattern. PR-G2 row renamed to `Add rstest, insta as dev-dependencies`; new "Deferred to PR-D1/D2" bullet captures the lineage. Issue [#136](https://github.com/brendanbyrne/beerio-kart/issues/136) body updated; PR-D1 / PR-D2 Issue bodies got a matching scope bullet. Surfaced via Claude Code handoff (`.agents/handoffs/cowork.md`, transient) after Brendan flagged the missing-consumer seam during PR #139 review cleanup.
 - 2026-05-14 — Marked PR-G4 sign-off complete (closed earlier today via PR [#150](https://github.com/brendanbyrne/beerio-kart/pull/150) — `services/sessions.rs` → `sessions/{lifecycle,detail,races,types}.rs` and `services/runs.rs` → `runs/{submission,read}.rs`). The fourth `types.rs` sibling under `sessions/` was added in the review-feedback fixup commit to break what was originally a 3-way cycle (`lifecycle → detail → races → lifecycle`); the cycle resolution is captured in the refreshed `rust.md` § 13 example.
+- 2026-05-14 — Marked PR-F1 sign-off complete (closed via PR [#152](https://github.com/brendanbyrne/beerio-kart/pull/152)). `tokio-util` wired in with the `rt` feature (Issue body had said `task`, which doesn't exist on the crate); `tokio`'s `signal` feature added for the SIGTERM handler. `axum::serve(...).with_graceful_shutdown(...)` drains in-flight requests; the 20s `tracker.wait()` budget drains tracked background tasks. New `shutdown` module carries `signal`, `wait`, and `supervised` — the last one wraps each detached task with § 8 entry/exit logs and § 5 `AssertUnwindSafe(...).catch_unwind()` panic capture. Both background spawn sites (tower-governor cache janitor, stale-session cleanup) migrated to `tracker.spawn(shutdown::supervised(...))`. Verified end-to-end on WSL2 via `kill -TERM`; Unraid SIGTERM test still pending pre-release per the Issue's risk note.
+- 2026-05-14 — Marked PR-F2 sign-off complete (closed via PR [#152](https://github.com/brendanbyrne/beerio-kart/pull/152), folded into PR-F1's compliance work since the stale-session spawn site was already being migrated). All three scope bullets land: (1) `tokio.md` § 8 task shape — `tokio::time::interval` with `MissedTickBehavior::Skip`, `biased;` cancel branch, `shutdown::supervised` wrapper; (2) spawned via `TaskTracker::spawn` from PR-F1's tracker; (3) `close_stale_sessions` refactored to two set-based `Entity::update_many()` statements (`seaorm.md` § 1 — the exemplar names this exact cleanup), replacing the prior SELECT + per-session UPDATE loop. The body still lives inline in `main.rs`; extraction into `services::sessions::session_cleanup_loop` is the only piece of the original Issue scope deferred (no behavior change — fold into the next sessions/-area PR). Issue [#58](https://github.com/brendanbyrne/beerio-kart/issues/58) closes via the PR's `Closes` line.
