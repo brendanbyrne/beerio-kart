@@ -8,8 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     domain::{
-        BodyId, CharacterId, DrinkTypeId, GliderId, LapTimeMs, MAX_TIME_MS, RaceTimeMs, RunId,
-        SessionId, SessionRaceId, TrackId, UserId, Username, WheelId, numeric::assert_lap_sum,
+        BodyId, CharacterId, DrinkTypeId, GliderId, LapTimeMs, MAX_TIME_MS, MIN_TIME_MS,
+        RaceTimeMs, RunId, SessionId, SessionRaceId, TrackId, UserId, Username, WheelId,
+        assert_lap_sum,
     },
     entities::{
         bodies, characters, drink_types, gliders, runs, session_race_participations, session_races,
@@ -140,19 +141,24 @@ struct ValidatedRunTimes {
 
 /// Validate the four time fields on a run submission.
 ///
-/// Parses each `i32` into its typed newtype (enforcing the `1..=MAX_TIME_MS`
-/// bound at construction time), then delegates the lap-sum invariant
+/// Parses each `i32` into its typed newtype (enforcing the
+/// `MIN_TIME_MS..=MAX_TIME_MS` bound at construction time), then
+/// delegates the lap-sum invariant
 /// (`lap1 + lap2 + lap3 == track_time`) to [`assert_lap_sum`]. The
 /// invariant lives in one place — see `domain/numeric.rs` — and this
 /// function is the boundary that translates `nutype` errors into the
 /// user-facing `BadRequest` messages the API contract expects.
 fn validate_time_fields(body: &CreateRunRequest) -> Result<ValidatedRunTimes, Error> {
     let track_time = RaceTimeMs::try_from(body.track_time).map_err(|_| {
-        Error::bad_request(format!("track_time must be between 1 and {MAX_TIME_MS} ms"))
+        Error::bad_request(format!(
+            "track_time must be between {MIN_TIME_MS} and {MAX_TIME_MS} ms"
+        ))
     })?;
     let parse_lap = |value: i32, label: &str| -> Result<LapTimeMs, Error> {
         LapTimeMs::try_from(value).map_err(|_| {
-            Error::bad_request(format!("{label} must be between 1 and {MAX_TIME_MS} ms"))
+            Error::bad_request(format!(
+                "{label} must be between {MIN_TIME_MS} and {MAX_TIME_MS} ms"
+            ))
         })
     };
     let lap1_time = parse_lap(body.lap1_time, "lap1_time")?;
