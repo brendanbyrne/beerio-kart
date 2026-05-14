@@ -12,7 +12,10 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use super::detail::{SessionDetail, get_session_detail};
+use super::{
+    detail::{SessionDetail, get_session_detail},
+    types::REJOIN_GRACE_MINUTES,
+};
 use crate::{
     domain::{
         SessionId, UserId, Username,
@@ -224,14 +227,6 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
         })
         .collect()
 }
-
-/// Grace window for "rejoin without losing pre-leave pending races."
-///
-/// Within this window of `left_at`, rejoining preserves `joined_at` (and
-/// therefore preserves access to pre-leave pending races, per the §3 grace
-/// semantics). After this window, `joined_at` is reset to `NOW()`, forfeiting
-/// any pre-gap pending records.
-pub const REJOIN_GRACE_MINUTES: i64 = 5;
 
 /// Join (or rejoin) a session. **Single mutable row per (session, user)** —
 /// first join INSERTs, rejoin mutates the existing row.
