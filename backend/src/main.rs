@@ -275,21 +275,18 @@ async fn main() -> anyhow::Result<()> {
         );
 
     // Spawn background task to close stale sessions (no activity for 1 hour).
-    // Runs every 5 minutes. PR-F2 (#58) extracts this body into
-    // `services::sessions::session_cleanup_loop` and wraps it in
-    // `shutdown::supervised` like the governor janitor above; for now it
-    // lives inline (with manual entry/exit logs) so F1 stays focused on
-    // the shutdown wiring.
+    // Runs every 5 minutes. PR-F2 (#58) extracts the closure body into
+    // `services::sessions::session_cleanup_loop`; the `shutdown::supervised`
+    // wrapping stays, the body moves.
     //
     // Shutdown-safe (tokio.md § 13 final rule): `close_stale_sessions` is
     // idempotent — it flips `is_active` to `false` on sessions matching
     // `is_active AND last_activity_at < cutoff`. A future dropped between
     // the read and the write leaves the row in its original active state;
     // the next cycle picks it up. No partial-write window.
-    tracker.spawn({
+    tracker.spawn(shutdown::supervised("session cleanup task", {
         let cancel = cancel.clone();
         async move {
-            tracing::info!("session cleanup task started");
             let mut tick = tokio::time::interval(Duration::from_secs(300));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
@@ -305,9 +302,8 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            tracing::info!("session cleanup task exited");
         }
-    });
+    }));
 
     // No more tasks are spawned after this; closing lets `tracker.wait()`
     // return as soon as the spawned tasks finish (tokio.md § 13).
