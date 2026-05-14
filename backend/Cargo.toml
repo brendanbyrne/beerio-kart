@@ -56,6 +56,11 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 # `axum::serve(...).with_graceful_shutdown(...)` in `main.rs` and exercised
 # by the `shutdown` module.
 tokio-util = { version = "0.7", features = ["rt"] }
+# `FutureExt::catch_unwind` for `shutdown::supervised` (tokio.md § 5 — wrap
+# detached tasks so panics are logged instead of vanishing silently).
+# `std` feature is required by `catch_unwind`; `default-features = false`
+# drops the `alloc` half we don't use.
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # `limit` for ConcurrencyLimitLayer, `load-shed` for LoadShedLayer (turns
 # ConcurrencyLimit's "queue indefinitely" into "shed with Overloaded" so the
 # stack returns 503 on saturation instead of hanging). Timeout uses

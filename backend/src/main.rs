@@ -125,8 +125,16 @@ async fn main() -> anyhow::Result<()> {
     // README. Uses `tokio::time::interval` with `MissedTickBehavior::Skip`
     // (tokio.md § 8) — same pattern as the stale-session loop below, and
     // a real OS thread is overkill for a once-a-minute janitor.
+    //
+    // Shutdown-safe (tokio.md § 13 final rule): `retain_recent()` is pure
+    // in-memory; a future dropped mid-call leaves no externally-visible
+    // state. Worst case on shutdown timeout: the rate-limit map keeps
+    // stale entries for a few extra seconds — irrelevant in a restart.
+    //
+    // Wrapped in `shutdown::supervised` so § 8 entry/exit logs and § 5
+    // panic capture are uniform across detached tasks.
     let governor_limiter = governor_conf.limiter().clone();
-    tracker.spawn({
+    tracker.spawn(shutdown::supervised("governor cache janitor", {
         let cancel = cancel.clone();
         async move {
             let mut tick = tokio::time::interval(Duration::from_secs(60));
@@ -138,9 +146,8 @@ async fn main() -> anyhow::Result<()> {
                     _ = tick.tick() => governor_limiter.retain_recent(),
                 }
             }
-            tracing::info!("governor cache janitor exited");
         }
-    });
+    }));
 
     // STATIC_DIR defaults to ../frontend/dist for local dev (running from backend/).
     // In Docker, set to /app/static where the built frontend is copied.
@@ -269,11 +276,20 @@ async fn main() -> anyhow::Result<()> {
 
     // Spawn background task to close stale sessions (no activity for 1 hour).
     // Runs every 5 minutes. PR-F2 (#58) extracts this body into
-    // `services::sessions::session_cleanup_loop`; for now it lives inline so
-    // F1 stays focused on the shutdown wiring.
+    // `services::sessions::session_cleanup_loop` and wraps it in
+    // `shutdown::supervised` like the governor janitor above; for now it
+    // lives inline (with manual entry/exit logs) so F1 stays focused on
+    // the shutdown wiring.
+    //
+    // Shutdown-safe (tokio.md § 13 final rule): `close_stale_sessions` is
+    // idempotent — it flips `is_active` to `false` on sessions matching
+    // `is_active AND last_activity_at < cutoff`. A future dropped between
+    // the read and the write leaves the row in its original active state;
+    // the next cycle picks it up. No partial-write window.
     tracker.spawn({
         let cancel = cancel.clone();
         async move {
+            tracing::info!("session cleanup task started");
             let mut tick = tokio::time::interval(Duration::from_secs(300));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
@@ -314,7 +330,8 @@ async fn main() -> anyhow::Result<()> {
     //
     // `with_graceful_shutdown` waits for in-flight requests to finish once
     // the shutdown future resolves — no new connections accepted, existing
-    // ones drain. Background tasks drain via the cancellation token below.
+    // ones drain. Background tasks drain via the cancellation token that
+    // `shutdown_signal` (constructed above) triggers when the signal arrives.
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),

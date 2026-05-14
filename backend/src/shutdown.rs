@@ -4,8 +4,9 @@
 //! § 8 (background task shape), and § 13 (the canonical
 //! signal → cancel → wait sequence).
 
-use std::time::Duration;
+use std::{future::Future, panic::AssertUnwindSafe, time::Duration};
 
+use futures_util::FutureExt;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 /// Build the shutdown-signal future for `axum::serve(...).with_graceful_shutdown(...)`.
@@ -55,6 +56,32 @@ pub fn signal(
 /// background task should observe its `cancel.cancelled()` branch and exit.
 /// The caller is responsible for `tracker.close()`-ing before calling this;
 /// `wait()` doesn't close so it stays composable.
+/// Wrap a background task with entry/exit logs and panic capture.
+///
+/// Per `coding-standards/tokio.md` § 5 ("spawn a wrapper that logs panics
+/// and errors") and § 8 ("Always log on background-task entry and exit,
+/// with the task name"). Detached tasks lose panics silently — Tokio
+/// catches the panic and stores it in the dropped `JoinHandle`. Wrapping
+/// every `tracker.spawn` with this helper turns a 3 a.m. mystery into a
+/// log line.
+///
+/// `name` is the task identifier emitted as the `task = ...` field on
+/// every log; `fut` is the task body. The wrapper is intentionally
+/// future-only (not spawn-and-handle) so the caller can compose it with
+/// `tracker.spawn(supervised(...))` without dragging `TaskTracker` into
+/// this helper's signature.
+pub async fn supervised<F>(name: &'static str, fut: F)
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    tracing::info!(task = name, "started");
+    if AssertUnwindSafe(fut).catch_unwind().await.is_ok() {
+        tracing::info!(task = name, "exited cleanly");
+    } else {
+        tracing::error!(task = name, "task panicked");
+    }
+}
+
 pub async fn wait(tracker: TaskTracker, timeout: Duration) {
     if tokio::time::timeout(timeout, tracker.wait()).await.is_ok() {
         tracing::info!("clean shutdown");
@@ -105,6 +132,28 @@ mod tests {
         cancel.cancel();
         wait(tracker, Duration::from_secs(1)).await;
         assert!(exited.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn supervised_runs_clean_future_to_completion() {
+        let ran = Arc::new(AtomicBool::new(false));
+        let ran_inner = ran.clone();
+        supervised("test-clean", async move {
+            ran_inner.store(true, Ordering::SeqCst);
+        })
+        .await;
+        assert!(ran.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn supervised_catches_panic_and_returns() {
+        // If `supervised` failed to catch, this test would itself panic and
+        // be reported as failed. Reaching the assertion proves the panic
+        // was contained — the log path is exercised by hand via smoke tests.
+        supervised("test-panic", async move {
+            panic!("intentional panic for supervised() test");
+        })
+        .await;
     }
 
     #[tokio::test]
