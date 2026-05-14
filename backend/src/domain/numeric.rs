@@ -24,20 +24,30 @@ use nutype::nutype;
 
 use crate::error::Error;
 
+/// Inclusive lower bound (in milliseconds) on a single race time or a
+/// single lap time: 1 ms.
+///
+/// Zero and negative values are not legal race times — submitting `0`
+/// for a track-time field would imply the run took no time, which the
+/// game can't produce.
+pub const MIN_TIME_MS: i32 = 1;
+
 /// Inclusive upper bound (in milliseconds) on a single race time or a
 /// single lap time: 600,000 ms = ten minutes.
 ///
 /// Public so route DTOs and error messages can spell the limit out the
-/// same way the constructor enforces it.
+/// same way the constructor enforces it. The matching lower bound is
+/// [`MIN_TIME_MS`].
 pub const MAX_TIME_MS: i32 = 600_000;
 
 /// Total elapsed time for one full race, in milliseconds.
 ///
 /// Constructed via `TryFrom<i32>`: values outside the inclusive range
-/// from `1` up to [`MAX_TIME_MS`] (i.e. zero, negative, or longer than
-/// ten minutes) are rejected by the nutype `validate` machinery.
+/// from [`MIN_TIME_MS`] up to [`MAX_TIME_MS`] (i.e. zero, negative, or
+/// longer than ten minutes) are rejected by the nutype `validate`
+/// machinery.
 #[nutype(
-    validate(greater_or_equal = 1, less_or_equal = 600_000),
+    validate(greater_or_equal = MIN_TIME_MS, less_or_equal = MAX_TIME_MS),
     derive(
         Debug,
         Clone,
@@ -64,7 +74,7 @@ pub struct RaceTimeMs(i32);
 /// `LapTimeMs` values equals the race's `RaceTimeMs` by construction —
 /// see [`assert_lap_sum`].
 #[nutype(
-    validate(greater_or_equal = 1, less_or_equal = 600_000),
+    validate(greater_or_equal = MIN_TIME_MS, less_or_equal = MAX_TIME_MS),
     derive(
         Debug,
         Clone,
@@ -98,15 +108,18 @@ pub struct LapTimeMs(i32);
 /// # Errors
 ///
 /// Returns [`Error::BadRequest`] if the laps don't sum to `total`. The
-/// message includes the absolute difference so the client can show the
-/// user which direction to correct.
-pub fn assert_lap_sum(laps: [LapTimeMs; 3], total: RaceTimeMs) -> Result<(), Error> {
+/// message names which direction the sum is off (`over by` when the
+/// laps exceed the total, `under by` when they fall short), so the
+/// client can show the user whether to add or subtract.
+pub(crate) fn assert_lap_sum(laps: [LapTimeMs; 3], total: RaceTimeMs) -> Result<(), Error> {
     let sum: i32 = laps.iter().map(|l| *l.as_ref()).sum();
     let total_inner = *total.as_ref();
     if sum != total_inner {
-        let diff = (sum - total_inner).abs();
+        let signed_diff = sum - total_inner;
+        let direction = if signed_diff > 0 { "over" } else { "under" };
+        let magnitude = signed_diff.abs();
         return Err(Error::bad_request(format!(
-            "Lap times must add up to total time (off by {diff}ms)"
+            "Lap times must add up to total time ({direction} by {magnitude}ms)"
         )));
     }
     Ok(())
@@ -202,7 +215,8 @@ mod tests {
     // ── assert_lap_sum unhappy path ──────────────────────────────────
 
     #[test]
-    fn test_assert_lap_sum_rejects_mismatch_and_carries_diff_in_message() {
+    fn test_assert_lap_sum_rejects_undersum_and_carries_signed_diff() {
+        // laps sum to 60_000, total is 120_000 → sum < total → "under".
         let laps = [
             LapTimeMs::try_from(20_000).unwrap(),
             LapTimeMs::try_from(20_000).unwrap(),
@@ -212,9 +226,40 @@ mod tests {
         let err = assert_lap_sum(laps, total).unwrap_err();
         match err {
             Error::BadRequest { client, .. } => {
-                // laps sum to 60_000, total is 120_000 → diff 60_000ms.
                 assert!(client.contains("60000"), "message missing diff: {client}");
                 assert!(client.contains("add up to total time"));
+                assert!(
+                    client.contains("under"),
+                    "expected `under` direction in message: {client}",
+                );
+            }
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_assert_lap_sum_rejects_oversum_and_says_over() {
+        // laps sum to 90_000, total is 60_000 → sum > total → "over".
+        // Complementary to the `under` test above so a regression that
+        // flips the sign on `signed_diff` would fail one of the two.
+        let laps = [
+            LapTimeMs::try_from(30_000).unwrap(),
+            LapTimeMs::try_from(30_000).unwrap(),
+            LapTimeMs::try_from(30_000).unwrap(),
+        ];
+        let total = RaceTimeMs::try_from(60_000).unwrap();
+        let err = assert_lap_sum(laps, total).unwrap_err();
+        match err {
+            Error::BadRequest { client, .. } => {
+                assert!(client.contains("30000"), "message missing diff: {client}");
+                assert!(
+                    client.contains("over"),
+                    "expected `over` direction in message: {client}",
+                );
+                assert!(
+                    !client.contains("under"),
+                    "should not contain `under` for an oversum: {client}",
+                );
             }
             other => panic!("expected BadRequest, got {other:?}"),
         }
