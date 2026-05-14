@@ -302,6 +302,8 @@ Preset flag reasons (user-initiated):
 Auto-generated flag reasons:
 - "Record requires photo verification"
 
+Storage values (snake_case): `time_is_incorrect`, `wrong_track`, `wrong_race_setup`, `wrong_drink_type`, `other`, `record_requires_photo_verification`. The frontend renders the display text shown above; the wire and DB use the snake_case form.
+
 Notes:
 - A run is considered flagged if it has an unresolved entry in `run_flags` (where `resolved_at` is null).
 - Users can only flag their own runs, and only if the run has a photo attached.
@@ -362,3 +364,4 @@ Each session uses one ruleset that determines how tracks are selected. The rules
 ## Document history
 
 - 2026-05-05 — Extracted from `docs/design.md` as part of PR 1 (docs restructure foundation). See `docs/designs/2026-05-04-design-doc-restructure.md` §5.1.
+- 2026-05-13 — § `run_flags` now enumerates the canonical snake_case storage values for `reason` alongside the display text, mirroring the storage-vs-display split already documented for `sessions.{ruleset,status,least_played_drink_category}`. The values are load-bearing as of PR-D3 ([#120](https://github.com/brendanbyrne/beerio-kart/issues/120) / PR [#148](https://github.com/brendanbyrne/beerio-kart/pull/148)), which committed them via `RunFlagReason::string_value` annotations on the `DeriveActiveEnum` backing the column. Review feedback from PR #148.
