@@ -3,7 +3,10 @@
 //! Picks the next track, re-rolls the current one, and derives / mutates the
 //! per-user pending-race surface. Read-side aggregation (current race in
 //! session detail, race history) lives in [`super::detail`]; the
-//! [`SessionRaceInfo`] DTO returned by the mutations is shared from there.
+//! [`SessionRaceInfo`] DTO returned by the mutations is shared from
+//! [`super::types`].
+//!
+//! [`SessionRaceInfo`]: super::types::SessionRaceInfo
 
 use chrono::{NaiveDateTime, Utc};
 use sea_orm::{
@@ -12,7 +15,7 @@ use sea_orm::{
     QueryOrder, Set, TransactionTrait,
 };
 
-use super::{detail::SessionRaceInfo, lifecycle::REJOIN_GRACE_MINUTES};
+use super::types::{REJOIN_GRACE_MINUTES, SessionRaceInfo};
 use crate::{
     domain::{ImagePath, SessionId, SessionRaceId, UserId},
     entities::{cups, runs, session_race_participations, session_races},

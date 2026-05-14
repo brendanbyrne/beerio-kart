@@ -1,15 +1,21 @@
 //! Session detail aggregation — the polling read path.
 //!
 //! Builds [`SessionDetail`] for the polling endpoint and exposes
-//! [`list_races`] for the race-history view. Shared race-shaped DTOs live
-//! here too ([`SessionRaceInfo`], [`RaceSubmission`], [`RaceInfo`]) because
-//! the detail payload bundles them; race-orchestration mutations import them
-//! from this module via the parent re-export.
+//! [`list_races`] for the race-history view. [`RaceInfo`] (race-history row)
+//! and [`ParticipantInfo`] live here because only `SessionDetail` consumes
+//! them; the cross-submodule DTOs [`SessionRaceInfo`] and
+//! [`RaceSubmission`] live in [`super::types`].
+//!
+//! [`SessionRaceInfo`]: super::types::SessionRaceInfo
+//! [`RaceSubmission`]: super::types::RaceSubmission
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sea_orm::{ConnectionTrait, EntityTrait, FromQueryResult};
 
-use super::races::get_pending_races;
+use super::{
+    races::get_pending_races,
+    types::{RaceSubmission, SessionRaceInfo},
+};
 use crate::{
     domain::{
         ImagePath, SessionId, SessionRaceId, UserId, Username,
@@ -37,15 +43,6 @@ struct ParticipantRow {
     left_at: Option<NaiveDateTime>,
 }
 
-/// Submission info for a single participant in a race.
-#[derive(serde::Serialize, Clone)]
-pub struct RaceSubmission {
-    pub user_id: UserId,
-    pub username: Username,
-    pub track_time: i32,
-    pub disqualified: bool,
-}
-
 /// Row shape for the submissions query.
 #[derive(Debug, FromQueryResult)]
 struct SubmissionRow {
@@ -53,19 +50,6 @@ struct SubmissionRow {
     username: String,
     track_time: i32,
     disqualified: bool,
-}
-
-/// Info about a single race in the session (returned on create / skip / poll).
-#[derive(serde::Serialize, Clone)]
-pub struct SessionRaceInfo {
-    pub id: SessionRaceId,
-    pub race_number: i32,
-    pub track_id: i32,
-    pub track_name: String,
-    pub cup_name: String,
-    pub image_path: ImagePath,
-    pub created_at: DateTime<Utc>,
-    pub submissions: Vec<RaceSubmission>,
 }
 
 /// Race info for the race history list.
