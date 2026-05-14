@@ -12,18 +12,32 @@
 // Tests legitimately want to panic — per rust.md § 8.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+/// Loaded server configuration (JWT secrets, cookie flags, request limits).
 pub mod config;
+/// SeaORM connection-pool setup with per-connection SQLite PRAGMAs.
 pub mod db;
+/// Domain types — IDs, validated strings, numeric newtypes, enums.
 pub mod domain;
+/// Newtype wrapper for drink-type identifiers (currently a plain string).
 pub mod drink_type_id;
-#[allow(unused_imports)]
+// Hand-written SeaORM entities (ADR 0023): every `pub` item in the
+// submodules is a column declaration or relation marker whose name IS
+// the documentation. `rust.md` § 6 doesn't earn its keep here; opt out
+// at the module boundary so we don't need a `#![allow]` in each file.
+#[allow(unused_imports, missing_docs)]
 pub mod entities;
+/// Unified application error type implementing [`axum::response::IntoResponse`].
 pub mod error;
+/// Axum middleware — JWT-based auth extractor and request-limit handlers.
 pub mod middleware;
+/// HTTP route handlers grouped by resource.
 pub mod routes;
+/// Business-logic service layer — orchestrates entities, enforces rules.
 pub mod services;
+/// Graceful-shutdown wiring: signal handling, task supervision, and drain.
 pub mod shutdown;
 
+/// Test fixtures and helpers shared across integration tests.
 #[cfg(test)]
 pub mod test_helpers;
 

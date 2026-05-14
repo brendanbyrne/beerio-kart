@@ -15,62 +15,93 @@ use crate::{
 
 // ── Response types ───────────────────────────────────────────────────
 
+/// Seeded character row returned by `GET /characters`.
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct CharacterResponse {
+    /// Integer identifier (matches the in-game character id).
     pub id: CharacterId,
+    /// Display name.
     pub name: String,
+    /// Relative path to the character's preview image.
     pub image_path: ImagePath,
 }
 
+/// Seeded kart-body row returned by `GET /bodies`.
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct BodyResponse {
+    /// Integer identifier (matches the in-game body id).
     pub id: BodyId,
+    /// Display name.
     pub name: String,
+    /// Relative path to the body's preview image.
     pub image_path: ImagePath,
 }
 
+/// Seeded wheel-set row returned by `GET /wheels`.
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct WheelResponse {
+    /// Integer identifier (matches the in-game wheel id).
     pub id: WheelId,
+    /// Display name.
     pub name: String,
+    /// Relative path to the wheel's preview image.
     pub image_path: ImagePath,
 }
 
+/// Seeded glider row returned by `GET /gliders`.
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct GliderResponse {
+    /// Integer identifier (matches the in-game glider id).
     pub id: GliderId,
+    /// Display name.
     pub name: String,
+    /// Relative path to the glider's preview image.
     pub image_path: ImagePath,
 }
 
+/// Seeded cup row returned by `GET /cups` (4 tracks per cup).
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct CupResponse {
+    /// Integer identifier (matches the in-game cup id).
     pub id: CupId,
+    /// Display name (e.g. `"Mushroom"`, `"Special"`).
     pub name: String,
+    /// Relative path to the cup's preview image.
     pub image_path: ImagePath,
 }
 
+/// Seeded track row returned by `GET /tracks`.
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct TrackResponse {
+    /// Integer identifier (matches the in-game track id).
     pub id: TrackId,
+    /// Display name.
     pub name: String,
+    /// FK to `cups.id` — which cup this track belongs to.
     pub cup_id: CupId,
+    /// 1-indexed position within its cup (1–4).
     pub position: i32,
+    /// Relative path to the track's preview image.
     pub image_path: ImagePath,
 }
 
+/// Cup row with its 4 tracks expanded inline, returned by `GET /cups/:id`.
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct CupWithTracksResponse {
+    /// Integer identifier (matches the in-game cup id).
     pub id: CupId,
+    /// Display name.
     pub name: String,
+    /// Relative path to the cup's preview image.
     pub image_path: ImagePath,
+    /// The cup's 4 tracks in `position` order.
     pub tracks: Vec<TrackResponse>,
 }
 
@@ -147,8 +178,10 @@ impl TryFrom<tracks::Model> for TrackResponse {
     }
 }
 
+/// Query-string filter for `GET /tracks`.
 #[derive(Deserialize)]
 pub struct TracksQuery {
+    /// If set, only return tracks belonging to this cup.
     pub cup_id: Option<CupId>,
 }
 

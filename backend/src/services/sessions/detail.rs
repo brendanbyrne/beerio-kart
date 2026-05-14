@@ -28,9 +28,13 @@ use crate::{
 /// Participant info for the detail response.
 #[derive(serde::Serialize)]
 pub struct ParticipantInfo {
+    /// Participant's user ID.
     pub user_id: UserId,
+    /// Cached username for display (saves a JOIN on the read path).
     pub username: Username,
+    /// When this participation row was created (joined or rejoined).
     pub joined_at: DateTime<Utc>,
+    /// When the participant left, or `None` if still active.
     pub left_at: Option<DateTime<Utc>>,
 }
 
@@ -55,12 +59,19 @@ struct SubmissionRow {
 /// Race info for the race history list.
 #[derive(serde::Serialize)]
 pub struct RaceInfo {
+    /// Stable UUID of the race row.
     pub id: SessionRaceId,
+    /// 1-indexed position within the session.
     pub race_number: i32,
+    /// FK to `tracks.id`.
     pub track_id: i32,
+    /// Cached track name (saves a JOIN on the read path).
     pub track_name: String,
+    /// Cached parent-cup name for display.
     pub cup_name: String,
+    /// Number of runs submitted to this race so far.
     pub run_count: i64,
+    /// Race-creation timestamp, UTC.
     pub created_at: DateTime<Utc>,
 }
 
@@ -91,16 +102,27 @@ struct CurrentRaceRow {
 /// Full session detail for polling.
 #[derive(serde::Serialize)]
 pub struct SessionDetail {
+    /// Session's stable UUID.
     pub id: SessionId,
+    /// Current host's user ID.
     pub host_id: UserId,
+    /// Cached host display name (saves a JOIN on the read path).
     pub host_username: Username,
+    /// Track-selection ruleset chosen at session creation.
     pub ruleset: SessionRuleset,
+    /// Lifecycle state — `Active` or `Closed`.
     pub status: SessionStatus,
+    /// Session-creation timestamp, UTC.
     pub created_at: DateTime<Utc>,
+    /// Most recent activity timestamp; used by stale-session cleanup.
     pub last_activity_at: DateTime<Utc>,
+    /// All participants who have ever joined this session, in join order.
     pub participants: Vec<ParticipantInfo>,
+    /// 1-indexed race count: 1 means "no races completed; race 1 is up next".
     pub race_number: usize,
+    /// The current in-progress race, if one exists.
     pub current_race: Option<SessionRaceInfo>,
+    /// All races for this session, oldest first.
     pub races: Vec<RaceInfo>,
     /// Pending races for the requesting user, oldest first. Empty if the
     /// user is not in this session, has no pending races, or is past the

@@ -14,8 +14,12 @@ use crate::{
     services::sessions,
 };
 
+/// Body shape for `POST /sessions`.
 #[derive(Deserialize)]
 pub struct CreateSessionRequest {
+    /// Track-selection ruleset name (e.g. `"random"`, `"least_played"`).
+    /// Validated against [`crate::domain::enums::SessionRuleset`] at the
+    /// service boundary; #146 will move this to the newtype directly.
     pub ruleset: String,
 }
 
@@ -37,8 +41,10 @@ pub async fn create_session(
     Ok((StatusCode::CREATED, Json(detail)))
 }
 
+/// Body shape for `GET /sessions/mine`.
 #[derive(Serialize)]
 pub struct MySessionResponse {
+    /// The user's current active session, or `None` if they're not in one.
     pub session_id: Option<SessionId>,
 }
 

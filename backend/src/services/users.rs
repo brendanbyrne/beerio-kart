@@ -10,22 +10,36 @@ use crate::{
 
 // ── Types ────────────────────────────────────────────────────────────
 
+/// Embedded drink-type summary returned inside [`UserDetailProfile`].
 #[derive(Serialize)]
 pub struct DrinkTypeInfo {
+    /// Drink type's stable UUID.
     pub id: DrinkTypeId,
+    /// Display name.
     pub name: String,
+    /// `true` for alcoholic drinks, `false` for non-alcoholic.
     pub alcoholic: bool,
 }
 
+/// Detail-view user profile — includes the resolved preferred drink type.
 #[derive(Serialize)]
 pub struct UserDetailProfile {
+    /// User's stable UUID.
     pub id: UserId,
+    /// Display handle.
     pub username: Username,
+    /// User's default character pick, if set.
     pub preferred_character_id: Option<CharacterId>,
+    /// User's default kart body, if set.
     pub preferred_body_id: Option<BodyId>,
+    /// User's default wheels, if set.
     pub preferred_wheel_id: Option<WheelId>,
+    /// User's default glider, if set.
     pub preferred_glider_id: Option<GliderId>,
+    /// User's default drink, expanded into the embedded summary (or `None`
+    /// if unset). Saved a round trip vs. returning just the id.
     pub preferred_drink_type: Option<DrinkTypeInfo>,
+    /// Account-creation timestamp, UTC.
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -36,10 +50,17 @@ pub struct UserDetailProfile {
 /// null (clear), key present with value (set).
 #[derive(Deserialize)]
 pub struct UpdateProfileRequest {
+    /// New preferred character. Must accompany the other three race-setup
+    /// fields (or all be absent) — see [`race_setup::Update`].
     pub preferred_character_id: Option<CharacterId>,
+    /// New preferred body. Paired with the rest of the race-setup quartet.
     pub preferred_body_id: Option<BodyId>,
+    /// New preferred wheels. Paired with the rest of the race-setup quartet.
     pub preferred_wheel_id: Option<WheelId>,
+    /// New preferred glider. Paired with the rest of the race-setup quartet.
     pub preferred_glider_id: Option<GliderId>,
+    /// New preferred drink. `None` = field absent (don't change),
+    /// `Some(None)` = explicitly cleared, `Some(Some(id))` = set to id.
     #[serde(default, deserialize_with = "deserialize_optional_field")]
     pub preferred_drink_type_id: Option<Option<DrinkTypeId>>,
 }

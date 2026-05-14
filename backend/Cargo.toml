@@ -5,6 +5,11 @@ members = ["migration"]
 warnings = "deny"
 unsafe_code = "forbid"
 rust_2018_idioms = { level = "warn", priority = -1 }
+# Enforces `rust.md` § 6 on `pub` items. Rustc's lint only covers `pub`
+# visibility (not `pub(crate)`), so cross-module-`pub(crate)` regressions
+# still rely on review; the broader `clippy::missing_docs_in_private_items`
+# would also force docs on bare-private items, which § 6 doesn't require.
+missing_docs = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

@@ -21,38 +21,55 @@ use crate::{
 
 // ── Request / Response types ────────────────────────────────────────
 
+/// Body shape for `POST /auth/register`.
 #[derive(Deserialize)]
 pub struct RegisterRequest {
+    /// Desired handle. Subject to `Username` validation at the service boundary.
     pub username: String,
+    /// Plaintext password. Hashed server-side; never stored.
     pub password: String,
 }
 
+/// Body shape for `POST /auth/login`.
 #[derive(Deserialize)]
 pub struct LoginRequest {
+    /// Account handle.
     pub username: String,
+    /// Plaintext password. Verified server-side via Argon2.
     pub password: String,
 }
 
+/// Body shape for `PUT /auth/password`.
 #[derive(Deserialize)]
 pub struct ChangePasswordRequest {
+    /// Plaintext current password. Verified server-side before the rotation.
     pub current_password: String,
+    /// New plaintext password. Hashed server-side; replaces the old hash.
     pub new_password: String,
 }
 
+/// Body shape for `POST /auth/login` and `POST /auth/register`.
 #[derive(Serialize)]
 pub struct Response {
+    /// Short-lived JWT bearer token to send on subsequent requests.
     pub access_token: String,
+    /// Public-facing identity bundle.
     pub user: UserInfo,
 }
 
+/// Body shape for `POST /auth/refresh`.
 #[derive(Serialize)]
 pub struct RefreshResponse {
+    /// Newly-minted short-lived JWT bearer token.
     pub access_token: String,
 }
 
+/// Embedded identity bundle on auth responses.
 #[derive(Serialize)]
 pub struct UserInfo {
+    /// User's stable UUID.
     pub id: UserId,
+    /// Display handle.
     pub username: Username,
 }
 

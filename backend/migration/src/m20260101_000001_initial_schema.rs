@@ -1,6 +1,10 @@
 // PR-A1 scaffolding: rust-2018 idioms cleanup deferred to Phase H per
 // rust.md § 8 ("config and clearing land in separate PRs").
 #![allow(elided_lifetimes_in_paths)]
+// The `Iden` enums below are mechanical SeaORM DDL scaffolding — each
+// variant is a column name, so the variant name itself is the
+// documentation. `rust.md` § 6 doesn't earn its keep here; opt out.
+#![allow(missing_docs)]
 
 use sea_orm_migration::prelude::*;
 

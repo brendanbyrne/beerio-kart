@@ -17,12 +17,19 @@ use crate::{
 
 // ── Response types ───────────────────────────────────────────────────
 
+/// Wire representation of a `drink_types` row.
 #[derive(Serialize)]
 pub struct DrinkTypeResponse {
+    /// Stable UUID. Seeded drinks have known fixed IDs; user-created drinks
+    /// derive theirs from the uppercased name (see `services::drink_types`).
     pub id: DrinkTypeId,
+    /// Display name. Unique case-insensitively.
     pub name: String,
+    /// `true` for alcoholic drinks, `false` for non-alcoholic.
     pub alcoholic: bool,
+    /// User who created this drink. `None` for seeded drinks.
     pub created_by: Option<UserId>,
+    /// Row-creation timestamp, UTC.
     pub created_at: DateTime<Utc>,
 }
 
@@ -45,14 +52,19 @@ impl DrinkTypeResponse {
 
 // ── Request types ────────────────────────────────────────────────────
 
+/// Body shape for `POST /drink-types`.
 #[derive(Deserialize)]
 pub struct CreateDrinkTypeRequest {
+    /// Display name. Case-insensitive uniqueness; existing matches return 200.
     pub name: String,
+    /// `true` for alcoholic drinks, `false` for non-alcoholic.
     pub alcoholic: bool,
 }
 
+/// Query filters for `GET /drink-types`.
 #[derive(Deserialize)]
 pub struct Filters {
+    /// If set, only return drinks matching this alcoholic flag.
     pub alcoholic: Option<bool>,
 }
 

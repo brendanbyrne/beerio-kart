@@ -1,3 +1,5 @@
+//! Integration tests for the auth route handlers (register, login, refresh, logout, change-password).
+
 // Tests legitimately want to panic — per rust.md § 8.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

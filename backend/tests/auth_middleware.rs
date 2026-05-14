@@ -1,3 +1,5 @@
+//! Integration tests for the JWT bearer auth middleware.
+
 // Tests legitimately want to panic — per rust.md § 8.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
