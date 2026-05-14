@@ -48,7 +48,7 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
-/// Body shape for `POST /auth/login` and `POST /auth/register`.
+/// Success-response body for `POST /auth/login` and `POST /auth/register`.
 #[derive(Serialize)]
 pub struct Response {
     /// Short-lived JWT bearer token to send on subsequent requests.
@@ -57,7 +57,7 @@ pub struct Response {
     pub user: UserInfo,
 }
 
-/// Body shape for `POST /auth/refresh`.
+/// Response body for `POST /auth/refresh`.
 #[derive(Serialize)]
 pub struct RefreshResponse {
     /// Newly-minted short-lived JWT bearer token.
