@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use axum::{
     Json,
     http::StatusCode,
@@ -5,7 +7,7 @@ use axum::{
 };
 use serde::Serialize;
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, warn};
 
 #[derive(Serialize)]
 struct ErrorBody {
@@ -74,6 +76,19 @@ pub enum Error {
     /// 500 — password hashing/verification failure. Same response semantics as `Token`.
     #[error("Password hashing error")]
     Hash(#[from] argon2::password_hash::Error),
+    /// 504 — a per-call `tokio::time::timeout` budget elapsed before the wrapped
+    /// future completed. Currently raised only by `timeout::db_query` /
+    /// `timeout::db_txn` around `SeaORM` calls; `SQLite` is the "upstream" in
+    /// the 504 sense, so the proxy-flavoured status code is semantically apt
+    /// even though the database is in-process. Distinct from `Internal` so
+    /// operators can chart timeouts independently of generic 500-class failures
+    /// (a stuck query is an operational signal, not a bug-class one).
+    #[error("Operation timed out after {budget:?}")]
+    Timeout {
+        /// Budget that elapsed. Logged via `tracing::warn!` at the
+        /// `IntoResponse` boundary; not returned to the client.
+        budget: Duration,
+    },
 }
 
 impl Error {
@@ -120,6 +135,13 @@ impl IntoResponse for Error {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal server error".to_string(),
                 )
+            }
+            Self::Timeout { budget } => {
+                warn!(
+                    budget_ms = u64::try_from(budget.as_millis()).unwrap_or(u64::MAX),
+                    "Operation timed out"
+                );
+                (StatusCode::GATEWAY_TIMEOUT, "Request timed out".to_string())
             }
         };
 
@@ -513,6 +535,57 @@ mod tests {
         assert!(
             !logs_contain("BadRequest"),
             "no-detail BadRequest should not emit a warn"
+        );
+    }
+
+    // ── Timeout variant ────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_timeout_response_status_is_504_gateway_timeout() {
+        let err = Error::Timeout {
+            budget: Duration::from_secs(2),
+        };
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::GATEWAY_TIMEOUT);
+    }
+
+    #[tokio::test]
+    async fn test_timeout_response_body_is_generic_and_omits_budget() {
+        // The budget is operator-relevant context that goes to logs, not to the
+        // client. The response body must not leak it (the user doesn't need to
+        // know we set a 2s ceiling) and must use a stable user-facing message.
+        let err = Error::Timeout {
+            budget: Duration::from_secs(2),
+        };
+        let resp = err.into_response();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body collect");
+        let body = std::str::from_utf8(&bytes).expect("utf-8 body");
+        assert!(
+            body.contains("Request timed out"),
+            "response missing user-facing message: {body}"
+        );
+        assert!(
+            !body.contains("2s") && !body.contains("2000"),
+            "response leaked budget to client: {body}"
+        );
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_timeout_emits_warn_with_budget_ms() {
+        let err = Error::Timeout {
+            budget: Duration::from_millis(2_500),
+        };
+        let _resp = err.into_response();
+        assert!(
+            logs_contain("budget_ms=2500"),
+            "budget field missing from captured logs"
+        );
+        assert!(
+            logs_contain("Operation timed out"),
+            "warn message missing from captured logs"
         );
     }
 }
