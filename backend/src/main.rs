@@ -103,6 +103,16 @@ async fn main() -> anyhow::Result<()> {
     let cancel = CancellationToken::new();
     let tracker = TaskTracker::new();
 
+    // Install signal handlers up front. Any failure surfaces here as an
+    // `io::Error` (typically a missing capability) — before any background
+    // task is detached, so `main` bails through the normal error path
+    // without leaving orphans for the runtime to abort. On Unix, the
+    // SIGTERM handler is registered with the OS as soon as
+    // `signal::unix::signal` returns, so a SIGTERM that races startup is
+    // queued and observed once the shutdown future starts polling.
+    let shutdown_signal =
+        shutdown::signal(cancel.clone()).context("Installing shutdown-signal handlers")?;
+
     // Per-peer-IP rate limit. The default `PeerIpKeyExtractor` reads the
     // remote address from the `ConnectInfo<SocketAddr>` extension, so the
     // server below must be served via `into_make_service_with_connect_info`.
@@ -279,11 +289,11 @@ async fn main() -> anyhow::Result<()> {
     // `services::sessions::session_cleanup_loop`; the `shutdown::supervised`
     // wrapping stays, the body moves.
     //
-    // Shutdown-safe (tokio.md § 13 final rule): `close_stale_sessions` is
-    // idempotent — it flips `is_active` to `false` on sessions matching
-    // `is_active AND last_activity_at < cutoff`. A future dropped between
-    // the read and the write leaves the row in its original active state;
-    // the next cycle picks it up. No partial-write window.
+    // Shutdown-safe (tokio.md § 13 final rule): `close_stale_sessions` runs
+    // SELECT + two UPDATEs inside one transaction that only commits at the
+    // end. A future dropped before the commit rolls the txn back, leaving
+    // every row in its original Active state; the next cycle re-finds the
+    // same stale set. No partial-write window.
     tracker.spawn(shutdown::supervised("session cleanup task", {
         let cancel = cancel.clone();
         async move {
@@ -313,12 +323,6 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("Binding TCP listener on 0.0.0.0:3000")?;
     tracing::info!("Listening on http://localhost:3000");
-
-    // Install signal handlers up front. Any failure surfaces here as an
-    // `io::Error` (typically a missing capability), not from inside the
-    // shutdown future where it would be hard to recover from.
-    let shutdown_signal =
-        shutdown::signal(cancel.clone()).context("Installing shutdown-signal handlers")?;
 
     // `into_make_service_with_connect_info::<SocketAddr>` populates the
     // `ConnectInfo<SocketAddr>` request extension that `tower-governor`'s
