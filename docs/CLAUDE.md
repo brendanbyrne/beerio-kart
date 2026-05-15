@@ -141,7 +141,9 @@ The root `CLAUDE.md` requires `docs/` files to maintain a `## Document history` 
 - ADRs (`decisions/`) — frontmatter has `date`; the ADR is intrinsically historical.
 - `roadmap.md` — task tracking; history lives in Issues / Project board.
 
-The rule applies to in-scope files in `docs/`: `design.md`, `data-model.md`, `user-workflows.md`, `api-contract.md`, `coding-standards/*`, `designs/*` records, and `research/*` files. CLAUDE.md files (root `.claude/CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`, and this file) are not in scope — they describe current behavior, not its history. Initial-creation history sections are fine but not required for ongoing edits.
+The rule applies to in-scope files in `docs/`: `design.md`, `data-model.md`, `user-workflows.md`, `api-contract.md`, `project-workflow.md`, `coding-standards/*`, `designs/*` records, and `research/*` files. CLAUDE.md files (root `.claude/CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`, and this file) are not in scope — they describe current behavior, not its history. Initial-creation history sections are fine but not required for ongoing edits.
+
+If you're unsure whether a doc is in scope, check for an existing `## Document history` section — if one exists, the file is in scope and the rule applies. The listing above is descriptive (files we know maintain history), not exhaustive; any active `docs/` file with a maintained history section gets the same treatment.
 
 ## Document history
 
