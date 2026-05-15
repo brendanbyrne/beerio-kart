@@ -404,7 +404,7 @@ impl IntoResponse for Error {
                 (StatusCode::CONFLICT, client.clone())
             }
             Self::Internal(_) | Self::Token(_) | Self::Hash(_) => {
-                error!("{}", format_error_chain(&self));
+                error!(?code, "{}", format_error_chain(&self));
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal server error".to_string(),
@@ -417,6 +417,7 @@ impl IntoResponse for Error {
                 // overflow as a real-looking number in the logs. The 2s /
                 // 5s budgets are nowhere near u64's range.
                 warn!(
+                    ?code,
                     budget_ms = budget.as_secs() * 1000 + u64::from(budget.subsec_millis()),
                     "Operation timed out"
                 );
@@ -899,6 +900,40 @@ mod tests {
         assert!(
             !logs_contain("BadRequest"),
             "no-detail BadRequest should not emit a warn"
+        );
+    }
+
+    // ── 500-class wire-shape (Internal / Token / Hash share one match arm) ──
+    //
+    // `code()` and the per-helper round-trip tests cover the variant→code
+    // mapping; this test guards the response-body serialization for the
+    // 500-class arm directly. If `IntoResponse`'s 500 path stops emitting
+    // `code` (e.g., a future refactor returns a hand-rolled body that omits
+    // the field), this is the regression-blocker. `Internal` is the
+    // representative — `Token` and `Hash` flow through the same match arm,
+    // so one wire-shape test covers all three.
+
+    #[tokio::test]
+    async fn test_internal_response_body_includes_internal_code() {
+        let err: Error = anyhow::anyhow!("boom").into();
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body collect");
+        let body = std::str::from_utf8(&bytes).expect("utf-8 body");
+        assert!(
+            body.contains("\"code\":\"internal\""),
+            "response missing code field: {body}"
+        );
+        assert!(
+            body.contains("Internal server error"),
+            "response missing user-facing message: {body}"
+        );
+        // Internal must not leak the underlying error message to the client.
+        assert!(
+            !body.contains("boom"),
+            "response leaked underlying error chain: {body}"
         );
     }
 
