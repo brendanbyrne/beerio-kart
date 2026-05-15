@@ -159,7 +159,7 @@ Option C threads the needle:
   analysis of #146; bundled into the broader #157 rollout).
 - Related ADRs: 0035 (race-anchored session lifetime, the most recent
   ADR).
-- Implementing PR: [#157](https://github.com/brendanbyrne/beerio-kart/pull/157).
+- Implementing PR: [#158](https://github.com/brendanbyrne/beerio-kart/pull/158).
 - Closed Issues: [#146](https://github.com/brendanbyrne/beerio-kart/issues/146)
   (typed-Path-extractor 400s, subsumed by #157), [#157](https://github.com/brendanbyrne/beerio-kart/issues/157).
 - Standards refs: [`api-contract.md` § 3](../api-contract.md#3-error-response-contract),
