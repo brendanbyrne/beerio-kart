@@ -13,6 +13,7 @@ use crate::{
     error::Error,
     middleware::auth::User,
     services::users as user_service,
+    timeout::db_query,
 };
 
 // ── Response types (API contract) ───────────────────────────────────
@@ -52,7 +53,7 @@ pub async fn list_users(
     user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<UserPublicProfile>>, Error> {
-    let all_users = users::Entity::find().all(&state.db).await?;
+    let all_users = db_query(users::Entity::find().all(&state.db)).await?;
     Ok(Json(
         all_users
             .into_iter()
@@ -88,8 +89,7 @@ pub async fn get_user(
     State(state): State<AppState>,
     Path(id): Path<UserId>,
 ) -> Result<Json<user_service::UserDetailProfile>, Error> {
-    let user = users::Entity::find_by_id(id)
-        .one(&state.db)
+    let user = db_query(users::Entity::find_by_id(id).one(&state.db))
         .await?
         .ok_or_else(|| Error::NotFound(format!("User {id} not found")))?;
 
