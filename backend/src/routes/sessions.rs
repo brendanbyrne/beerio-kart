@@ -1,15 +1,11 @@
-use axum::{
-    Json,
-    extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
     domain::{SessionId, SessionRaceId},
     error::Error,
+    extract::{Json, Path},
     middleware::auth::User,
     services::sessions,
 };

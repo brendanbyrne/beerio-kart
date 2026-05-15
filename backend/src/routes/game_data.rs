@@ -1,7 +1,4 @@
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-};
+use axum::extract::{Query, State};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +7,7 @@ use crate::{
     domain::{BodyId, CharacterId, CupId, GliderId, ImagePath, TrackId, WheelId},
     entities::{bodies, characters, cups, gliders, tracks, wheels},
     error::Error,
+    extract::{Json, Path},
     middleware::auth::User,
     timeout::db_query,
 };

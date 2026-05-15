@@ -1,6 +1,5 @@
 use axum::{
-    Json,
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -10,6 +9,7 @@ use crate::{
     AppState,
     domain::{RunId, SessionRaceId, TrackId, UserId},
     error::Error,
+    extract::{Json, Path},
     middleware::auth::User,
     services::runs,
 };

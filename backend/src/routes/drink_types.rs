@@ -1,7 +1,4 @@
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-};
+use axum::extract::{Query, State};
 use chrono::{DateTime, Utc};
 use sea_orm::{ActiveValue::NotSet, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
@@ -12,6 +9,7 @@ use crate::{
     drink_type_id::drink_type_uuid,
     entities::drink_types,
     error::Error,
+    extract::{Json, Path},
     middleware::auth::User,
     timeout::db_query,
 };

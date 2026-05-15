@@ -1,5 +1,4 @@
 use axum::{
-    Json,
     extract::State,
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
@@ -15,6 +14,7 @@ use crate::{
     domain::{Password, PasswordHash, UserId, Username},
     entities::users,
     error::Error,
+    extract::Json,
     middleware::auth::User,
     services::auth as auth_service,
     timeout::db_query,
