@@ -9,7 +9,7 @@ This directory contains the project's coding standards, split by area so a revie
 Companion documents:
 
 - [`../api-contract.md`](../api-contract.md) — wire-format conventions between backend and frontend.
-- [`../compliance-plan.md`](../compliance-plan.md) — sequenced PR plan to bring the existing codebase to the standard.
+- [`../designs/archive/compliance-plan.md`](../designs/archive/compliance-plan.md) — archived sequenced PR plan that brought the existing codebase to the standard (signed off 2026-05-15).
 
 ## How to use these docs
 

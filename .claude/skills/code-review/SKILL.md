@@ -158,7 +158,7 @@ Notes on the API:
 
 After posting, verify with `gh api repos/<owner>/<repo>/pulls/<number>/reviews/<review-id>/comments --jq '.[] | {path, position, body: (.body[0:80])}'` — `position` (legacy diff-position field) being non-null confirms the inline anchored correctly even when `line` returns null.
 
-**Confirm with the user before posting.** Posting publishes findings to anyone who can see the PR. Once approved, post via the single review POST as the default mechanism — no other tiers, no markdown file output. PR review feedback lives entirely on GitHub per `docs/designs/2026-05-04-design-doc-restructure.md` § 8.8.
+**Confirm with the user before posting.** Posting publishes findings to anyone who can see the PR. Once approved, post via the single review POST as the default mechanism — no other tiers, no markdown file output. PR review feedback lives entirely on GitHub per `docs/designs/archive/2026-05-04-design-doc-restructure.md` § 8.8.
 
 ## What to look for
 
@@ -232,5 +232,5 @@ When `docs/coding-standards/frontend.md` lands, this section gets replaced with 
 
 - **Current cup:** check CLAUDE.md's `## Project Phase` heading for the active cup, and `docs/roadmap.md` for the cup-by-cup narrative. Don't flag features deferred to later cups — verify against the roadmap before raising "this is missing." (Milestones use Mario Kart cup names — Mushroom, Flower, Star, etc. — not numbered phases; the numbered scheme was retired in the 2026-05-05 cup-name convention adoption.)
 - **Prelaunch in the data-preservation sense:** the consolidated migration file is edited in place; dev DB is reset on schema changes. See `seaorm.md` § 5 for the policy. Don't flag append-only-migration violations until we cross the launch threshold (first deployment where data persistence matters).
-- **Compliance plan exists:** `docs/compliance-plan.md` tracks 23 sequenced PRs that bring existing code to the standard. If a PR touches code that's already on the compliance plan as a known gap, note that — the existing non-compliance is acknowledged debt, not a fresh finding. New code is held to the standard regardless of whether legacy code in the same file conforms.
+- **Compliance plan is closed.** The backend compliance plan (now archived at `docs/designs/archive/compliance-plan.md`) sequenced 23+ PRs that brought existing code up to the standard; all signed off 2026-05-15. New code is held to the standards in `docs/coding-standards/` regardless. If you find code that violates a standard and the violation pre-dates the compliance plan's sign-off date, surface it as a finding (the plan is no longer a debt-acknowledgement umbrella); for code modified in the PR under review, hold it to the standard.
 - **Two-assistant setup:** Cowork (Claude Desktop) handles design and review work; Claude Code handles implementation. PR review (this skill) is a Claude Code-side task by default, but Cowork can review too. Output goes to a single GitHub PR review (line-anchored comments + review body) per the Tier 2 pattern above.

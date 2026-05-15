@@ -2,7 +2,7 @@
 status: accepted
 date: 2026-05-05
 deciders: [Brendan]
-source: docs/designs/2026-04-19-pending-races-and-grace-period.md
+source: docs/designs/archive/2026-04-19-pending-races-and-grace-period.md
 ---
 
 # 0013 — Pending race cap: UI shows max 3 pending races
@@ -39,4 +39,4 @@ Chosen: **Option B** — UI shows max 3 pending races (oldest expire first). Sch
 
 ## Links
 
-- Source: [`docs/designs/2026-04-19-pending-races-and-grace-period.md`](../designs/2026-04-19-pending-races-and-grace-period.md)
+- Source: [`docs/designs/archive/2026-04-19-pending-races-and-grace-period.md`](../designs/archive/2026-04-19-pending-races-and-grace-period.md)

@@ -20,7 +20,7 @@ For deep conventions, read these once and refer back when relevant:
 - [`docs/coding-standards/tokio.md`](../docs/coding-standards/tokio.md) — async/Tokio: spawn vs blocking, cancellation, lifetime tips.
 - [`docs/data-model.md`](../docs/data-model.md) — schema, table definitions, FK conventions.
 - [`docs/api-contract.md`](../docs/api-contract.md) — endpoint catalog (§ 1) plus wire-format conventions (error codes, ETag polling, idempotency, time format).
-- [`docs/compliance-plan.md`](../docs/compliance-plan.md) — sequenced PRs to bring existing code up to the coding standards.
+- [`docs/designs/archive/compliance-plan.md`](../docs/designs/archive/compliance-plan.md) — archived. Sequenced PRs that brought existing code up to the coding standards; all signed off 2026-05-15. Coding standards are live in `coding-standards/`; consult the plan only when archaeologically curious about why a particular refactor happened.
 
 ## ORM usage
 

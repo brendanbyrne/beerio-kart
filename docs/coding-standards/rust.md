@@ -2,7 +2,7 @@
 
 > **Scope.** General Rust patterns for the `beerio-kart` backend. Edition 2024, Rust 1.85+. Not specific to SeaORM or Tokio — those have their own files in this directory.
 > **Format.** Each rule: *Rule / Why / Example / Source*.
-> **Companions.** `seaorm.md`, `tokio.md`, `../api-contract.md`, `../compliance-plan.md`.
+> **Companions.** `seaorm.md`, `tokio.md`, `../api-contract.md`. Archived: `../designs/archive/compliance-plan.md`.
 
 ## Index
 

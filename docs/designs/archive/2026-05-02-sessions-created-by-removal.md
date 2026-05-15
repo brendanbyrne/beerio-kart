@@ -1,5 +1,7 @@
 # Sessions: drop `created_by` — design record (2026-05-02)
 
+> **Status: complete.** Implemented via PR-E3 (see [`compliance-plan.md`](./compliance-plan.md) Stream E). ADR captured at [`../../decisions/0001-sessions-no-created-by-column.md`](../../decisions/0001-sessions-no-created-by-column.md). Retained for historical reference.
+
 ## 1. Context
 
 The `sessions` table currently has both:

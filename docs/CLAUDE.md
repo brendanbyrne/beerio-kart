@@ -1,6 +1,6 @@
 # Doc-area conventions for Beerio Kart
 
-This file is loaded automatically when Claude works in `docs/`. It captures conventions that don't apply elsewhere in the codebase. Source design record: `docs/designs/2026-05-04-design-doc-restructure.md`.
+This file is loaded automatically when Claude works in `docs/`. It captures conventions that don't apply elsewhere in the codebase. Source design record: [`docs/designs/archive/2026-05-04-design-doc-restructure.md`](./designs/archive/2026-05-04-design-doc-restructure.md) (archived 2026-05-15; live archive convention is § Design records → Archive below).
 
 ## Where does this content go?
 
@@ -52,7 +52,7 @@ Convention going forward: prefer **single-line** WIP comment headers (`<!-- DRAF
 
 Single artifact type — no formal "plan vs design" distinction.
 
-- Naming: `YYYY-MM-DD-kebab-case-topic.md`.
+- Naming: `YYYY-MM-DD-kebab-case-topic.md` where the date prefix is the record's creation date. Records inherited from earlier without a date prefix (e.g., `compliance-plan.md`) keep their filename; date prefix is a convention for new records, not a rename mandate.
 - Format: numbered sections with checkbox sign-offs (`- [ ] Approved / - [ ] Needs discussion / - [ ] Skip`).
 - Each design record's sign-off summary lists ADRs spawned ("ADRs produced: 0042, 0043"). Mark `TBD` until known.
 - Implementation plans live inline under a `## Implementation plan` heading.
@@ -62,6 +62,31 @@ Optional autonomy framing for high-trust implementation plans:
 > ## Implementation plan (high-autonomy)
 >
 > Claude Code: work through items 1–N in order. Don't check in between items unless blocked. Definition of blocked: <explicit list>.
+
+### Archive
+
+Completed records move to `docs/designs/archive/`. The active directory stays focused on what's still in motion.
+
+A record is archive-eligible when **both** are true:
+
+1. Sign-off complete — all checkboxes either `Approved` or `Skip` (no remaining `Needs discussion` items that haven't been resolved or split out into Issues).
+2. Implementation merged — for design records that propose code/schema changes, the implementing PRs are in. For records whose scope is itself documentation (e.g., the docs restructure), "merged" means the doc changes landed.
+
+This convention also covers other completed-initiative artifacts that aren't formal design records but share the same lifecycle (e.g., the backend compliance plan, the rust audit). Move them in alongside the design records; the `archive/` directory is the home for all durably-resolved doc-area work, not just MADR-shaped artifacts.
+
+What does **not** apply:
+
+- The earlier "≥3 months since merge" wait was retired 2026-05-15 — at current project scale the wait added friction without payoff. Move records out as soon as they're durably resolved.
+- ADRs stay in `decisions/` regardless of age. They are intrinsically historical; superseded ones are marked, never moved.
+- Research files in `research/` have no archive convention — delete when superseded (per § Research notes).
+
+When moving:
+
+- Use `git mv` so history is preserved.
+- Add a single-line status banner immediately after the H1 title: `> **Status: complete.** Archived YYYY-MM-DD. Retained for historical reference; live conventions live in `docs/coding-standards/` (or wherever applicable).` This makes status obvious to anyone who arrives at the file via a deep link without seeing the path.
+- Update cross-references in the rest of the repo to the new path. ADRs that cite a now-archived design record via their `Source:` line should update the path.
+
+If volume in `archive/` ever makes it painful to scan, per-year subdirs (`archive/2026/`, `archive/2027/`) are the obvious next step — not needed at current scale.
 
 ## ADRs (`decisions/`) — MADR format
 

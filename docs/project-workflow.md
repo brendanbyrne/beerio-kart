@@ -2,7 +2,7 @@
 
 How work moves through the project — Issues, Milestones, PRs, and the handoffs between Cowork (Claude Desktop) and Claude Code (WSL2 CLI).
 
-This file is the operational guide. For high-level role split see `.claude/CLAUDE.md`; for cached project-board IDs see [`project-field-ids.md`](./project-field-ids.md); for handoff-file mechanics see [`.agents/handoffs/README.md`](../.agents/handoffs/README.md); for the cup-name milestone convention see the design record at [`docs/designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12 (a copy of the cup mapping lands in `docs/roadmap.md` once that file is created in PR 3).
+This file is the operational guide. For high-level role split see `.claude/CLAUDE.md`; for cached project-board IDs see [`project-field-ids.md`](./project-field-ids.md); for handoff-file mechanics see [`.agents/handoffs/README.md`](../.agents/handoffs/README.md); for the cup-name milestone convention see the archived design record at [`docs/designs/archive/2026-05-04-design-doc-restructure.md`](./designs/archive/2026-05-04-design-doc-restructure.md) §12 (cup mapping also lives in `docs/roadmap.md`).
 
 ## Decision tree: where does this thing belong?
 

@@ -52,7 +52,7 @@ Before opening a PR that touches the backend, skim these:
   - **[`seaorm.md`](../docs/coding-standards/seaorm.md)** — `ActiveModel` vs `Model`, queries, transactions, migrations, error handling, pool tuning.
   - **[`tokio.md`](../docs/coding-standards/tokio.md)** — Runtime, blocking, locks across `.await`, channels, cancellation, shutdown.
 - **[`../docs/api-contract.md`](../docs/api-contract.md)** — Wire-format decisions (error codes, ETag polling, idempotency keys, time format).
-- **[`../docs/compliance-plan.md`](../docs/compliance-plan.md)** — Sequenced PRs to bring the existing code to the standard. If you're picking work, look here.
+- **[`../docs/designs/archive/compliance-plan.md`](../docs/designs/archive/compliance-plan.md)** — Archived. Sequenced PRs that brought the existing code to the standard; all signed off 2026-05-15.
 
 If a PR introduces a pattern not covered by the standards, propose an addition in a design record under [`../docs/designs/`](../docs/designs) before merging.
 

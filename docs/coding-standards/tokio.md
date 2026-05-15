@@ -2,7 +2,7 @@
 
 > **Scope.** Async Rust and Tokio practice for the `beerio-kart` backend. Stack: Axum 0.8, Tokio multi-thread, Rust edition 2024.
 > **Format.** *Rule / Why / Example / Source*.
-> **Companions.** `rust.md`, `seaorm.md`, `../api-contract.md`, `../compliance-plan.md`.
+> **Companions.** `rust.md`, `seaorm.md`, `../api-contract.md`. Archived: `../designs/archive/compliance-plan.md`.
 
 The rules are ordered roughly by how much damage breaking them causes. The first four sections — runtime choice, blocking, sync primitives across `.await`, and channels — catch the most production bugs in async Rust.
 
