@@ -22,6 +22,7 @@ use crate::{
     },
     error::Error,
     services::{helpers, sessions},
+    timeout::{db_query, db_txn},
 };
 
 /// Body shape for `POST /runs`.
@@ -152,8 +153,7 @@ async fn validate_run_request(
 ) -> Result<(session_races::Model, ValidatedRunTimes), Error> {
     let times = validate_time_fields(body)?;
 
-    let session_race = session_races::Entity::find_by_id(body.session_race_id)
-        .one(db)
+    let session_race = db_query(session_races::Entity::find_by_id(body.session_race_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound("Session race not found".to_string()))?;
 
@@ -167,14 +167,16 @@ async fn validate_run_request(
     helpers::require_active_participant(db, &session_id, user_id).await?;
 
     // Check for duplicate submission
-    let existing = runs::Entity::find()
-        .filter(
-            Condition::all()
-                .add(runs::Column::SessionRaceId.eq(body.session_race_id))
-                .add(runs::Column::UserId.eq(user_id)),
-        )
-        .one(db)
-        .await?;
+    let existing = db_query(
+        runs::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(runs::Column::SessionRaceId.eq(body.session_race_id))
+                    .add(runs::Column::UserId.eq(user_id)),
+            )
+            .one(db),
+    )
+    .await?;
 
     if existing.is_some() {
         return Err(Error::conflict("Already submitted a run for this race"));
@@ -185,14 +187,18 @@ async fn validate_run_request(
     // permanent forfeiture, matching the "submit OR skip" framing in
     // docs/design.md "Pending Race Tracking" → "Submission rules" and the
     // mutual-exclusion guarantee in `skip_pending_race`'s docstring.
-    let participation = session_race_participations::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_race_participations::Column::SessionRaceId.eq(body.session_race_id))
-                .add(session_race_participations::Column::UserId.eq(user_id)),
-        )
-        .one(db)
-        .await?;
+    let participation = db_query(
+        session_race_participations::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(
+                        session_race_participations::Column::SessionRaceId.eq(body.session_race_id),
+                    )
+                    .add(session_race_participations::Column::UserId.eq(user_id)),
+            )
+            .one(db),
+    )
+    .await?;
     if participation
         .as_ref()
         .is_some_and(|p| p.skipped_at.is_some())
@@ -252,34 +258,36 @@ async fn insert_run(
 ) -> Result<RunId, Error> {
     let run_id = RunId::new_v4();
 
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
-    runs::ActiveModel {
-        id: Set((&run_id).into()),
-        user_id: Set(user_id.into()),
-        session_race_id: Set((&body.session_race_id).into()),
-        track_id: Set(session_race.track_id),
-        character_id: Set(body.character_id.into()),
-        body_id: Set(body.body_id.into()),
-        wheel_id: Set(body.wheel_id.into()),
-        glider_id: Set(body.glider_id.into()),
-        track_time: Set(*times.track_time.as_ref()),
-        lap1_time: Set(*times.lap1_time.as_ref()),
-        lap2_time: Set(*times.lap2_time.as_ref()),
-        lap3_time: Set(*times.lap3_time.as_ref()),
-        drink_type_id: Set((&body.drink_type_id).into()),
-        disqualified: Set(body.disqualified),
-        photo_path: Set(None),
-        created_at: NotSet,
-        notes: Set(None),
-    }
-    .insert(&txn)
+    db_query(
+        runs::ActiveModel {
+            id: Set((&run_id).into()),
+            user_id: Set(user_id.into()),
+            session_race_id: Set((&body.session_race_id).into()),
+            track_id: Set(session_race.track_id),
+            character_id: Set(body.character_id.into()),
+            body_id: Set(body.body_id.into()),
+            wheel_id: Set(body.wheel_id.into()),
+            glider_id: Set(body.glider_id.into()),
+            track_time: Set(*times.track_time.as_ref()),
+            lap1_time: Set(*times.lap1_time.as_ref()),
+            lap2_time: Set(*times.lap2_time.as_ref()),
+            lap3_time: Set(*times.lap3_time.as_ref()),
+            drink_type_id: Set((&body.drink_type_id).into()),
+            disqualified: Set(body.disqualified),
+            photo_path: Set(None),
+            created_at: NotSet,
+            notes: Set(None),
+        }
+        .insert(&txn),
+    )
     .await?;
 
     let session_id = SessionId::from_db(&session_race.session_id)?;
     helpers::touch_session(&txn, &session_id).await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     Ok(run_id)
 }
@@ -298,8 +306,7 @@ pub async fn delete_run(
     run_id: &RunId,
     user_id: &UserId,
 ) -> Result<(), Error> {
-    let run = runs::Entity::find_by_id(run_id)
-        .one(db)
+    let run = db_query(runs::Entity::find_by_id(run_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound("Run not found".to_string()))?;
 
@@ -316,8 +323,7 @@ pub async fn delete_run(
     }
 
     // Check that the session is still active
-    let session_race = session_races::Entity::find_by_id(&run.session_race_id)
-        .one(db)
+    let session_race = db_query(session_races::Entity::find_by_id(&run.session_race_id).one(db))
         .await?
         .ok_or_else(|| Error::Internal(anyhow::anyhow!("Session race not found for run")))?;
 
@@ -333,13 +339,13 @@ pub async fn delete_run(
             other => other,
         })?;
 
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
-    run.delete(&txn).await?;
+    db_query(run.delete(&txn)).await?;
 
     helpers::touch_session(&txn, &session_id).await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     Ok(())
 }

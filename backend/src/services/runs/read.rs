@@ -17,6 +17,7 @@ use crate::{
     },
     entities::{runs, users},
     error::Error,
+    timeout::db_query,
 };
 
 /// Full wire view of a single run — JOIN-expanded for username and drink-type
@@ -145,9 +146,10 @@ pub struct RunFilters {
 /// unexpected DB failures.
 #[tracing::instrument(skip(db), fields(run_id = %run_id))]
 pub async fn get_run(db: &impl ConnectionTrait, run_id: &RunId) -> Result<RunDetail, Error> {
-    let row = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let row = db_query(
+        RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT r.id, r.user_id, u.username, r.session_race_id, r.track_id,
                r.track_time, r.lap1_time, r.lap2_time, r.lap3_time,
                r.character_id, r.body_id, r.wheel_id, r.glider_id,
@@ -158,9 +160,10 @@ pub async fn get_run(db: &impl ConnectionTrait, run_id: &RunId) -> Result<RunDet
         JOIN drink_types dt ON r.drink_type_id = dt.id
         WHERE r.id = $1
         "#,
-        [run_id.into()],
-    ))
-    .one(db)
+            [run_id.into()],
+        ))
+        .one(db),
+    )
     .await?
     .ok_or_else(|| Error::NotFound("Run not found".to_string()))?;
 
@@ -225,12 +228,14 @@ pub async fn list_runs(
         "#
     );
 
-    let rows = RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        &sql,
-        params,
-    ))
-    .all(db)
+    let rows = db_query(
+        RunDetailRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            &sql,
+            params,
+        ))
+        .all(db),
+    )
     .await?;
 
     rows.into_iter()
@@ -251,11 +256,13 @@ pub async fn get_run_defaults(
     user_id: &UserId,
 ) -> Result<RunDefaults, Error> {
     // Try most recent run
-    let latest_run = runs::Entity::find()
-        .filter(runs::Column::UserId.eq(user_id))
-        .order_by_desc(runs::Column::CreatedAt)
-        .one(db)
-        .await?;
+    let latest_run = db_query(
+        runs::Entity::find()
+            .filter(runs::Column::UserId.eq(user_id))
+            .order_by_desc(runs::Column::CreatedAt)
+            .one(db),
+    )
+    .await?;
 
     if let Some(run) = latest_run {
         return Ok(RunDefaults {
@@ -269,8 +276,7 @@ pub async fn get_run_defaults(
     }
 
     // Fall back to user preferences
-    let user = users::Entity::find_by_id(user_id)
-        .one(db)
+    let user = db_query(users::Entity::find_by_id(user_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
 
