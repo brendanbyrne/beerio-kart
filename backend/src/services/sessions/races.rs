@@ -21,6 +21,7 @@ use crate::{
     entities::{cups, runs, session_race_participations, session_races},
     error::Error,
     services::helpers,
+    timeout::{db_query, db_txn},
 };
 
 /// Row shape for the pending-races query.
@@ -83,9 +84,10 @@ pub async fn get_pending_races(
     let now = Utc::now().naive_utc();
     let grace_cutoff = now - chrono::Duration::minutes(REJOIN_GRACE_MINUTES);
 
-    let rows = PendingRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let rows = db_query(
+        PendingRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT sr.id, sr.race_number, sr.track_id,
                t.name AS track_name, c.name AS cup_name,
                t.image_path, sr.created_at
@@ -108,9 +110,10 @@ pub async fn get_pending_races(
           )
         ORDER BY sr.race_number ASC
         "#,
-        [session_id.into(), user_id.into(), grace_cutoff.into()],
-    ))
-    .all(db)
+            [session_id.into(), user_id.into(), grace_cutoff.into()],
+        ))
+        .all(db),
+    )
     .await?;
 
     rows.into_iter()
@@ -194,9 +197,7 @@ pub async fn skip_pending_race(
     // Verify the race belongs to this session. Looking up by ID first and
     // then matching session_id keeps the error message consistent — both
     // "unknown race" and "race in another session" surface the same 404.
-    let race = session_races::Entity::find_by_id(session_race_id)
-        .one(db)
-        .await?;
+    let race = db_query(session_races::Entity::find_by_id(session_race_id).one(db)).await?;
     let session_id_str = session_id.to_string();
     let Some(race) = race.filter(|r| r.session_id == session_id_str) else {
         return Err(Error::NotFound(
@@ -204,25 +205,29 @@ pub async fn skip_pending_race(
         ));
     };
 
-    let participation = session_race_participations::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_race_participations::Column::SessionRaceId.eq(&race.id))
-                .add(session_race_participations::Column::UserId.eq(user_id)),
-        )
-        .one(db)
-        .await?
-        .ok_or_else(|| Error::NotFound("Pending race not found".to_string()))?;
+    let participation = db_query(
+        session_race_participations::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_race_participations::Column::SessionRaceId.eq(&race.id))
+                    .add(session_race_participations::Column::UserId.eq(user_id)),
+            )
+            .one(db),
+    )
+    .await?
+    .ok_or_else(|| Error::NotFound("Pending race not found".to_string()))?;
 
     // Reject if user already submitted a run for this race.
-    let existing_run = runs::Entity::find()
-        .filter(
-            Condition::all()
-                .add(runs::Column::SessionRaceId.eq(&race.id))
-                .add(runs::Column::UserId.eq(user_id)),
-        )
-        .one(db)
-        .await?;
+    let existing_run = db_query(
+        runs::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(runs::Column::SessionRaceId.eq(&race.id))
+                    .add(runs::Column::UserId.eq(user_id)),
+            )
+            .one(db),
+    )
+    .await?;
     if existing_run.is_some() {
         return Err(Error::conflict("Already submitted"));
     }
@@ -235,15 +240,15 @@ pub async fn skip_pending_race(
     }
 
     let now = Utc::now().naive_utc();
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
     let mut active: session_race_participations::ActiveModel = participation.into();
     active.skipped_at = Set(Some(now));
-    active.update(&txn).await?;
+    db_query(active.update(&txn)).await?;
 
     helpers::touch_session(&txn, session_id).await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     Ok(())
 }
@@ -269,10 +274,12 @@ pub async fn next_track(
     ctx.require_host(user_id)?;
 
     // Get already-used track IDs
-    let used_races = session_races::Entity::find()
-        .filter(session_races::Column::SessionId.eq(session_id))
-        .all(db)
-        .await?;
+    let used_races = db_query(
+        session_races::Entity::find()
+            .filter(session_races::Column::SessionId.eq(session_id))
+            .all(db),
+    )
+    .await?;
     let race_count = i32::try_from(used_races.len()).map_err(|_| {
         Error::Internal(anyhow::anyhow!(
             "session has more races than i32 can represent: {}",
@@ -286,29 +293,30 @@ pub async fn next_track(
     let race_id = SessionRaceId::new_v4();
     let new_race_number = race_count + 1;
 
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
     // Capture the inserted row so we can echo its `before_save`-stamped
     // `created_at` back in the response.
-    let inserted = session_races::ActiveModel {
-        id: Set((&race_id).into()),
-        session_id: Set(session_id.into()),
-        race_number: Set(new_race_number),
-        track_id: Set(chosen.id),
-        chosen_by: Set(None),
-        created_at: NotSet,
-    }
-    .insert(&txn)
+    let inserted = db_query(
+        session_races::ActiveModel {
+            id: Set((&race_id).into()),
+            session_id: Set(session_id.into()),
+            race_number: Set(new_race_number),
+            track_id: Set(chosen.id),
+            chosen_by: Set(None),
+            created_at: NotSet,
+        }
+        .insert(&txn),
+    )
     .await?;
 
     helpers::insert_race_participations(&txn, session_id, &race_id).await?;
     helpers::touch_session(&txn, session_id).await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     // Look up cup name for the response (FK-protected — missing is corruption)
-    let cup = cups::Entity::find_by_id(chosen.cup_id)
-        .one(db)
+    let cup = db_query(cups::Entity::find_by_id(chosen.cup_id).one(db))
         .await?
         .ok_or_else(|| {
             Error::Internal(anyhow::anyhow!(
@@ -356,18 +364,22 @@ pub async fn skip_turn(
     helpers::load_active_session(db, session_id).await?;
 
     // Find the most recent race
-    let current_race = session_races::Entity::find()
-        .filter(session_races::Column::SessionId.eq(session_id))
-        .order_by_desc(session_races::Column::RaceNumber)
-        .one(db)
-        .await?
-        .ok_or_else(|| Error::bad_request("No track to skip"))?;
+    let current_race = db_query(
+        session_races::Entity::find()
+            .filter(session_races::Column::SessionId.eq(session_id))
+            .order_by_desc(session_races::Column::RaceNumber)
+            .one(db),
+    )
+    .await?
+    .ok_or_else(|| Error::bad_request("No track to skip"))?;
 
     // Verify no runs exist for this race
-    let run_count = runs::Entity::find()
-        .filter(runs::Column::SessionRaceId.eq(&current_race.id))
-        .count(db)
-        .await?;
+    let run_count = db_query(
+        runs::Entity::find()
+            .filter(runs::Column::SessionRaceId.eq(&current_race.id))
+            .count(db),
+    )
+    .await?;
 
     if run_count > 0 {
         return Err(Error::bad_request("Can't skip — runs already submitted"));
@@ -378,10 +390,12 @@ pub async fn skip_turn(
 
     // Build the exclusion list: all tracks used in this session (including
     // the one being skipped, which next_track wouldn't see after deletion).
-    let used_races = session_races::Entity::find()
-        .filter(session_races::Column::SessionId.eq(session_id))
-        .all(db)
-        .await?;
+    let used_races = db_query(
+        session_races::Entity::find()
+            .filter(session_races::Column::SessionId.eq(session_id))
+            .all(db),
+    )
+    .await?;
     let exclude_ids: Vec<i32> = used_races.iter().map(|r| r.track_id).collect();
 
     let chosen = helpers::pick_random_track(db, &exclude_ids, &[skipped_track_id]).await?;
@@ -392,30 +406,31 @@ pub async fn skip_turn(
     // transaction. The old race's `session_race_participations` rows cascade
     // away with the delete; the new race gets a fresh snapshot of who's
     // currently present.
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
-    current_race.delete(&txn).await?;
+    db_query(current_race.delete(&txn)).await?;
 
     // Capture the inserted row so we can echo its `before_save`-stamped
     // `created_at` back in the response.
-    let inserted = session_races::ActiveModel {
-        id: Set((&race_id).into()),
-        session_id: Set(session_id.into()),
-        race_number: Set(keep_race_number),
-        track_id: Set(chosen.id),
-        chosen_by: Set(None),
-        created_at: NotSet,
-    }
-    .insert(&txn)
+    let inserted = db_query(
+        session_races::ActiveModel {
+            id: Set((&race_id).into()),
+            session_id: Set(session_id.into()),
+            race_number: Set(keep_race_number),
+            track_id: Set(chosen.id),
+            chosen_by: Set(None),
+            created_at: NotSet,
+        }
+        .insert(&txn),
+    )
     .await?;
 
     helpers::insert_race_participations(&txn, session_id, &race_id).await?;
     helpers::touch_session(&txn, session_id).await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
-    let cup = cups::Entity::find_by_id(chosen.cup_id)
-        .one(db)
+    let cup = db_query(cups::Entity::find_by_id(chosen.cup_id).one(db))
         .await?
         .ok_or_else(|| {
             Error::Internal(anyhow::anyhow!(
