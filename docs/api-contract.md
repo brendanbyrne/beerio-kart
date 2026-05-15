@@ -140,39 +140,11 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
   ```json
   { "error": "Session is closed.", "code": "session_closed" }
   ```
-  The `error` field is human-readable (may change wording without notice). The `code` field is a stable string the frontend matches on (changing a code is a breaking change).
-- **Why:** Status code alone (`409 Conflict`) doesn't tell the frontend whether to render "session is closed, start a new one" or "username is taken, pick another" — both are 409. The current `error::Error` variants carry a free-text message, which forces the frontend to either show raw backend text (bad UX) or pattern-match on substrings (brittle). A stable code lets the frontend pick the right copy and the right recovery action without coupling to backend wording.
-- **Implementation:**
-  - Add a `code: &'static str` to each `error::Error` variant, or better — split `error::Error` into a flat enum where each variant carries its own code:
-    ```rust
-    #[derive(thiserror::Error, Debug)]
-    #[non_exhaustive]
-    pub enum Error {
-        #[error("Session is closed.")]
-        SessionClosed,
-        #[error("Username already taken.")]
-        UsernameTaken,
-        #[error("{0}")]
-        BadRequest(String),
-        // ...
-    }
-
-    impl Error {
-        fn code(&self) -> &'static str {
-            match self {
-                Self::SessionClosed => "session_closed",
-                Self::UsernameTaken => "username_taken",
-                Self::BadRequest(_) => "bad_request",
-                // ...
-            }
-        }
-        fn status(&self) -> StatusCode { /* ... */ }
-    }
-    ```
-  - The `IntoResponse` impl serializes both fields.
-  - Catalog the codes in this doc as they're added (see § 8 below for the registry).
+  The `error` field is human-readable (may change wording without notice). The `code` field is a stable string the frontend matches on — once consumed by a client, **renaming a code is a breaking change**.
+- **Why:** Status code alone (`409 Conflict`) doesn't tell the frontend whether to render "session is closed, start a new one" or "username is taken, pick another" — both are 409. Free-text messages force the frontend to either show raw backend text (bad UX) or pattern-match on substrings (brittle). A stable code lets the frontend pick the right copy and the right recovery action without coupling to backend wording.
+- **Implementation:** Emitted by `IntoResponse` for [`error::Error`](https://github.com/brendanbyrne/beerio-kart/blob/main/backend/src/error.rs). Codes come from the [`ErrorCode`](https://github.com/brendanbyrne/beerio-kart/blob/main/backend/src/error.rs) enum (variant per registry row, `#[serde(rename_all = "snake_case")]` serialization). The full design — per-variant-enum vs. argument, hybrid helper API — is documented in [ADR 0036](https://github.com/brendanbyrne/beerio-kart/blob/main/docs/decisions/0036-error-code-rollout.md).
 - **Trade-offs considered:**
-  - **`code` as enum vs. `code` as string:** String is friendlier to the OpenAPI spec (easy to declare as `enum: [...]` in a schema) and to the frontend (no code-gen ceremony for a one-off compare).
+  - **`code` as enum vs. `code` as string:** A wire-side string is friendlier to OpenAPI (easy to declare as `enum: [...]` in a schema) and to the frontend (no code-gen ceremony for a one-off compare). The backend stores it as a typed `ErrorCode` enum and serializes to snake_case strings — best of both.
   - **RFC 7807 (`application/problem+json`):** Considered. It's well-specified but adds `type` (URI), `title`, `status`, `detail`, `instance` fields most of which we don't need. For an internal app, the simpler `{ error, code }` is enough.
 - **Source:** <https://datatracker.ietf.org/doc/html/rfc7807> (for context, even though we're not adopting it)
 
@@ -250,6 +222,8 @@ The list of stable `code` values returned in error responses. Add to this list w
 | 400 | `bad_request` | Generic validation failure (free-text message). |
 | 400 | `lap_times_mismatch` | Lap times don't sum to total time. |
 | 400 | `track_id_mismatch` | Submitted `track_id` doesn't match the `session_race`'s track. |
+| 400 | `invalid_path_param` | URL path segment failed to parse into a typed `Path<T>` extractor. |
+| 400 | `invalid_request_body` | JSON body failed to parse or deserialize. |
 | 401 | `invalid_credentials` | Login failed. |
 | 401 | `token_expired` | Access token expired (frontend should refresh). |
 | 401 | `token_invalid` | Token malformed or signature mismatch. |
@@ -295,3 +269,4 @@ The list of stable `code` values returned in error responses. Add to this list w
 - 2026-05-06 — Merged the API Surface section from `design.md` as new § 1 "Endpoint catalog". Convention sections renumbered: previous §§ 1–9 are now §§ 2–10; previous § 10 (history) is now § 11. Internal cross-references updated: § 3 (Error response contract) "see § 7 below for the registry" → "see § 8 below"; § 4 (Polling) and § 6 (Idempotency) updated to reference § 1.5 / Issue #75 instead of `design.md` callouts. Top-of-document scope statement expanded to cover both catalog and conventions. ADR 0031 reference added to § 5 to replace the `design.md` "Auth token strategy" pointer. PR 4 of the docs restructure.
 - 2026-05-10 — Renamed `AppError` → `error::Error` in the § 3 (error response contract) prose and example. Companion to the module-name-repetition cleanup in PR-H1+ (d). PR #103 sequence.
 - 2026-05-15 — § 8 error code registry: added `504 | gateway_timeout` for the per-call DB timeout path introduced in PR-F4. The `code` field is deferred per § 3, so this isn't a wire-contract change today — the registry already documents codes ahead of implementation (e.g., `lap_times_mismatch`), and adding this row avoids drift when the `code` field eventually lands. PR [#155](https://github.com/brendanbyrne/beerio-kart/pull/155).
+- 2026-05-15 — `code` field rollout (#157). § 3 rewritten: dropped the speculative `Implementation:` block (the codebase shape is now real); references to "deferred" replaced with the actually-emitted shape; pointer to ADR 0036 added for the design rationale. § 8 grew two rows for the path/json extractor failures (`invalid_path_param`, `invalid_request_body`) added by the custom extractors that closed #146 as part of #157. The `code` field is now emitted on every error response.
