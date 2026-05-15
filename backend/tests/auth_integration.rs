@@ -182,6 +182,7 @@ async fn test_refresh_without_cookie_returns_401() {
     response.assert_status(StatusCode::UNAUTHORIZED);
     let body: Value = response.json();
     assert!(body["error"].as_str().unwrap().contains("Missing"));
+    assert_eq!(body["code"], "token_invalid");
 }
 
 #[tokio::test]
@@ -213,6 +214,7 @@ async fn test_refresh_with_wrong_version_returns_401() {
     response.assert_status(StatusCode::UNAUTHORIZED);
     let body: Value = response.json();
     assert!(body["error"].as_str().unwrap().contains("revoked"));
+    assert_eq!(body["code"], "token_invalid");
 }
 
 #[tokio::test]
@@ -400,6 +402,7 @@ async fn test_register_duplicate_username_returns_409() {
     response.assert_status(StatusCode::CONFLICT);
     let body: Value = response.json();
     assert!(body["error"].as_str().unwrap().contains("already taken"));
+    assert_eq!(body["code"], "username_taken");
 }
 
 #[tokio::test]
@@ -465,6 +468,7 @@ async fn test_login_wrong_password_returns_401() {
     response.assert_status(StatusCode::UNAUTHORIZED);
     let body: Value = response.json();
     assert_eq!(body["error"], "Invalid username or password");
+    assert_eq!(body["code"], "invalid_credentials");
 }
 
 #[tokio::test]
@@ -479,6 +483,7 @@ async fn test_login_nonexistent_user_returns_401() {
     response.assert_status(StatusCode::UNAUTHORIZED);
     let body: Value = response.json();
     assert_eq!(body["error"], "Invalid username or password");
+    assert_eq!(body["code"], "invalid_credentials");
 }
 
 #[tokio::test]

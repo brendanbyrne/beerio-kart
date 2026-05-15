@@ -654,6 +654,7 @@ async fn test_create_run_blocked_by_older_pending_returns_409_with_message() {
         msg.contains("Must submit or skip pending race #1"),
         "expected race-#1 conflict message, got: {msg}"
     );
+    assert_eq!(body["code"], "pending_races_first");
     let _ = race1_id; // silence unused-binding warning
 }
 
@@ -777,6 +778,9 @@ async fn test_create_run_after_skip_returns_409() {
         msg.contains("skipped"),
         "expected message about skipped race, got: {msg}"
     );
+    // This site uses the generic `conflict` helper — no specific code in the
+    // registry for "submit after skip" yet. Confirms the generic code lands.
+    assert_eq!(body["code"], "conflict");
 }
 
 #[tokio::test]

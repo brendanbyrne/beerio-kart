@@ -17,10 +17,11 @@
 
 use std::time::{Duration, Instant};
 
+use axum::response::IntoResponse;
 use beerio_kart::{
     db,
     entities::users,
-    error::Error,
+    error::{Error, ErrorCode},
     timeout::{QUERY_BUDGET, db_query},
 };
 use migration::{Migrator, MigratorTrait};
@@ -74,10 +75,28 @@ async fn test_db_query_returns_timeout_when_blocked_on_sqlite_write_lock() {
     // Variant + budget: a stuck DB call must surface as `Error::Timeout`
     // (not `Error::Internal` from a SQLITE_BUSY mapped through `DbErr`),
     // and the budget carried in the variant must be the helper's constant.
-    match result {
-        Err(Error::Timeout { budget }) => assert_eq!(budget, QUERY_BUDGET),
+    // `code()` must return `GatewayTimeout` so the wire envelope's `code`
+    // field is correct — IntoResponse below sanity-checks the serialization.
+    let err = match result {
+        Err(Error::Timeout { budget }) => {
+            assert_eq!(budget, QUERY_BUDGET);
+            Error::Timeout { budget }
+        }
         other => panic!("expected Error::Timeout, got {other:?}"),
-    }
+    };
+    assert_eq!(err.code(), ErrorCode::GatewayTimeout);
+
+    // Wire-shape sanity: the response body emits `code: "gateway_timeout"`
+    // alongside the user-facing message. Guards against a regression where
+    // the variant is right but the IntoResponse arm drops the code field.
+    let response = err.into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::GATEWAY_TIMEOUT);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("collect body");
+    let body: serde_json::Value = serde_json::from_slice(&bytes).expect("body is JSON");
+    assert_eq!(body["code"], "gateway_timeout");
+    assert_eq!(body["error"], "Request timed out");
 
     // Wall-clock check: the timeout fired close to the budget, not past
     // the pool's 5 s busy_timeout. The variant check above is the
