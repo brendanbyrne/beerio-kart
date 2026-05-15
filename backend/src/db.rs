@@ -105,6 +105,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_connect_enforces_foreign_keys_on_non_first_pool_connection() {
+        // The behavioural test for Issue #140: with `foreign_keys = ON`
+        // applied per-connection via `SqliteConnectOptions::foreign_keys(true)`
+        // at pool-open time, every pool connection enforces FKs — not just
+        // the one that handled a one-shot startup PRAGMA.
+        //
+        // Pin connection #1 with a transaction so the subsequent `&db` insert
+        // *must* go through a freshly-opened pool connection. With the
+        // pre-#140 setup (`Database::connect(url)` + `execute_unprepared
+        // ("PRAGMA foreign_keys = ON")`), only the one connection that
+        // happened to serve the startup PRAGMA had FKs enabled. Connection
+        // #2+ would happily insert this bogus FK row, and the test would
+        // fail. Under `db::connect()`, every connection has FKs at birth and
+        // the violation surfaces here.
+        let db = shared_memory_db().await;
+
+        let pin = db.begin().await.expect("pin connection #1");
+
+        let result = users::ActiveModel {
+            id: Set(Uuid::new_v4().to_string()),
+            username: Set("alice".to_string()),
+            email: Set(None),
+            password_hash: Set("placeholder".to_string()),
+            preferred_character_id: Set(Some(99_999)),
+            preferred_body_id: Set(None),
+            preferred_wheel_id: Set(None),
+            preferred_glider_id: Set(None),
+            preferred_drink_type_id: Set(None),
+            refresh_token_version: Set(0),
+            created_at: NotSet,
+            updated_at: NotSet,
+        }
+        .insert(&db)
+        .await;
+
+        // Release the pin before the assertion so we don't leak the txn on
+        // a panic path.
+        let _ = pin.rollback().await;
+
+        assert!(
+            result.is_err(),
+            "insert with bogus FK must fail on non-#1 pool connection too"
+        );
+    }
+
+    #[tokio::test]
     async fn test_shared_cache_schema_visible_across_pool_connections() {
         // Two concurrent transactions force the pool to hand out two distinct
         // connections (each `begin()` pins one for the lifetime of the txn).

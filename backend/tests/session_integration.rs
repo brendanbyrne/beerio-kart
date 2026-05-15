@@ -14,13 +14,14 @@ use axum_test::TestServer;
 use beerio_kart::{
     ARGON2_MAX_CONCURRENT, AppState,
     config::Config,
+    db,
     drink_type_id::drink_type_uuid,
     entities::{bodies, characters, cups, drink_types, gliders, sessions, tracks, wheels},
     routes,
 };
 use chrono::Utc;
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
@@ -43,13 +44,12 @@ fn test_config() -> Arc<Config> {
 
 async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
-    let db = Database::connect(&url)
+    // `db::connect` applies `foreign_keys = ON` per-connection (seaorm.md § 8
+    // / Issue #140), so every pool connection enforces FKs — not just the
+    // one that handled a one-shot startup PRAGMA.
+    let db = db::connect(&url)
         .await
         .expect("Failed to connect to in-memory SQLite");
-
-    db.execute_unprepared("PRAGMA foreign_keys = ON")
-        .await
-        .expect("Failed to enable foreign keys");
 
     Migrator::up(&db, None)
         .await

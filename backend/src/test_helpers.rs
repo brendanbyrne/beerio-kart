@@ -15,12 +15,11 @@
 #![allow(clippy::missing_panics_doc)]
 
 use chrono::Utc;
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::NotSet, ConnectionTrait, Database, DatabaseConnection, Set,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, DatabaseConnection, Set};
 use uuid::Uuid;
 
 use crate::{
+    db,
     domain::{
         SessionId, SessionRaceId, UserId,
         enums::{SessionRuleset, SessionStatus},
@@ -39,16 +38,15 @@ use crate::{
 /// see the same DB (per `seaorm.md` § 9), while different tests stay isolated
 /// from each other. Plain `sqlite::memory:?cache=shared` would share one DB
 /// across every test in the process.
+///
+/// Uses [`db::connect`] so `foreign_keys = ON` is applied to every pool
+/// connection at open time (per `seaorm.md` § 8 / Issue #140) — not just the
+/// one that handled a one-shot startup PRAGMA.
 pub async fn setup_db() -> DatabaseConnection {
     use migration::{Migrator, MigratorTrait};
 
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
-    let db = Database::connect(&url)
-        .await
-        .expect("connect to in-memory DB");
-    db.execute_unprepared("PRAGMA foreign_keys = ON")
-        .await
-        .expect("enable foreign keys");
+    let db = db::connect(&url).await.expect("connect to in-memory DB");
     Migrator::up(&db, None).await.expect("run migrations");
     db
 }
