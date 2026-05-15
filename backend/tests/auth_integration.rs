@@ -41,9 +41,7 @@ async fn protected_hello(user: beerio_kart::middleware::auth::User) -> axum::Jso
 /// Create a fresh in-memory `SQLite` database with all migrations applied.
 async fn setup_test_app() -> TestServer {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
-    // `db::connect` applies `foreign_keys = ON` at connection-open time via
-    // `SqliteConnectOptions::foreign_keys(true)`, so every pool connection
-    // (not just the first) enforces FKs. See seaorm.md § 8 and Issue #140.
+    // `db::connect` enables per-pool-connection FKs — see seaorm.md § 8 / #140.
     let db = db::connect(&url)
         .await
         .expect("Failed to connect to in-memory SQLite");

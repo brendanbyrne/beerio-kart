@@ -47,9 +47,7 @@ fn make_config(admin_user_id: Option<UserId>) -> Arc<Config> {
 
 async fn setup_server(admin_user_id: Option<UserId>) -> TestServer {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
-    // `db::connect` applies `foreign_keys = ON` per-connection (seaorm.md § 8
-    // / Issue #140), so every pool connection enforces FKs — not just the
-    // one that handled a one-shot startup PRAGMA.
+    // `db::connect` enables per-pool-connection FKs — see seaorm.md § 8 / #140.
     let db = db::connect(&url).await.expect("connect");
     Migrator::up(&db, None).await.expect("migrate");
 

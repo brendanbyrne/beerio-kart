@@ -53,6 +53,7 @@ pub async fn connect(url: &str) -> Result<DatabaseConnection, DbErr> {
 #[cfg(test)]
 mod tests {
     use migration::{Migrator, MigratorTrait};
+    use rstest::rstest;
     use sea_orm::{
         ActiveModelTrait, ActiveValue::NotSet, EntityTrait, FromQueryResult, PaginatorTrait, Set,
         Statement, TransactionTrait,
@@ -75,53 +76,31 @@ mod tests {
         db
     }
 
+    // Parameterized FK-enforcement check. Two cases:
+    //
+    // - `single_connection` — the basic claim: a bogus-FK insert via `&db`
+    //   fails. The pool picks whichever connection it likes; with FKs
+    //   enforced per-connection, the violation surfaces.
+    // - `non_first_pool_connection` — the behavioural test for Issue #140.
+    //   Pin connection #1 with `db.begin()` so the subsequent `&db` insert
+    //   *must* go through a freshly-opened pool connection. Under the
+    //   pre-#140 setup (`Database::connect(url)` + one-shot `PRAGMA
+    //   foreign_keys = ON`), only the one connection that served the
+    //   startup PRAGMA had FKs enabled — pool connections #2+ would happily
+    //   insert this bogus row. Under `db::connect()`, every connection has
+    //   FKs at birth and the violation surfaces here too.
+    #[rstest]
+    #[case::single_connection(false)]
+    #[case::non_first_pool_connection(true)]
     #[tokio::test]
-    async fn test_connect_enforces_foreign_keys_on_inserts() {
-        // The behavioral test: with FKs enforced per-connection, an insert that
-        // references a non-existent character must fail. Pre-PR-B2 this would
-        // only fail if the query happened to land on the connection that ran
-        // the startup PRAGMA — flaky and pool-size-dependent.
-        let db = shared_memory_db().await;
-        let result = users::ActiveModel {
-            id: Set(Uuid::new_v4().to_string()),
-            username: Set("alice".to_string()),
-            email: Set(None),
-            password_hash: Set("placeholder".to_string()),
-            preferred_character_id: Set(Some(99_999)),
-            preferred_body_id: Set(None),
-            preferred_wheel_id: Set(None),
-            preferred_glider_id: Set(None),
-            preferred_drink_type_id: Set(None),
-            refresh_token_version: Set(0),
-            created_at: NotSet,
-            updated_at: NotSet,
-        }
-        .insert(&db)
-        .await;
-        assert!(
-            result.is_err(),
-            "insert with bogus FK should fail when foreign_keys=ON"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_connect_enforces_foreign_keys_on_non_first_pool_connection() {
-        // The behavioural test for Issue #140: with `foreign_keys = ON`
-        // applied per-connection via `SqliteConnectOptions::foreign_keys(true)`
-        // at pool-open time, every pool connection enforces FKs — not just
-        // the one that handled a one-shot startup PRAGMA.
-        //
-        // Pin connection #1 with a transaction so the subsequent `&db` insert
-        // *must* go through a freshly-opened pool connection. With the
-        // pre-#140 setup (`Database::connect(url)` + `execute_unprepared
-        // ("PRAGMA foreign_keys = ON")`), only the one connection that
-        // happened to serve the startup PRAGMA had FKs enabled. Connection
-        // #2+ would happily insert this bogus FK row, and the test would
-        // fail. Under `db::connect()`, every connection has FKs at birth and
-        // the violation surfaces here.
+    async fn test_connect_enforces_foreign_keys(#[case] pin_first_connection: bool) {
         let db = shared_memory_db().await;
 
-        let pin = db.begin().await.expect("pin connection #1");
+        let pin = if pin_first_connection {
+            Some(db.begin().await.expect("pin connection #1"))
+        } else {
+            None
+        };
 
         let result = users::ActiveModel {
             id: Set(Uuid::new_v4().to_string()),
@@ -140,13 +119,15 @@ mod tests {
         .insert(&db)
         .await;
 
-        // Release the pin before the assertion so we don't leak the txn on
-        // a panic path.
-        let _ = pin.rollback().await;
+        // Drop the pin before the assertion so we don't leak the held
+        // connection on a panic path; `Drop` rolls back asynchronously
+        // (seaorm.md § 3 / tokio.md § 12 aside).
+        drop(pin);
 
         assert!(
             result.is_err(),
-            "insert with bogus FK must fail on non-#1 pool connection too"
+            "insert with bogus FK must fail when foreign_keys=ON \
+             (pin_first_connection={pin_first_connection})"
         );
     }
 
