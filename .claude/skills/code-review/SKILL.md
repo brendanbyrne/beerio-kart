@@ -1,15 +1,24 @@
 ---
 name: code-review
 description: >
-  Review pull requests for code quality, security vulnerabilities, and adherence
-  to the project's coding standards. Use this skill whenever the user wants a
-  code review, PR review, diff review, or asks you to look at changes on a
-  GitHub pull request. Also use when the user says things like "review this PR",
+  Reviews pull requests for code quality, security vulnerabilities, and
+  adherence to the project's coding standards. Triggers when the user wants
+  a code review, PR review, or diff review, or asks Claude to look at changes
+  on a GitHub pull request. Also triggers on phrases like "review this PR",
   "check this diff", "look at these changes", "what do you think of this code",
-  or provides a PR number or GitHub PR URL. This skill identifies which
+  or when the user provides a PR number or GitHub PR URL. Identifies which
   coding-standards files apply to the diff, reads only those, and provides
   structured feedback both in chat and as GitHub PR comments — citing rules by
   section number so findings are re-litigatable against documented evidence.
+allowed-tools:
+  - Bash(gh pr:*)
+  - Bash(gh api:*)
+  - Bash(gh issue view:*)
+  - Bash(gh issue list:*)
+  - Bash(cargo fmt:*)
+  - Bash(cargo clippy:*)
+  - Bash(cargo test:*)
+  - Bash(bun run:*)
 ---
 
 # Code Review Skill
@@ -221,7 +230,7 @@ When `docs/coding-standards/frontend.md` lands, this section gets replaced with 
 
 ## Project context
 
-- **Current phase: 3** (Sessions & Run Recording) per CLAUDE.md. Don't flag missing features that are planned for later phases — check the build plan in `design.md`.
+- **Current cup:** check CLAUDE.md's `## Project Phase` heading for the active cup, and `docs/roadmap.md` for the cup-by-cup narrative. Don't flag features deferred to later cups — verify against the roadmap before raising "this is missing." (Milestones use Mario Kart cup names — Mushroom, Flower, Star, etc. — not numbered phases; the numbered scheme was retired in the 2026-05-05 cup-name convention adoption.)
 - **Prelaunch in the data-preservation sense:** the consolidated migration file is edited in place; dev DB is reset on schema changes. See `seaorm.md` § 5 for the policy. Don't flag append-only-migration violations until we cross the launch threshold (first deployment where data persistence matters).
 - **Compliance plan exists:** `docs/compliance-plan.md` tracks 23 sequenced PRs that bring existing code to the standard. If a PR touches code that's already on the compliance plan as a known gap, note that — the existing non-compliance is acknowledged debt, not a fresh finding. New code is held to the standard regardless of whether legacy code in the same file conforms.
 - **Two-assistant setup:** Cowork (Claude Desktop) handles design and review work; Claude Code handles implementation. PR review (this skill) is a Claude Code-side task by default, but Cowork can review too. Output goes to a single GitHub PR review (line-anchored comments + review body) per the Tier 2 pattern above.
