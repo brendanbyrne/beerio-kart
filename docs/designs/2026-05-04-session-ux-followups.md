@@ -116,3 +116,4 @@ Issues produced: TBD
 ## Document history
 
 - 2026-05-05 — Created in `docs/designs/` by distilling the 2026-05-04 `reviews/design/2026-04-04-session-screen-mockup-critique.md` per the migration triage in `docs/designs/archive/2026-05-04-design-doc-restructure.md` (archived 2026-05-15). PR #41.
+- 2026-05-15 — Updated the Source line and the 2026-05-05 history entry's path reference for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).

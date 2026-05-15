@@ -500,6 +500,8 @@ Existing assets in `reviews/design/` are triaged during migration (see §8.11).
 
 ### 8.10 Archive convention
 
+> **Superseded 2026-05-15.** Live convention lives in [`../../CLAUDE.md`](../../CLAUDE.md) § Design records → Archive. The 3-month wait described below was retired, and the scope was broadened to admit non-design-record artifacts (e.g., the compliance plan) alongside MADR-shaped records.
+
 To keep `docs/designs/` scannable as the project ages, archive design records once durably resolved.
 
 A design record is eligible for archive when **all three** are true:
