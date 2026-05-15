@@ -24,6 +24,7 @@ use crate::{
     entities::{session_participants, sessions},
     error::Error,
     services::helpers,
+    timeout::{db_query, db_txn},
 };
 
 /// Row shape for the active-participant-in-active-session query.
@@ -39,7 +40,7 @@ async fn check_not_in_any_session(
     db: &impl ConnectionTrait,
     user_id: &UserId,
 ) -> Result<(), Error> {
-    let existing =
+    let existing = db_query(
         ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
             db.get_database_backend(),
             r#"
@@ -53,8 +54,9 @@ async fn check_not_in_any_session(
             "#,
             [user_id.into()],
         ))
-        .one(db)
-        .await?;
+        .one(db),
+    )
+    .await?;
 
     if let Some(row) = existing {
         return Err(Error::conflict(format!(
@@ -77,9 +79,10 @@ pub async fn get_active_session_id(
     db: &impl ConnectionTrait,
     user_id: &UserId,
 ) -> Result<Option<SessionId>, Error> {
-    let row = ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let row = db_query(
+        ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT sp.session_id
         FROM session_participants sp
         JOIN sessions s ON sp.session_id = s.id
@@ -88,9 +91,10 @@ pub async fn get_active_session_id(
           AND s.status = 'active'
         LIMIT 1
         "#,
-        [user_id.into()],
-    ))
-    .one(db)
+            [user_id.into()],
+        ))
+        .one(db),
+    )
     .await?;
 
     row.map(|r| SessionId::from_db(&r.session_id)).transpose()
@@ -132,31 +136,35 @@ pub async fn create_session(
     let now = Utc::now().naive_utc();
     let session_id = SessionId::new_v4();
 
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
-    sessions::ActiveModel {
-        id: Set(session_id.into()),
-        host_id: Set(user_id.into()),
-        ruleset: Set(parsed),
-        least_played_drink_category: Set(None),
-        status: Set(SessionStatus::Active),
-        created_at: NotSet,
-        last_activity_at: Set(now),
-    }
-    .insert(&txn)
+    db_query(
+        sessions::ActiveModel {
+            id: Set(session_id.into()),
+            host_id: Set(user_id.into()),
+            ruleset: Set(parsed),
+            least_played_drink_category: Set(None),
+            status: Set(SessionStatus::Active),
+            created_at: NotSet,
+            last_activity_at: Set(now),
+        }
+        .insert(&txn),
+    )
     .await?;
 
-    session_participants::ActiveModel {
-        id: Set(Uuid::new_v4().to_string()),
-        session_id: Set(session_id.into()),
-        user_id: Set(user_id.into()),
-        joined_at: Set(now),
-        left_at: Set(None),
-    }
-    .insert(&txn)
+    db_query(
+        session_participants::ActiveModel {
+            id: Set(Uuid::new_v4().to_string()),
+            session_id: Set(session_id.into()),
+            user_id: Set(user_id.into()),
+            joined_at: Set(now),
+            left_at: Set(None),
+        }
+        .insert(&txn),
+    )
     .await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     get_session_detail(db, &session_id, Some(user_id)).await
 }
@@ -197,9 +205,10 @@ struct SessionSummaryRow {
 /// Returns `Internal` for unexpected DB failures.
 #[tracing::instrument(skip(db))]
 pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<SessionSummary>, Error> {
-    let rows = SessionSummaryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let rows = db_query(
+        SessionSummaryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT
             s.id,
             u.username AS host_username,
@@ -215,9 +224,10 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
         GROUP BY s.id
         ORDER BY s.last_activity_at DESC
         "#,
-        [],
-    ))
-    .all(db)
+            [],
+        ))
+        .all(db),
+    )
     .await?;
 
     rows.into_iter()
@@ -265,28 +275,32 @@ pub async fn join_session(
         })?;
     check_not_in_any_session(db, user_id).await?;
 
-    let existing = session_participants::Entity::find()
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::SessionId.eq(session_id))
-                .add(session_participants::Column::UserId.eq(user_id)),
-        )
-        .one(db)
-        .await?;
+    let existing = db_query(
+        session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(session_id))
+                    .add(session_participants::Column::UserId.eq(user_id)),
+            )
+            .one(db),
+    )
+    .await?;
 
     let now = Utc::now().naive_utc();
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
     match existing {
         None => {
-            session_participants::ActiveModel {
-                id: Set(Uuid::new_v4().to_string()),
-                session_id: Set(session_id.into()),
-                user_id: Set(user_id.into()),
-                joined_at: Set(now),
-                left_at: Set(None),
-            }
-            .insert(&txn)
+            db_query(
+                session_participants::ActiveModel {
+                    id: Set(Uuid::new_v4().to_string()),
+                    session_id: Set(session_id.into()),
+                    user_id: Set(user_id.into()),
+                    joined_at: Set(now),
+                    left_at: Set(None),
+                }
+                .insert(&txn),
+            )
             .await?;
         }
         Some(row) => {
@@ -314,13 +328,13 @@ pub async fn join_session(
                 active.joined_at = Set(now);
             }
 
-            active.update(&txn).await?;
+            db_query(active.update(&txn)).await?;
         }
     }
 
     helpers::touch_session(&txn, session_id).await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     Ok(())
 }
@@ -360,16 +374,18 @@ async fn transfer_host_or_close(
     is_host_leaving: bool,
 ) -> Result<HostDisposition, Error> {
     if is_host_leaving {
-        let next_host = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session_id))
-                    .add(session_participants::Column::UserId.ne(leaving_user_id))
-                    .add(session_participants::Column::LeftAt.is_null()),
-            )
-            .order_by_asc(session_participants::Column::JoinedAt)
-            .one(txn)
-            .await?;
+        let next_host = db_query(
+            session_participants::Entity::find()
+                .filter(
+                    Condition::all()
+                        .add(session_participants::Column::SessionId.eq(session_id))
+                        .add(session_participants::Column::UserId.ne(leaving_user_id))
+                        .add(session_participants::Column::LeftAt.is_null()),
+                )
+                .order_by_asc(session_participants::Column::JoinedAt)
+                .one(txn),
+        )
+        .await?;
 
         match next_host {
             Some(new_host) => Ok(HostDisposition::TransferredTo(UserId::from_db(
@@ -378,14 +394,16 @@ async fn transfer_host_or_close(
             None => Ok(HostDisposition::SessionClosed),
         }
     } else {
-        let remaining = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session_id))
-                    .add(session_participants::Column::LeftAt.is_null()),
-            )
-            .count(txn)
-            .await?;
+        let remaining = db_query(
+            session_participants::Entity::find()
+                .filter(
+                    Condition::all()
+                        .add(session_participants::Column::SessionId.eq(session_id))
+                        .add(session_participants::Column::LeftAt.is_null()),
+                )
+                .count(txn),
+        )
+        .await?;
 
         if remaining == 0 {
             Ok(HostDisposition::SessionClosed)
@@ -409,8 +427,7 @@ pub async fn leave_session(
     session_id: &SessionId,
     user_id: &UserId,
 ) -> Result<(), Error> {
-    let session = sessions::Entity::find_by_id(session_id)
-        .one(db)
+    let session = db_query(sessions::Entity::find_by_id(session_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound("Session not found".to_string()))?;
 
@@ -421,11 +438,11 @@ pub async fn leave_session(
         .map_err(|_| Error::bad_request("Not currently in this session"))?;
 
     let now = Utc::now().naive_utc();
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
     let mut active_participant: session_participants::ActiveModel = participant.into();
     active_participant.left_at = Set(Some(now));
-    active_participant.update(&txn).await?;
+    db_query(active_participant.update(&txn)).await?;
 
     // Lift to typed before comparing — matches the pattern in
     // `session_context.rs::require_host` and surfaces a malformed UUID in
@@ -446,9 +463,9 @@ pub async fn leave_session(
     }
 
     active_session.last_activity_at = Set(now);
-    active_session.update(&txn).await?;
+    db_query(active_session.update(&txn)).await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     Ok(())
 }
@@ -474,7 +491,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
     let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).naive_utc();
     let now = Utc::now().naive_utc();
 
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
 
     // Capture the stale ids once. We can't derive them from the sessions
     // `update_many`'s result (it returns a count, not a row set), and using
@@ -482,43 +499,49 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
     // engine implicitly. The explicit form keeps the filter expressions
     // readable and short-circuits cleanly when the cleanup has nothing to
     // do (the common case).
-    let stale_ids: Vec<String> = sessions::Entity::find()
-        .select_only()
-        .column(sessions::Column::Id)
-        .filter(
-            Condition::all()
-                .add(sessions::Column::Status.eq(SessionStatus::Active))
-                .add(sessions::Column::LastActivityAt.lt(one_hour_ago)),
-        )
-        .into_tuple()
-        .all(&txn)
-        .await?;
+    let stale_ids: Vec<String> = db_query(
+        sessions::Entity::find()
+            .select_only()
+            .column(sessions::Column::Id)
+            .filter(
+                Condition::all()
+                    .add(sessions::Column::Status.eq(SessionStatus::Active))
+                    .add(sessions::Column::LastActivityAt.lt(one_hour_ago)),
+            )
+            .into_tuple()
+            .all(&txn),
+    )
+    .await?;
 
     if stale_ids.is_empty() {
-        txn.commit().await?;
+        db_txn(txn.commit()).await?;
         return Ok(0);
     }
 
     // Mark all still-active participants of the stale sessions as left.
-    session_participants::Entity::update_many()
-        .col_expr(session_participants::Column::LeftAt, Expr::value(now))
-        .filter(
-            Condition::all()
-                .add(session_participants::Column::SessionId.is_in(stale_ids.clone()))
-                .add(session_participants::Column::LeftAt.is_null()),
-        )
-        .exec(&txn)
-        .await?;
+    db_query(
+        session_participants::Entity::update_many()
+            .col_expr(session_participants::Column::LeftAt, Expr::value(now))
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.is_in(stale_ids.clone()))
+                    .add(session_participants::Column::LeftAt.is_null()),
+            )
+            .exec(&txn),
+    )
+    .await?;
 
     // Close the stale sessions in one statement (seaorm.md § 1 — the
     // exemplar for the set-based-update rule names this exact cleanup).
-    let result = sessions::Entity::update_many()
-        .col_expr(sessions::Column::Status, Expr::value(SessionStatus::Closed))
-        .filter(sessions::Column::Id.is_in(stale_ids))
-        .exec(&txn)
-        .await?;
+    let result = db_query(
+        sessions::Entity::update_many()
+            .col_expr(sessions::Column::Status, Expr::value(SessionStatus::Closed))
+            .filter(sessions::Column::Id.is_in(stale_ids))
+            .exec(&txn),
+    )
+    .await?;
 
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     Ok(result.rows_affected)
 }
