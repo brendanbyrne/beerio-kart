@@ -137,8 +137,13 @@ impl IntoResponse for Error {
                 )
             }
             Self::Timeout { budget } => {
+                // `as_secs()` returns `u64` and `subsec_millis()` returns
+                // `u32` (<1000), so this expression is direct integer math
+                // with no fallible cast — no `u64::MAX` sentinel masking an
+                // overflow as a real-looking number in the logs. The 2s /
+                // 5s budgets are nowhere near u64's range.
                 warn!(
-                    budget_ms = u64::try_from(budget.as_millis()).unwrap_or(u64::MAX),
+                    budget_ms = budget.as_secs() * 1000 + u64::from(budget.subsec_millis()),
                     "Operation timed out"
                 );
                 (StatusCode::GATEWAY_TIMEOUT, "Request timed out".to_string())
