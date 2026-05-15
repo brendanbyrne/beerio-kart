@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use beerio_kart::{
     drink_type_id::drink_type_uuid,
     entities::{bodies, characters, cups, drink_types, gliders, tracks, wheels},
+    timeout::{db_query, db_txn},
 };
 use sea_orm::{
     ActiveModelBehavior, ActiveModelTrait, ActiveValue::NotSet, DatabaseConnection, EntityTrait,
@@ -90,7 +91,7 @@ where
     A: ActiveModelBehavior<Entity = E> + From<SimpleActiveModel> + Send,
     <E as EntityTrait>::Model: IntoActiveModel<A>,
 {
-    let existing = E::find().one(db).await?;
+    let existing = db_query(E::find().one(db)).await?;
     if existing.is_some() {
         tracing::debug!("{table_name}: already seeded, skipping");
         return Ok(());
@@ -99,7 +100,7 @@ where
     let items: Vec<SeedItem> = serde_json::from_str(json_data)?;
     let num_items = items.len();
 
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
     for item in items {
         let model: A = SimpleActiveModel {
             id: item.id,
@@ -107,9 +108,9 @@ where
             image_path: item.image_path,
         }
         .into();
-        model.insert(&txn).await?;
+        db_query(model.insert(&txn)).await?;
     }
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     tracing::info!("{table_name}: seeded {num_items} rows");
     Ok(())
@@ -143,7 +144,7 @@ macro_rules! impl_simple_seed {
 impl_simple_seed!(characters, bodies, wheels, gliders, cups);
 
 async fn seed_tracks(db: &DatabaseConnection) -> anyhow::Result<()> {
-    let existing = tracks::Entity::find().one(db).await?;
+    let existing = db_query(tracks::Entity::find().one(db)).await?;
     if existing.is_some() {
         tracing::debug!("tracks: already seeded, skipping");
         return Ok(());
@@ -155,8 +156,7 @@ async fn seed_tracks(db: &DatabaseConnection) -> anyhow::Result<()> {
     // Validate that every track's cup_id references an existing cup.
     // We read cup IDs from the database (not just the JSON) so this catches
     // issues even if cups were seeded in a prior run.
-    let cup_ids: HashSet<i32> = cups::Entity::find()
-        .all(db)
+    let cup_ids: HashSet<i32> = db_query(cups::Entity::find().all(db))
         .await?
         .into_iter()
         .map(|c| c.id)
@@ -174,7 +174,7 @@ async fn seed_tracks(db: &DatabaseConnection) -> anyhow::Result<()> {
     }
 
     let num_items = items.len();
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
     for track in items {
         let model = tracks::ActiveModel {
             id: Set(track.id),
@@ -183,9 +183,9 @@ async fn seed_tracks(db: &DatabaseConnection) -> anyhow::Result<()> {
             position: Set(track.position),
             image_path: Set(track.image_path),
         };
-        model.insert(&txn).await?;
+        db_query(model.insert(&txn)).await?;
     }
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     tracing::info!("tracks: seeded {num_items} rows");
     Ok(())
@@ -198,7 +198,7 @@ struct SeedDrinkType {
 }
 
 async fn seed_drink_types(db: &DatabaseConnection) -> anyhow::Result<()> {
-    let existing = drink_types::Entity::find().one(db).await?;
+    let existing = db_query(drink_types::Entity::find().one(db)).await?;
     if existing.is_some() {
         tracing::debug!("drink_types: already seeded, skipping");
         return Ok(());
@@ -208,7 +208,7 @@ async fn seed_drink_types(db: &DatabaseConnection) -> anyhow::Result<()> {
     let items: Vec<SeedDrinkType> = serde_json::from_str(json_data)?;
     let num_items = items.len();
 
-    let txn = db.begin().await?;
+    let txn = db_txn(db.begin()).await?;
     for item in items {
         let id = drink_type_uuid(&item.name);
         // `created_at` is populated by `drink_types::ActiveModelBehavior::before_save`.
@@ -219,9 +219,9 @@ async fn seed_drink_types(db: &DatabaseConnection) -> anyhow::Result<()> {
             created_at: NotSet,
             created_by: Set(None), // Pre-seeded entries have no creator
         };
-        model.insert(&txn).await?;
+        db_query(model.insert(&txn)).await?;
     }
-    txn.commit().await?;
+    db_txn(txn.commit()).await?;
 
     tracing::info!("drink_types: seeded {num_items} rows");
     Ok(())
