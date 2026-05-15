@@ -185,7 +185,7 @@ pub async fn skip_pending_race(
     helpers::load_active_session(db, session_id)
         .await
         .map_err(|e| match e {
-            Error::Conflict { .. } => Error::conflict("Cannot skip in a closed session"),
+            Error::Conflict { .. } => Error::session_closed("Cannot skip in a closed session"),
             other => other,
         })?;
     // Symmetry with `create_run`: the user must currently be in the session
