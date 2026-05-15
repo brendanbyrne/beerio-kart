@@ -85,6 +85,7 @@ When moving:
 - Use `git mv` so history is preserved.
 - Add a single-line status banner immediately after the H1 title: `> **Status: complete.** Archived YYYY-MM-DD. Retained for historical reference; live conventions live in `docs/coding-standards/` (or wherever applicable).` This makes status obvious to anyone who arrives at the file via a deep link without seeing the path.
 - Update cross-references in the rest of the repo to the new path. ADRs that cite a now-archived design record via their `Source:` line should update the path.
+- **Inside the archived file itself, treat it as a frozen snapshot.** Update relative-path hrefs so they still resolve from the new location (`../` → `../../`, sibling-archive references shorten to `./X.md`), but leave display text and embedded history entries as written. The file's content is a point-in-time record; rewriting visible paths or rewriting old history entries to use new paths would edit history retroactively. Hrefs need to work; display text doesn't.
 
 If volume in `archive/` ever makes it painful to scan, per-year subdirs (`archive/2026/`, `archive/2027/`) are the obvious next step — not needed at current scale.
 
