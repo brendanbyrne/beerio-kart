@@ -11,9 +11,8 @@ use axum::{
     routing::{get, post, put},
 };
 use axum_test::TestServer;
-use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::Config, routes};
+use beerio_kart::{ARGON2_MAX_CONCURRENT, AppState, config::Config, db, routes};
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{ConnectionTrait, Database};
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
@@ -42,13 +41,12 @@ async fn protected_hello(user: beerio_kart::middleware::auth::User) -> axum::Jso
 /// Create a fresh in-memory `SQLite` database with all migrations applied.
 async fn setup_test_app() -> TestServer {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
-    let db = Database::connect(&url)
+    // `db::connect` applies `foreign_keys = ON` at connection-open time via
+    // `SqliteConnectOptions::foreign_keys(true)`, so every pool connection
+    // (not just the first) enforces FKs. See seaorm.md § 8 and Issue #140.
+    let db = db::connect(&url)
         .await
         .expect("Failed to connect to in-memory SQLite");
-
-    db.execute_unprepared("PRAGMA foreign_keys = ON")
-        .await
-        .expect("Failed to enable foreign keys");
 
     Migrator::up(&db, None)
         .await
