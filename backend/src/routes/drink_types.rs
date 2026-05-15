@@ -13,6 +13,7 @@ use crate::{
     entities::drink_types,
     error::Error,
     middleware::auth::User,
+    timeout::db_query,
 };
 
 // ── Response types ───────────────────────────────────────────────────
@@ -96,7 +97,7 @@ pub async fn create_drink_type(
     let id = drink_type_uuid(name.as_ref());
 
     // Check if this drink type already exists (by UUID)
-    if let Some(existing) = drink_types::Entity::find_by_id(id).one(&state.db).await? {
+    if let Some(existing) = db_query(drink_types::Entity::find_by_id(id).one(&state.db)).await? {
         // Return the existing entry (200, not 409)
         return Ok(Json(DrinkTypeResponse::try_from_model(existing)?));
     }
@@ -110,7 +111,7 @@ pub async fn create_drink_type(
         created_by: Set(Some((&user.user_id).into())),
     };
 
-    let inserted = sea_orm::ActiveModelTrait::insert(model, &state.db).await?;
+    let inserted = db_query(sea_orm::ActiveModelTrait::insert(model, &state.db)).await?;
 
     Ok(Json(DrinkTypeResponse::try_from_model(inserted)?))
 }
@@ -135,7 +136,7 @@ pub async fn list_drink_types(
         query = query.filter(drink_types::Column::Alcoholic.eq(alcoholic));
     }
 
-    let items = query.all(&state.db).await?;
+    let items = db_query(query.all(&state.db)).await?;
     Ok(Json(
         items
             .into_iter()
@@ -156,8 +157,7 @@ pub async fn get_drink_type(
     State(state): State<AppState>,
     Path(id): Path<DrinkTypeId>,
 ) -> Result<Json<DrinkTypeResponse>, Error> {
-    let dt = drink_types::Entity::find_by_id(id)
-        .one(&state.db)
+    let dt = db_query(drink_types::Entity::find_by_id(id).one(&state.db))
         .await?
         .ok_or_else(|| Error::NotFound(format!("Drink type {id} not found")))?;
 

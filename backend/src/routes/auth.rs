@@ -17,6 +17,7 @@ use crate::{
     error::Error,
     middleware::auth::User,
     services::auth as auth_service,
+    timeout::db_query,
 };
 
 // ── Request / Response types ────────────────────────────────────────
@@ -131,10 +132,12 @@ pub async fn register(
         .map_err(|_| Error::bad_request("Password must be 8-128 characters"))?;
 
     // Check if username already exists (nicer error than a DB constraint violation)
-    let existing = users::Entity::find()
-        .filter(users::Column::Username.eq(username.as_ref()))
-        .one(&state.db)
-        .await?;
+    let existing = db_query(
+        users::Entity::find()
+            .filter(users::Column::Username.eq(username.as_ref()))
+            .one(&state.db),
+    )
+    .await?;
 
     if existing.is_some() {
         return Err(Error::conflict("Username already taken"));
@@ -162,7 +165,7 @@ pub async fn register(
         updated_at: NotSet,
     };
 
-    new_user.insert(&state.db).await?;
+    db_query(new_user.insert(&state.db)).await?;
 
     // Generate tokens
     let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;
@@ -202,10 +205,12 @@ pub async fn login(
 ) -> Result<impl IntoResponse, Error> {
     let username = body.username.trim();
 
-    let Some(user) = users::Entity::find()
-        .filter(users::Column::Username.eq(username))
-        .one(&state.db)
-        .await?
+    let Some(user) = db_query(
+        users::Entity::find()
+            .filter(users::Column::Username.eq(username))
+            .one(&state.db),
+    )
+    .await?
     else {
         // Hash a dummy password so the timing is similar to the "wrong password"
         // path. Prevents username enumeration via response-time analysis. The
@@ -303,8 +308,7 @@ pub async fn refresh(
     }
 
     // Look up user and check refresh_token_version
-    let user = users::Entity::find_by_id(&claims.sub)
-        .one(&state.db)
+    let user = db_query(users::Entity::find_by_id(&claims.sub).one(&state.db))
         .await?
         .ok_or_else(|| Error::Unauthorized("User not found".into()))?;
     let user_id = UserId::from_db(&user.id)?;
@@ -339,8 +343,7 @@ pub async fn refresh(
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, Error> {
     // Look up user to get current version
-    let db_user = users::Entity::find_by_id(user.user_id)
-        .one(&state.db)
+    let db_user = db_query(users::Entity::find_by_id(user.user_id).one(&state.db))
         .await?
         .ok_or_else(|| {
             Error::Internal(anyhow::anyhow!("Authenticated user not found in database"))
@@ -352,7 +355,7 @@ pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl In
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.refresh_token_version = Set(new_version);
 
-    active.update(&state.db).await?;
+    db_query(active.update(&state.db)).await?;
 
     // Clear the refresh cookie
     let cookie = auth_service::clear_refresh_cookie(&state.config);
@@ -390,8 +393,7 @@ pub async fn change_password(
         .map_err(|_| Error::bad_request("New password must be 8-128 characters"))?;
 
     // Look up user
-    let db_user = users::Entity::find_by_id(user.user_id)
-        .one(&state.db)
+    let db_user = db_query(users::Entity::find_by_id(user.user_id).one(&state.db))
         .await?
         .ok_or_else(|| Error::NotFound("User not found".into()))?;
 
@@ -416,7 +418,7 @@ pub async fn change_password(
     active.password_hash = Set(new_hash.into_inner());
     active.refresh_token_version = Set(new_version);
 
-    active.update(&state.db).await?;
+    db_query(active.update(&state.db)).await?;
 
     // Issue new tokens for the current session
     let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;

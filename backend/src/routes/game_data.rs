@@ -11,6 +11,7 @@ use crate::{
     entities::{bodies, characters, cups, gliders, tracks, wheels},
     error::Error,
     middleware::auth::User,
+    timeout::db_query,
 };
 
 // ── Response types ───────────────────────────────────────────────────
@@ -197,7 +198,7 @@ pub async fn list_characters(
     user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CharacterResponse>>, Error> {
-    let items = characters::Entity::find().all(&state.db).await?;
+    let items = db_query(characters::Entity::find().all(&state.db)).await?;
     Ok(Json(
         items
             .into_iter()
@@ -216,7 +217,7 @@ pub async fn list_bodies(
     user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<BodyResponse>>, Error> {
-    let items = bodies::Entity::find().all(&state.db).await?;
+    let items = db_query(bodies::Entity::find().all(&state.db)).await?;
     Ok(Json(
         items
             .into_iter()
@@ -235,7 +236,7 @@ pub async fn list_wheels(
     user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<WheelResponse>>, Error> {
-    let items = wheels::Entity::find().all(&state.db).await?;
+    let items = db_query(wheels::Entity::find().all(&state.db)).await?;
     Ok(Json(
         items
             .into_iter()
@@ -254,7 +255,7 @@ pub async fn list_gliders(
     user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<GliderResponse>>, Error> {
-    let items = gliders::Entity::find().all(&state.db).await?;
+    let items = db_query(gliders::Entity::find().all(&state.db)).await?;
     Ok(Json(
         items
             .into_iter()
@@ -273,7 +274,7 @@ pub async fn list_cups(
     user: User,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CupResponse>>, Error> {
-    let items = cups::Entity::find().all(&state.db).await?;
+    let items = db_query(cups::Entity::find().all(&state.db)).await?;
     Ok(Json(
         items
             .into_iter()
@@ -294,18 +295,19 @@ pub async fn get_cup(
     State(state): State<AppState>,
     Path(id): Path<CupId>,
 ) -> Result<Json<CupWithTracksResponse>, Error> {
-    let cup = cups::Entity::find_by_id(id)
-        .one(&state.db)
+    let cup = db_query(cups::Entity::find_by_id(id).one(&state.db))
         .await?
         .ok_or_else(|| Error::NotFound(format!("Cup {id} not found")))?;
 
-    let cup_tracks: Vec<TrackResponse> = tracks::Entity::find()
-        .filter(tracks::Column::CupId.eq(id))
-        .all(&state.db)
-        .await?
-        .into_iter()
-        .map(TrackResponse::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
+    let cup_tracks: Vec<TrackResponse> = db_query(
+        tracks::Entity::find()
+            .filter(tracks::Column::CupId.eq(id))
+            .all(&state.db),
+    )
+    .await?
+    .into_iter()
+    .map(TrackResponse::try_from)
+    .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Json(CupWithTracksResponse {
         id: CupId::new(cup.id),
@@ -335,7 +337,7 @@ pub async fn list_tracks(
         query = query.filter(tracks::Column::CupId.eq(cup_id));
     }
 
-    let items = query.all(&state.db).await?;
+    let items = db_query(query.all(&state.db)).await?;
     Ok(Json(
         items
             .into_iter()
@@ -356,8 +358,7 @@ pub async fn get_track(
     State(state): State<AppState>,
     Path(id): Path<TrackId>,
 ) -> Result<Json<TrackResponse>, Error> {
-    let track = tracks::Entity::find_by_id(id)
-        .one(&state.db)
+    let track = db_query(tracks::Entity::find_by_id(id).one(&state.db))
         .await?
         .ok_or_else(|| Error::NotFound(format!("Track {id} not found")))?;
 
