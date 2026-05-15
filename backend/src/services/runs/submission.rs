@@ -317,9 +317,7 @@ pub async fn delete_run(
     // worth surfacing if it ever does).
     let owner = UserId::from_db(&run.user_id)?;
     if owner != *user_id {
-        return Err(Error::Forbidden(
-            "Only the run's owner can delete it".to_string(),
-        ));
+        return Err(Error::forbidden("Only the run's owner can delete it"));
     }
 
     // Check that the session is still active

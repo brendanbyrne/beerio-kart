@@ -66,7 +66,7 @@ pub async fn require_active_participant<C: ConnectionTrait>(
             .one(db),
     )
     .await?
-    .ok_or_else(|| Error::Forbidden("Not a participant in this session".into()))
+    .ok_or_else(|| Error::forbidden("Not a participant in this session"))
 }
 
 /// Snapshot per-race presence at race-creation time.
@@ -317,7 +317,7 @@ mod tests {
         let err = require_active_participant(&db, &session_id, &user)
             .await
             .unwrap_err();
-        assert!(matches!(err, Error::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden { .. }));
     }
 
     #[tokio::test]
@@ -330,7 +330,7 @@ mod tests {
         let err = require_active_participant(&db, &session_id, &user)
             .await
             .unwrap_err();
-        assert!(matches!(err, Error::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden { .. }));
     }
 
     // --- touch_session ---

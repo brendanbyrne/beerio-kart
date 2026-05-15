@@ -1256,7 +1256,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(
-            matches!(err, Error::Forbidden(_)),
+            matches!(err, Error::Forbidden { .. }),
             "expected Forbidden for left user, got {err:?}"
         );
     }
