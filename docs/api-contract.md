@@ -263,6 +263,7 @@ The list of stable `code` values returned in error responses. Add to this list w
 | 409 | `race_number_conflict` | Concurrent `next-track` race lost (idempotency-key retry will return the winning response). |
 | 422 | `unprocessable` | Body parsed but failed semantic validation (catch-all). |
 | 500 | `internal` | Unexpected. Frontend shows generic message. |
+| 504 | `gateway_timeout` | Per-call timeout budget elapsed; retry is safe. |
 
 ---
 
@@ -293,3 +294,4 @@ The list of stable `code` values returned in error responses. Add to this list w
 - 2026-05-02 — Added prelaunch carve-out to the Versioning section: while prelaunch, breaking changes ship in `/api/v1` directly rather than spinning up a v2 path. Mirrors the "launch" definition in `seaorm.md` § 5.
 - 2026-05-06 — Merged the API Surface section from `design.md` as new § 1 "Endpoint catalog". Convention sections renumbered: previous §§ 1–9 are now §§ 2–10; previous § 10 (history) is now § 11. Internal cross-references updated: § 3 (Error response contract) "see § 7 below for the registry" → "see § 8 below"; § 4 (Polling) and § 6 (Idempotency) updated to reference § 1.5 / Issue #75 instead of `design.md` callouts. Top-of-document scope statement expanded to cover both catalog and conventions. ADR 0031 reference added to § 5 to replace the `design.md` "Auth token strategy" pointer. PR 4 of the docs restructure.
 - 2026-05-10 — Renamed `AppError` → `error::Error` in the § 3 (error response contract) prose and example. Companion to the module-name-repetition cleanup in PR-H1+ (d). PR #103 sequence.
+- 2026-05-15 — § 8 error code registry: added `504 | gateway_timeout` for the per-call DB timeout path introduced in PR-F4. The `code` field is deferred per § 3, so this isn't a wire-contract change today — the registry already documents codes ahead of implementation (e.g., `lap_times_mismatch`), and adding this row avoids drift when the `code` field eventually lands. PR [#155](https://github.com/brendanbyrne/beerio-kart/pull/155).
