@@ -38,3 +38,4 @@ Some rules are checked by tooling on every CI run (`cargo fmt --check`, `cargo c
 
 - 2026-05-02 — Initial monolithic draft at `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into per-area files (this directory). Added serde, rustfmt, Cargo, config, feature-flag sections to `rust.md`. Adopted the "launch = first deploy where data preservation matters" definition in `seaorm.md`. Adopted the strict newtype-with-`nutype` direction.
+- 2026-05-15 — Updated the compliance-plan companion link to point at its archived location (`../designs/archive/compliance-plan.md`); plan signed off 2026-05-15. Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).

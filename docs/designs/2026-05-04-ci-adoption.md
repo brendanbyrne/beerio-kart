@@ -496,3 +496,4 @@ Goal: any check lefthook runs locally also runs in CI.
 ## Document history
 
 - 2026-05-05 — Created in `docs/designs/` by splitting from the 2026-05-04 `reviews/design/2026-05-04-ci-research.md` per the triage decision in `docs/designs/archive/2026-05-04-design-doc-restructure.md` §6.5 (archived 2026-05-15). PR #41.
+- 2026-05-15 — Updated the path reference in the 2026-05-05 entry above for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
