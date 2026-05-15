@@ -23,6 +23,7 @@ use crate::{
     },
     entities::{sessions, users},
     error::Error,
+    timeout::db_query,
 };
 
 /// Participant info for the detail response.
@@ -140,8 +141,7 @@ async fn load_host_username(
     db: &impl ConnectionTrait,
     host_id: &UserId,
 ) -> Result<Username, Error> {
-    let user = users::Entity::find_by_id(host_id)
-        .one(db)
+    let user = db_query(users::Entity::find_by_id(host_id).one(db))
         .await?
         .ok_or_else(|| {
             Error::Internal(anyhow::anyhow!("Host user not found for host_id {host_id}"))
@@ -154,18 +154,20 @@ async fn load_participants(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
 ) -> Result<Vec<ParticipantInfo>, Error> {
-    let rows = ParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let rows = db_query(
+        ParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT sp.user_id, u.username, sp.joined_at, sp.left_at
         FROM session_participants sp
         JOIN users u ON sp.user_id = u.id
         WHERE sp.session_id = $1
         ORDER BY sp.joined_at ASC
         "#,
-        [session_id.into()],
-    ))
-    .all(db)
+            [session_id.into()],
+        ))
+        .all(db),
+    )
     .await?;
 
     rows.into_iter()
@@ -186,9 +188,10 @@ async fn load_current_race_with_submissions(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
 ) -> Result<Option<SessionRaceInfo>, Error> {
-    let race_row = CurrentRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let race_row = db_query(
+        CurrentRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT sr.id, sr.race_number, sr.track_id,
                t.name AS track_name, c.name AS cup_name,
                t.image_path, sr.created_at
@@ -199,16 +202,17 @@ async fn load_current_race_with_submissions(
         ORDER BY sr.race_number DESC
         LIMIT 1
         "#,
-        [session_id.into()],
-    ))
-    .one(db)
+            [session_id.into()],
+        ))
+        .one(db),
+    )
     .await?;
 
     let Some(row) = race_row else {
         return Ok(None);
     };
 
-    let submissions: Vec<RaceSubmission> =
+    let submissions: Vec<RaceSubmission> = db_query(
         SubmissionRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
             db.get_database_backend(),
             r#"
@@ -220,18 +224,19 @@ async fn load_current_race_with_submissions(
             "#,
             [row.id.clone().into()],
         ))
-        .all(db)
-        .await?
-        .into_iter()
-        .map(|s| {
-            Ok::<_, Error>(RaceSubmission {
-                user_id: UserId::from_db(&s.user_id)?,
-                username: Username::from_db(s.username, "users.username")?,
-                track_time: s.track_time,
-                disqualified: s.disqualified,
-            })
+        .all(db),
+    )
+    .await?
+    .into_iter()
+    .map(|s| {
+        Ok::<_, Error>(RaceSubmission {
+            user_id: UserId::from_db(&s.user_id)?,
+            username: Username::from_db(s.username, "users.username")?,
+            track_time: s.track_time,
+            disqualified: s.disqualified,
         })
-        .collect::<Result<Vec<_>, _>>()?;
+    })
+    .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Some(SessionRaceInfo {
         id: SessionRaceId::from_db(&row.id)?,
@@ -250,9 +255,10 @@ async fn load_race_history(
     db: &impl ConnectionTrait,
     session_id: &SessionId,
 ) -> Result<Vec<RaceInfo>, Error> {
-    let rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let rows = db_query(
+        RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT sr.id, sr.race_number, sr.track_id,
                t.name AS track_name, c.name AS cup_name,
                COUNT(r.id) AS run_count, sr.created_at
@@ -264,9 +270,10 @@ async fn load_race_history(
         GROUP BY sr.id
         ORDER BY sr.race_number ASC
         "#,
-        [session_id.into()],
-    ))
-    .all(db)
+            [session_id.into()],
+        ))
+        .all(db),
+    )
     .await?;
 
     rows.into_iter()
@@ -304,8 +311,7 @@ pub async fn get_session_detail(
     session_id: &SessionId,
     requesting_user_id: Option<&UserId>,
 ) -> Result<SessionDetail, Error> {
-    let session = sessions::Entity::find_by_id(session_id)
-        .one(db)
+    let session = db_query(sessions::Entity::find_by_id(session_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound("Session not found".to_string()))?;
 
@@ -362,14 +368,14 @@ pub async fn list_races(
     session_id: &SessionId,
 ) -> Result<Vec<RaceInfo>, Error> {
     // Verify session exists
-    sessions::Entity::find_by_id(session_id)
-        .one(db)
+    db_query(sessions::Entity::find_by_id(session_id).one(db))
         .await?
         .ok_or_else(|| Error::NotFound("Session not found".to_string()))?;
 
-    let rows = RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-        db.get_database_backend(),
-        r#"
+    let rows = db_query(
+        RaceHistoryRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            db.get_database_backend(),
+            r#"
         SELECT sr.id, sr.race_number, sr.track_id,
                t.name AS track_name, c.name AS cup_name,
                COUNT(r.id) AS run_count, sr.created_at
@@ -381,9 +387,10 @@ pub async fn list_races(
         GROUP BY sr.id
         ORDER BY sr.race_number ASC
         "#,
-        [session_id.into()],
-    ))
-    .all(db)
+            [session_id.into()],
+        ))
+        .all(db),
+    )
     .await?;
 
     rows.into_iter()
