@@ -28,6 +28,9 @@ pub mod drink_type_id;
 pub mod entities;
 /// Unified application error type implementing [`axum::response::IntoResponse`].
 pub mod error;
+/// Project-local request extractors (typed Path/Json) emitting the standard
+/// [error envelope](error::Error) on rejection.
+pub mod extract;
 /// Axum middleware — JWT-based auth extractor and request-limit handlers.
 pub mod middleware;
 /// HTTP route handlers grouped by resource.
