@@ -33,7 +33,7 @@ pub async fn load_active_session<C: ConnectionTrait>(
         .await?
         .ok_or_else(|| Error::NotFound("Session not found".into()))?;
     if session.status != SessionStatus::Active {
-        return Err(Error::conflict("Session is not active"));
+        return Err(Error::session_closed("Session is not active"));
     }
     Ok(session)
 }

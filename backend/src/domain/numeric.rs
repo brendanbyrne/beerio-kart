@@ -118,7 +118,7 @@ pub(crate) fn assert_lap_sum(laps: [LapTimeMs; 3], total: RaceTimeMs) -> Result<
         let signed_diff = sum - total_inner;
         let direction = if signed_diff > 0 { "over" } else { "under" };
         let magnitude = signed_diff.abs();
-        return Err(Error::bad_request(format!(
+        return Err(Error::lap_times_mismatch(format!(
             "Lap times must add up to total time ({direction} by {magnitude}ms)"
         )));
     }

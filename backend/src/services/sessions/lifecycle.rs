@@ -270,7 +270,7 @@ pub async fn join_session(
     helpers::load_active_session(db, session_id)
         .await
         .map_err(|e| match e {
-            Error::Conflict { .. } => Error::conflict("Cannot join a closed session"),
+            Error::Conflict { .. } => Error::session_closed("Cannot join a closed session"),
             other => other,
         })?;
     check_not_in_any_session(db, user_id).await?;

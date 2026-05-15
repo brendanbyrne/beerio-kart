@@ -161,7 +161,9 @@ async fn validate_run_request(
     helpers::load_active_session(db, &session_id)
         .await
         .map_err(|e| match e {
-            Error::Conflict { .. } => Error::conflict("Cannot submit run for a closed session"),
+            Error::Conflict { .. } => {
+                Error::session_closed("Cannot submit run for a closed session")
+            }
             other => other,
         })?;
     helpers::require_active_participant(db, &session_id, user_id).await?;
@@ -224,7 +226,7 @@ async fn validate_run_request(
         .filter(|p| p.race_number < session_race.race_number)
         .min_by_key(|p| p.race_number)
     {
-        return Err(Error::conflict(format!(
+        return Err(Error::pending_races_first(format!(
             "Must submit or skip pending race #{} first",
             older.race_number
         )));
@@ -333,7 +335,9 @@ pub async fn delete_run(
             Error::NotFound(msg) => {
                 Error::Internal(anyhow::anyhow!("Session not found for run: {msg}"))
             }
-            Error::Conflict { .. } => Error::conflict("Cannot delete run from a closed session"),
+            Error::Conflict { .. } => {
+                Error::session_closed("Cannot delete run from a closed session")
+            }
             other => other,
         })?;
 
