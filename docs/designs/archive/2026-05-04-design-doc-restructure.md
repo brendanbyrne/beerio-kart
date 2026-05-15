@@ -1,5 +1,7 @@
 # Design doc restructure — design record (2026-05-04)
 
+> **Status: complete.** Archived 2026-05-15. All seven implementation PRs landed. Retained for historical reference. The archive convention originally documented here in § 8.10 has been superseded — live archive rules now live in [`../../CLAUDE.md`](../../CLAUDE.md) § Design records → Archive, with the 3-month wait dropped and the scope broadened to cover completed-initiative artifacts (e.g., the compliance plan) alongside design records.
+
 Date: 2026-05-04
 Author: Cowork
 Scope: `docs/design.md` and the surrounding `docs/` layout

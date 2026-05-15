@@ -2,7 +2,7 @@
 status: accepted
 date: 2026-05-05
 deciders: [Brendan]
-source: docs/designs/2026-05-02-entity-codegen-strategy.md
+source: docs/designs/archive/2026-05-02-entity-codegen-strategy.md
 ---
 
 # 0023 — Hand-written SeaORM entities: committed source code
@@ -39,5 +39,5 @@ Chosen: **Option C** — Entities under `backend/src/entities/` are committed so
 
 ## Links
 
-- Source: [`docs/designs/2026-05-02-entity-codegen-strategy.md`](../designs/2026-05-02-entity-codegen-strategy.md)
+- Source: [`docs/designs/archive/2026-05-02-entity-codegen-strategy.md`](../designs/archive/2026-05-02-entity-codegen-strategy.md)
 - Implementing PRs: PR-X1

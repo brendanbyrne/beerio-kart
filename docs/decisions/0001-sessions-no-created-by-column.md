@@ -41,4 +41,4 @@ Chosen: **Option B** — `host_id` carries the creator identity until host trans
 ## Links
 
 - Source: [`docs/designs/archive/2026-05-02-sessions-created-by-removal.md`](../designs/archive/2026-05-02-sessions-created-by-removal.md)
-- Implementing PRs: PR-E3 (`docs/compliance-plan.md` Stream E)
+- Implementing PRs: PR-E3 (`docs/designs/archive/compliance-plan.md` Stream E)

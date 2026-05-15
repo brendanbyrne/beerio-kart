@@ -2,7 +2,7 @@
 
 Date: 2026-05-04
 Author: Cowork
-Source: distilled from `reviews/design/2026-04-04-session-screen-mockup-critique.md` per the migration triage of design record `2026-05-04-design-doc-restructure.md`.
+Source: distilled from `reviews/design/2026-04-04-session-screen-mockup-critique.md` per the migration triage of design record `archive/2026-05-04-design-doc-restructure.md` (archived 2026-05-15).
 
 ## Status and how to use this record
 
@@ -115,4 +115,4 @@ Issues produced: TBD
 
 ## Document history
 
-- 2026-05-05 — Created in `docs/designs/` by distilling the 2026-05-04 `reviews/design/2026-04-04-session-screen-mockup-critique.md` per the migration triage in `docs/designs/2026-05-04-design-doc-restructure.md`. PR #41.
+- 2026-05-05 — Created in `docs/designs/` by distilling the 2026-05-04 `reviews/design/2026-04-04-session-screen-mockup-critique.md` per the migration triage in `docs/designs/archive/2026-05-04-design-doc-restructure.md` (archived 2026-05-15). PR #41.

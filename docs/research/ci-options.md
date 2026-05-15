@@ -72,7 +72,7 @@ The current coverage workflow uses `dtolnay`. Both work, but the inline annotati
 
 ### 2.5 SeaORM migration apply check + entity drift check
 
-Your consolidated migration must apply cleanly on every PR — otherwise a contributor's broken migration ships. And the entities under `backend/src/entities/` must stay in sync with the schema, since they're hand-checked in (per CLAUDE.md and `2026-05-02-entity-codegen-strategy.md`).
+Your consolidated migration must apply cleanly on every PR — otherwise a contributor's broken migration ships. And the entities under `backend/src/entities/` must stay in sync with the schema, since they're hand-checked in (per CLAUDE.md and `archive/2026-05-02-entity-codegen-strategy.md`).
 
 Two CI steps:
 
@@ -557,5 +557,5 @@ These are decisions Brendan should make before §12 kicks off:
 
 ## Document history
 
-- 2026-05-05 — Created in `docs/research/` by splitting from the 2026-05-04 `reviews/design/2026-05-04-ci-research.md` per the triage decision in `docs/designs/2026-05-04-design-doc-restructure.md` §6.5. PR #41.
+- 2026-05-05 — Created in `docs/research/` by splitting from the 2026-05-04 `reviews/design/2026-05-04-ci-research.md` per the triage decision in `docs/designs/archive/2026-05-04-design-doc-restructure.md` §6.5 (archived 2026-05-15). PR #41.
 - 2026-05-08 — Repaired broken lychee-action recipes URL in the "Repo & workflow hygiene" bullet: `https://lychee.cli.rs/github_action_recipes/check-repository/` → `https://lychee.cli.rs/continuous-integration/github/`. Old path was removed in lychee's site redesign; new path is the closest equivalent (CI integration guide). Updated link text to match. PR 5 of the docs restructure (plan deviation — surfaced when lychee `fail: true` flipped on).

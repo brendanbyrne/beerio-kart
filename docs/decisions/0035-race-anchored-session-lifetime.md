@@ -133,7 +133,7 @@ Specific tests change; the full list will live in the implementing PR descriptio
 - `docs/user-workflows.md` § 1.5: replace the 5-minute grace sentence with the race-expiry sentence.
 - `docs/decisions/0013-pending-race-cap.md`: no change — the UI cap concept is orthogonal.
 - `docs/decisions/0015-session-timeout-skip-turn.md`: no change — skip-turn semantics are independent of session/race lifetime.
-- `docs/designs/2026-04-19-pending-races-and-grace-period.md` § 3 (grace semantics) is superseded by this ADR. Per design-record convention the design record stays as-is, with a top-of-file note pointing here.
+- `docs/designs/archive/2026-04-19-pending-races-and-grace-period.md` § 3 (grace semantics) is superseded by this ADR. Per design-record convention the design record stays as-is, with a top-of-file note pointing here.
 
 - [x] Approved
 - [ ] Needs discussion
@@ -180,12 +180,12 @@ Each section above carries its own approval checkbox. Once all are checked:
 
 - Set `status` in this file's frontmatter to `accepted`.
 - Update the row for 0035 in `docs/decisions/README.md` from `proposed` to `accepted`.
-- Add a top-of-file "Superseded by ADR-0035 (§ 3 grace semantics)" note to `docs/designs/2026-04-19-pending-races-and-grace-period.md`.
+- Add a top-of-file "Superseded by ADR-0035 (§ 3 grace semantics)" note to `docs/designs/archive/2026-04-19-pending-races-and-grace-period.md`.
 - File implementation issues per the PR split above under Milestone Star.
 
 ## Links
 
 - Source: ad-hoc (Cowork chat discussion, 2026-05-11)
-- Supersedes: `docs/designs/2026-04-19-pending-races-and-grace-period.md` § 3 (grace period semantics)
+- Supersedes: `docs/designs/archive/2026-04-19-pending-races-and-grace-period.md` § 3 (grace period semantics)
 - Related ADRs: 0013 (pending race cap — unchanged), 0014 (host transfer — cleaner under monotonic `joined_at`), 0015 (skip-turn semantics — unchanged), 0018 (polling — unchanged)
 - Implementing PRs: <to fill in>

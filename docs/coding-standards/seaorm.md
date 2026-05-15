@@ -2,7 +2,7 @@
 
 > **Scope.** SeaORM 1.x with SQLite for the `beerio-kart` backend. Features: `["sqlx-sqlite", "runtime-tokio-rustls", "macros"]`. Workspace member crate `migration` for migrations.
 > **Format.** *Rule / Why / Example / Source*.
-> **Companions.** `rust.md`, `tokio.md`, `../api-contract.md`, `../compliance-plan.md`.
+> **Companions.** `rust.md`, `tokio.md`, `../api-contract.md`. Archived: `../designs/archive/compliance-plan.md`.
 
 ## Index
 
@@ -207,11 +207,11 @@
 
 ## 6. Entity organization
 
-The migration code in `migration/` is the schema source of truth. Entities mirror that shape; they are **committed source code**, hand-edited as the schema evolves. Codegen (`sea-orm-cli generate entity`) is a one-shot scaffolding tool, not a routine workflow step. The architectural reasoning is recorded in [`docs/designs/2026-05-02-entity-codegen-strategy.md`](../designs/2026-05-02-entity-codegen-strategy.md); the short version is that round-tripping schema information through SQLite introspection (migration → DB → entity) loses information the migration already contains (most notably partial-index predicates), and we have no need to pay that cost on a greenfield project we own end-to-end.
+The migration code in `migration/` is the schema source of truth. Entities mirror that shape; they are **committed source code**, hand-edited as the schema evolves. Codegen (`sea-orm-cli generate entity`) is a one-shot scaffolding tool, not a routine workflow step. The architectural reasoning is recorded in [`docs/designs/archive/2026-05-02-entity-codegen-strategy.md`](../designs/archive/2026-05-02-entity-codegen-strategy.md); the short version is that round-tripping schema information through SQLite introspection (migration → DB → entity) loses information the migration already contains (most notably partial-index predicates), and we have no need to pay that cost on a greenfield project we own end-to-end.
 
 - **Rule:** Entities under `backend/src/entities/` are committed source. Hand-edit them as the schema evolves. Do not re-run codegen on existing entity files.
   - **Why:** Codegen will clobber hand-corrections — currently the partial-unique-index attribute on `session_participants.user_id` and the `has_many` cardinality on `users` ↔ `session_participants` — and the same class of bug is likely to recur as new partial indexes appear. The information lives in the migration; the entity is just the Rust mirror.
-  - **Source:** Project decision recorded in [`docs/designs/2026-05-02-entity-codegen-strategy.md`](../designs/2026-05-02-entity-codegen-strategy.md).
+  - **Source:** Project decision recorded in [`docs/designs/archive/2026-05-02-entity-codegen-strategy.md`](../designs/archive/2026-05-02-entity-codegen-strategy.md).
 
 - **Rule:** When adding a new table, write the migration first, then run `just entities-bootstrap` to scaffold the entity into `backend/src/entities/{table}.rs`. Hand-edit and commit. From then on, the file is owned source.
   - **Why:** The CLI still produces a useful starting point — column derives, `Relation` enum, `Related` impls. Saving 20 minutes of typing on the initial scaffold is fine; the cost the design record warns against is *re-running* it on existing entities.
@@ -425,7 +425,7 @@ A single-screen review checklist:
 - 2026-05-02 — Initial draft as part of `docs/rust-coding-standards.md`.
 - 2026-05-02 — Split into `docs/coding-standards/seaorm.md`. Added explicit "launch" definition to § 5. Updated § 9 to use `?cache=shared`. Added entity↔domain newtype boundary rule to § 6. Noted upcoming `sessions.created_by` removal in § 11.
 - 2026-05-02 — Removed the live-instance reference from § 11 after `sessions.created_by` was dropped (PR #23). Multi-FK rule retained for any future table that reuses a target.
-- 2026-05-04 — Hand-written entities convention. § 6 rewritten and § 11 reworded to drop the "trust codegen" framing in favor of declarative guidance for owned entity files. Closes the codegen-strategy decision recorded at [`docs/designs/2026-05-02-entity-codegen-strategy.md`](../designs/2026-05-02-entity-codegen-strategy.md). PR-X1.
+- 2026-05-04 — Hand-written entities convention. § 6 rewritten and § 11 reworded to drop the "trust codegen" framing in favor of declarative guidance for owned entity files. Closes the codegen-strategy decision recorded at [`docs/designs/archive/2026-05-02-entity-codegen-strategy.md`](../designs/archive/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-05 — Rewrote active-prose `reviews/design/` references to `docs/designs/` paths (§ 6 paragraph and § 6 Source bullet) as part of PR 1 (docs restructure foundation). PR #41.
 - 2026-05-08 — Pinned two broken SeaORM doc URLs to the `1.1.x` versioned path: `/SeaORM/docs/advanced-query/custom-active-model/` and `/SeaORM/docs/relation/data-loader/`. Both pages 404 on the unversioned (latest) path, likely because the SeaORM site is mid-restructure; pinning to `1.1.x` (which matches the `sea-orm = "1"` dep in `backend/Cargo.toml`) resolves to a stable page. The eight other SeaORM URLs in this file are left unversioned (they still resolve). PR 5 of the docs restructure (plan deviation — surfaced when lychee `fail: true` flipped on).
 - 2026-05-11 — § 7 updated to reflect Issue [#84](https://github.com/brendanbyrne/beerio-kart/issues/84): `error::Error::Conflict` and `error::Error::BadRequest` are now struct variants `{ client, detail }`, with the raw `DbErr` driver string captured in `detail` (log-only at `IntoResponse`) and the client receiving a sanitized generic message. Added two rules: the struct-shape convention + helpers (`error::Error::conflict()` / `error::Error::bad_request()`), and the pre-check guidance for new user-reachable UNIQUE constraints. Collateral rename pass: replaced the remaining `AppError::*` references across §§ 1, 3, 4, 7, and § 12 with `error::Error::*` (PR #112's rename swept the code but missed this file). Updated the § 7 `From<DbErr>` example's `Internal` line from the pre-C2 `format!("Database error: {e}")` shape to the current `anyhow::Error::new(e).context("Database error")` shape.

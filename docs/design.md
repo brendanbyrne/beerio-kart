@@ -151,7 +151,7 @@ See [`decisions/`](./decisions/) — each prior bullet has been distilled into a
 
 - **`api-contract.md`** — Wire-format conventions between backend and frontend (error codes, ETag polling, idempotency keys, time format).
 - **`coding-standards/`** — Backend coding standards (general Rust, SeaORM, Tokio).
-- **`compliance-plan.md`** — Sequenced PRs to bring the existing code into compliance with the coding standards.
+- **`designs/archive/compliance-plan.md`** — Archived. Sequenced PRs that brought the existing code into compliance with the coding standards; all signed off 2026-05-15.
 - **`research/`** — Long-form exploration of approaches not yet decided (e.g., OCR strategy, SeaORM 2.0 evaluation). Reference-only; not authoritative until promoted into this file or `coding-standards/`.
 - **`data-model.md`** — Database schema, table definitions, and design decisions about them. (Extracted from this file in PR 1 of the docs restructure.)
 - **`decisions/`** — Architecture Decision Records (MADR format). Searchable index in `decisions/README.md`.
@@ -162,7 +162,7 @@ See [`decisions/`](./decisions/) — each prior bullet has been distilled into a
 - 2026-05-02 — Moved from repo root (`DESIGN.md`) to `docs/design.md`. Project structure section updated to reflect the move and the new `docs/` layout. The root `DESIGN.md` is kept as a redirect (Cowork sandbox cannot delete files); a Claude Code PR will remove it from the working tree.
 - 2026-05-04 — Updated the AppError "Key behaviors" bullet to reflect the variant-aware `From<sea_orm::DbErr>` impl (NotFound / Conflict / BadRequest / Internal mapping). PR #25.
 - 2026-05-04 — Added `docs/research/` to the project-structure tree and a corresponding entry in Related documents (long-form exploration not yet promoted to design or coding-standards).
-- 2026-05-04 — Replaced the "Entity regeneration via justfile recipe" rule with "Hand-written SeaORM entities"; updated the `just (not Make)` example to use `just entities-bootstrap`. Closes the codegen-strategy decision recorded at [`docs/designs/2026-05-02-entity-codegen-strategy.md`](./designs/2026-05-02-entity-codegen-strategy.md). PR-X1.
+- 2026-05-04 — Replaced the "Entity regeneration via justfile recipe" rule with "Hand-written SeaORM entities"; updated the `just (not Make)` example to use `just entities-bootstrap`. Closes the codegen-strategy decision recorded at [`docs/designs/archive/2026-05-02-entity-codegen-strategy.md`](./designs/archive/2026-05-02-entity-codegen-strategy.md). PR-X1.
 - 2026-05-05 — Extracted Data Model section to `data-model.md`. PR 1 of the docs restructure.
 - 2026-05-05 — Replaced the Resolved Decisions bullet list with a pointer to `docs/decisions/`. Each prior bullet distilled into a MADR file (0002–0034). PR 2 of the docs restructure.
 - 2026-05-06 — Replaced the Build Plan section with a one-paragraph pointer to `roadmap.md` (created in this PR). Phase narratives moved to roadmap.md per cup; the 20 unchecked Phase 3 / Milestone Star bullets were filed as GitHub Issues (#46, #47, #49, #50, #51, #54, #56, #58, #59, #61, #62, #63, #64, #65, #66, #67, #70, #71, #72, #73) under Milestone Star. PR 3 of the docs restructure.

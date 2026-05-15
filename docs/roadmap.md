@@ -12,7 +12,7 @@ Two milestone types: **product cups** for user-facing feature work-chunks, **wor
 - **This file** is the narrative — each milestone gets a section describing the goal, scope, deferred work, and success criteria. When a milestone closes, its section keeps a brief retrospective and the cup/topic keeps its name forever.
 - **Future-cup Scope sections double as the future-work record.** Cups not yet active list their work as bullets here, not as GitHub Issues. When a cup becomes the next active work-chunk, its bullets transcribe to Issues at that time and the Scope list in this file gets a "see Milestone X for current status" pointer. This keeps the GitHub Backlog scoped to "things we're committed to right now," not "everything we'd ever want to do."
 
-For the underlying conventions, see [`project-workflow.md`](./project-workflow.md) § Milestone lifecycle and [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) §12.
+For the underlying conventions, see [`project-workflow.md`](./project-workflow.md) § Milestone lifecycle and [`designs/archive/2026-05-04-design-doc-restructure.md`](./designs/archive/2026-05-04-design-doc-restructure.md) §12 (archived).
 
 ## Cup mapping (product)
 
@@ -34,7 +34,7 @@ OCR work (was Phase 7) is **not** yet milestoned — too speculative to commit t
 | Topic | Work chunk | Status | Closed |
 |-------|------------|--------|--------|
 | Docs | Documentation overhaul (renamed from `Special:` for convention consistency, 2026-05-11) | Closed | 2026-05-11 |
-| Hardening | Backend compliance plan — code hygiene, standards conformance, type-driven design, infrastructure (per `compliance-plan.md`) | Open, in progress | — |
+| Hardening | Backend compliance plan — code hygiene, standards conformance, type-driven design, infrastructure (per `designs/archive/compliance-plan.md`, archived) | Open (all issues closed; milestone awaiting closure) | — |
 
 ---
 
@@ -94,7 +94,7 @@ Single-container Docker on Unraid, Cloudflare Tunnel + Full-strict TLS (per ADR 
 
 **Type:** Workstream (renamed from cup `Special:` on 2026-05-11 — non-product work shouldn't consume cup names per the convention update).
 
-Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-hoc review notes, no clear narrative-vs-decision separation) into a coherent multi-doc structure: 34 ADRs in `decisions/` distilled from prior `DESIGN.md` bullets, design records in `designs/` for point-in-time sign-off narratives, the cup-by-cup story in `roadmap.md`, a slimmed `design.md` (~250 lines) for architecture, the operational `project-workflow.md`, an `api-contract.md` for wire-format conventions, a `user-workflows.md` for end-user flows and screens, a `data-model.md` for the schema, and CLAUDE.md files at appropriate scopes (repo root, `backend/`, `frontend/`, `docs/`). All six PRs of [`designs/2026-05-04-design-doc-restructure.md`](./designs/2026-05-04-design-doc-restructure.md) landed. The workstream that turned scattered project documentation into something a new contributor can navigate in under five minutes via `docs/README.md`.
+Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-hoc review notes, no clear narrative-vs-decision separation) into a coherent multi-doc structure: 34 ADRs in `decisions/` distilled from prior `DESIGN.md` bullets, design records in `designs/` for point-in-time sign-off narratives, the cup-by-cup story in `roadmap.md`, a slimmed `design.md` (~250 lines) for architecture, the operational `project-workflow.md`, an `api-contract.md` for wire-format conventions, a `user-workflows.md` for end-user flows and screens, a `data-model.md` for the schema, and CLAUDE.md files at appropriate scopes (repo root, `backend/`, `frontend/`, `docs/`). All six PRs of [`designs/archive/2026-05-04-design-doc-restructure.md`](./designs/archive/2026-05-04-design-doc-restructure.md) landed (archived 2026-05-15). The workstream that turned scattered project documentation into something a new contributor can navigate in under five minutes via `docs/README.md`.
 
 [Milestone Docs: Documentation overhaul](https://github.com/brendanbyrne/beerio-kart/milestone/4)
 
@@ -102,17 +102,17 @@ Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-ho
 
 ## Hardening — Backend compliance plan
 
-**Status:** Open, in progress.
+**Status:** Plan signed off 2026-05-15; all 33 tracked Issues closed. Milestone awaits closure in GitHub.
 
-**Type:** Workstream. Concurrent with product cups; expected to span Star and likely Shell.
+**Type:** Workstream. Ran concurrent with product cups; spanned Star.
 
-**Goal.** Bring the backend into conformance with the standards in `coding-standards/` and execute the sequenced PR list in [`compliance-plan.md`](./compliance-plan.md). Code hygiene, type-driven design, infrastructure (graceful shutdown, Tower middleware, tracing instrumentation), and documentation polish — all the work that supports product cups but doesn't itself ship user-facing functionality.
+**Goal.** Brought the backend into conformance with the standards in `coding-standards/` and executed the sequenced PR list in [`designs/archive/compliance-plan.md`](./designs/archive/compliance-plan.md). Code hygiene, type-driven design, infrastructure (graceful shutdown, Tower middleware, tracing instrumentation), and documentation polish — all the work that supported product cups but didn't itself ship user-facing functionality.
 
-**Scope.** The full sequenced list lives in `compliance-plan.md`. Already-merged Quality Pass work (PR-A1 / A2 / B1 / B2 / B3 / C1 / C2 / E3 / H1+ / X1 / X2) plus the remaining streams (D, F, the rest of G, I). Each chunk is a tracked Issue under this milestone.
+**Scope.** The full sequenced list lives in `designs/archive/compliance-plan.md` (archived 2026-05-15). All numbered streams (A–J) and the lazy lint-cleanup stream H1+ are signed off.
 
-**Deferred.** Work whose scope is naturally part of a product cup stays in that cup (e.g., the `users.email` pre-check that lands with whatever profile-update endpoint introduces a real email value — that's Star or Banana, not Hardening). Hardening is for cross-cutting compliance work, not feature-adjacent code hygiene.
+**Deferred.** Work whose scope was naturally part of a product cup stayed in that cup (e.g., `users.email` pre-check, which lands with whatever profile-update endpoint introduces a real email value).
 
-**Success criteria.** `compliance-plan.md` reaches all-signed-off; the standards docs in `coding-standards/` describe the code as it actually is; the backend's structural hygiene supports the next product cup without surprise.
+**Success criteria.** `compliance-plan.md` reached all-signed-off; the standards docs in `coding-standards/` describe the code as it actually is; the backend's structural hygiene supports the next product cup without surprise. All met.
 
 [Milestone Hardening: Backend compliance plan](https://github.com/brendanbyrne/beerio-kart/milestone/8)
 

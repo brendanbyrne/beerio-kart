@@ -2,7 +2,7 @@
 //! `backend/src/entities/` can load from a freshly-migrated database.
 //!
 //! Implements PR-X2 / § 7 of
-//! `docs/designs/2026-05-02-entity-codegen-strategy.md`. Now that entities
+//! `docs/designs/archive/2026-05-02-entity-codegen-strategy.md`. Now that entities
 //! are committed source (per `coding-standards/seaorm.md` § 6), codegen no
 //! longer acts as an implicit drift-checker between migration and entity.
 //! This test replaces that signal with a single CI-time guarantee: for every

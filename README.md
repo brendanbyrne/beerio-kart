@@ -95,7 +95,7 @@ The shape:
 - **[`docs/user-workflows.md`](./docs/user-workflows.md)** — End-user flows (registration → racing → stats → admin) and screen-by-screen UI breakdown.
 - **[`docs/roadmap.md`](./docs/roadmap.md)** — Cup-by-cup narrative of where the project is going (Mushroom, Flower, Star, Special, ...).
 - **[`docs/project-workflow.md`](./docs/project-workflow.md)** — Operational guide: Issue lifecycle, milestone conventions, PR conventions, triage, multi-assistant coordination.
-- **[`docs/compliance-plan.md`](./docs/compliance-plan.md)** — Sequenced PRs to bring the existing code into compliance with the coding standards.
+- **[`docs/designs/archive/compliance-plan.md`](./docs/designs/archive/compliance-plan.md)** — Archived. Sequenced PRs that brought the existing code into compliance with the coding standards; all signed off 2026-05-15.
 - **[`docs/decisions/`](./docs/decisions)** — Architecture Decision Records in MADR format. Searchable index in [`docs/decisions/README.md`](./docs/decisions/README.md).
 - **[`docs/designs/`](./docs/designs)** — Design records: durable narratives of design sessions that produced one or more ADRs.
 - **[`docs/coding-standards/`](./docs/coding-standards)** — Backend coding standards split by area: general Rust, SeaORM, Tokio.

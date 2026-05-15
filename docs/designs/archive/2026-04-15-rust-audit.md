@@ -1,5 +1,7 @@
 # Rust Backend Code Audit
 
+> **Status: complete.** Archived 2026-05-15. Audit findings were implemented via the backend compliance plan (see [`compliance-plan.md`](./compliance-plan.md) in this directory). Retained for historical reference; live conventions live in [`../../coding-standards/`](../../coding-standards/).
+
 Date: 2026-04-15
 Auditor: Cowork
 Scope: `backend/src/` excluding generated `entities/` and migrations
@@ -139,7 +141,7 @@ Examples where the HTTP status feels off:
 
 Re-classify the above under this rule. "Session closed" errors become 409.
 
-**Divergence noted (2026-05-09):** `leave_session` kept `BadRequest` for "Not currently in this session" rather than re-classifying to `Conflict` or `NotFound`. Reasoning is captured inline at [`backend/src/services/sessions.rs:859-863`](../../backend/src/services/sessions.rs#L859-L863): `require_active_participant` returns `Forbidden` (an authorization guard), but trying to leave a session you aren't in is bad input from the client (wrong session named) rather than a state clash on the server. `Conflict` would imply "valid input but clashes with server state," which doesn't fit. `NotFound` would also be ambiguous — the session resource exists; only the participation doesn't. The other call sites in the list above were re-classified per the rule.
+**Divergence noted (2026-05-09):** `leave_session` kept `BadRequest` for "Not currently in this session" rather than re-classifying to `Conflict` or `NotFound`. Reasoning is captured inline at [`backend/src/services/sessions.rs:859-863`](../../../backend/src/services/sessions.rs#L859-L863): `require_active_participant` returns `Forbidden` (an authorization guard), but trying to leave a session you aren't in is bad input from the client (wrong session named) rather than a state clash on the server. `Conflict` would imply "valid input but clashes with server state," which doesn't fit. `NotFound` would also be ambiguous — the session resource exists; only the participation doesn't. The other call sites in the list above were re-classified per the rule.
 
 - [x] Approved
 - [ ] Needs discussion
@@ -550,7 +552,7 @@ With `Deref<Target=str>` or `AsRef<str>` for ergonomics.
 
 **Trade-off:** Touches every service function signature. Big diff, modest practical benefit for a small codebase. Worth it if you're worried about ID confusion; skip if you're not.
 
-**Adoption status (2026-05-09):** Adopted project-wide for the four ID kinds — `UserId`, `SessionId`, `RunId`, `SessionRaceId`. Newtypes live in [`backend/src/domain/ids.rs`](../../backend/src/domain/ids.rs), re-exported from `crate::domain`. Service and middleware function signatures take and return the newtypes; route handlers wrap `Path<String>` extractors at the boundary. Request body types kept as `String` (untrusted client input) — services wrap on entry. Response DTOs use the newtypes directly; `serde(transparent)` keeps wire format identical. SeaORM call sites work without `.as_str()` because `domain/ids.rs` provides `From<&Self> for sea_orm::Value` and `From<Self> for String` per newtype. Per Issue [#82](https://github.com/brendanbyrne/beerio-kart/issues/82).
+**Adoption status (2026-05-09):** Adopted project-wide for the four ID kinds — `UserId`, `SessionId`, `RunId`, `SessionRaceId`. Newtypes live in [`backend/src/domain/ids.rs`](../../../backend/src/domain/ids.rs), re-exported from `crate::domain`. Service and middleware function signatures take and return the newtypes; route handlers wrap `Path<String>` extractors at the boundary. Request body types kept as `String` (untrusted client input) — services wrap on entry. Response DTOs use the newtypes directly; `serde(transparent)` keeps wire format identical. SeaORM call sites work without `.as_str()` because `domain/ids.rs` provides `From<&Self> for sea_orm::Value` and `From<Self> for String` per newtype. Per Issue [#82](https://github.com/brendanbyrne/beerio-kart/issues/82).
 
 - [x] Approved
 - [ ] Needs discussion
@@ -682,6 +684,6 @@ If most of this is approved, I'd suggest splitting into three PRs for digestibil
 ## Document history
 
 - 2026-05-05 — Audit content (authored 2026-04-15) migrated into `docs/designs/` as part of PR 1 (docs restructure foundation, commit `31f90bd`).
-- 2026-05-09 — Added §1.5 "Divergence noted" subsection recording that `leave_session::BadRequest` is a deliberate departure from the rule, with a cross-reference to the inline rationale at [`backend/src/services/sessions.rs:859-863`](../../backend/src/services/sessions.rs#L859-L863). Per Issue [#81](https://github.com/brendanbyrne/beerio-kart/issues/81).
+- 2026-05-09 — Added §1.5 "Divergence noted" subsection recording that `leave_session::BadRequest` is a deliberate departure from the rule, with a cross-reference to the inline rationale at [`backend/src/services/sessions.rs:859-863`](../../../backend/src/services/sessions.rs#L859-L863). Per Issue [#81](https://github.com/brendanbyrne/beerio-kart/issues/81).
 - 2026-05-09 — Recorded §4.2 adoption status: the four ID newtypes (`UserId`, `SessionId`, `RunId`, `SessionRaceId`) are now plumbed through service signatures, middleware (`AuthUser` / `AdminUser`), route adapters, response DTOs, and test helpers. Per Issue [#82](https://github.com/brendanbyrne/beerio-kart/issues/82).
 - 2026-05-09 — Recorded §3.2 adoption status: `create_run` decomposed into a 4-line orchestrator over `validate_run_request` and `insert_run`. Per Issue [#83](https://github.com/brendanbyrne/beerio-kart/issues/83).

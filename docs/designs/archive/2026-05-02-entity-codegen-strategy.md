@@ -1,5 +1,7 @@
 # SeaORM entity codegen strategy — design record (2026-05-02)
 
+> **Status: complete.** Archived 2026-05-15. Implemented via PR-X1 and PR-X2 (see [`compliance-plan.md`](./compliance-plan.md) Stream J). The hand-written-entities convention is live in [`../../coding-standards/seaorm.md`](../../coding-standards/seaorm.md) § 6.
+
 ## 1. Context
 
 PR-E3 (`phase-e/drop-sessions-created-by`) surfaced a workflow bug. After running `just entities` to regenerate `backend/src/entities/sessions.rs`, four other entity files came back dirty in two distinct ways:
@@ -24,7 +26,7 @@ The bug originates upstream in `sea-schema`'s SQLite introspector. SQLite's `PRA
 
 This is industry-wide on SQLite, not specific to sea-schema. SQLAlchemy has the identical bug ([sqlalchemy #8804](https://github.com/sqlalchemy/sqlalchemy/issues/8804)). PostgreSQL handles this correctly via `pg_index.indpred` ([Postgres docs](https://www.postgresql.org/docs/current/catalog-pg-index.html)).
 
-There is an existing upstream issue tracking the propagation of this through to entity codegen: [`SeaQL/sea-orm#2666`](https://github.com/SeaQL/sea-orm/issues/2666) ("Entity generation misinterprets partial unique index as fully unique"). It was closed in November 2025 with sea-schema PR #150, which added an `is_partial` flag for **PostgreSQL** discovery only. **The fix does not parse the predicate, does not propagate to entity codegen output, and does not touch SQLite.** So while the issue is closed, our specific bug remains. Documented in detail in [`docs/research/seaorm_2_0_migration.md`](../../docs/research/seaorm_2_0_migration.md).
+There is an existing upstream issue tracking the propagation of this through to entity codegen: [`SeaQL/sea-orm#2666`](https://github.com/SeaQL/sea-orm/issues/2666) ("Entity generation misinterprets partial unique index as fully unique"). It was closed in November 2025 with sea-schema PR #150, which added an `is_partial` flag for **PostgreSQL** discovery only. **The fix does not parse the predicate, does not propagate to entity codegen output, and does not touch SQLite.** So while the issue is closed, our specific bug remains. Documented in detail in [`docs/research/seaorm_2_0_migration.md`](../../research/seaorm_2_0_migration.md).
 
 - [x] Approved — verification
 
@@ -48,7 +50,7 @@ Most modern "schema as code" implementations don't round-trip through a database
 
 ## 4. SeaORM 2.0 entity-first investigation
 
-We considered whether SeaORM 2.0's entity-first workflow would solve the partial-index problem. A separate research session investigated this against primary sources; the full evaluation is at **[`docs/research/seaorm_2_0_migration.md`](../../docs/research/seaorm_2_0_migration.md)**. Summary of findings:
+We considered whether SeaORM 2.0's entity-first workflow would solve the partial-index problem. A separate research session investigated this against primary sources; the full evaluation is at **[`docs/research/seaorm_2_0_migration.md`](../../research/seaorm_2_0_migration.md)**. Summary of findings:
 
 **SeaORM 2.0 is not stable yet.** As of 2026-05-03 (verified directly via the crates.io API):
 
@@ -195,6 +197,6 @@ If none of those triggers fire, hand-written entities stay in place. Today's sch
 
 When all ten checkboxes above are checked, the design is approved and Claude Code can proceed with PR-X1 / PR-X2. The PR-E3 Group (2) cleanup happens regardless, on the existing branch.
 
-Reference document: [`docs/research/seaorm_2_0_migration.md`](../../docs/research/seaorm_2_0_migration.md) — full primary-source evaluation.
+Reference document: [`docs/research/seaorm_2_0_migration.md`](../../research/seaorm_2_0_migration.md) — full primary-source evaluation.
 
 - [x] **All sections approved — clear to implement**
