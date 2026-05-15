@@ -140,7 +140,7 @@ pub async fn register(
     .await?;
 
     if existing.is_some() {
-        return Err(Error::conflict("Username already taken"));
+        return Err(Error::username_taken("Username already taken"));
     }
 
     // Hash password (offloaded to the blocking pool, capped by argon2_limit)
@@ -229,7 +229,7 @@ pub async fn login(
         })?;
         let _ = auth_service::verify_password(&state.argon2_limit, "dummy".to_string(), dummy_hash)
             .await;
-        return Err(Error::Unauthorized("Invalid username or password".into()));
+        return Err(Error::invalid_credentials());
     };
     let user_id = UserId::from_db(&user.id)?;
     tracing::Span::current().record("user_id", tracing::field::display(&user_id));
@@ -241,7 +241,7 @@ pub async fn login(
     let password_ok =
         auth_service::verify_password(&state.argon2_limit, body.password, stored_hash).await?;
     if !password_ok {
-        return Err(Error::Unauthorized("Invalid username or password".into()));
+        return Err(Error::invalid_credentials());
     }
 
     // Stored username is validated at the boundary for the same reason
@@ -290,12 +290,20 @@ pub async fn refresh(
 ) -> Result<impl IntoResponse, Error> {
     let cookie_value = match extract_refresh_cookie(&headers) {
         Some(v) if !v.is_empty() => v,
-        _ => return Err(Error::Unauthorized("Missing refresh token".into())),
+        _ => return Err(Error::token_invalid("Missing refresh token")),
     };
 
-    // Validate the JWT signature and expiry
-    let claims = auth_service::validate_refresh_token(&cookie_value, &state.config)
-        .map_err(|_| Error::Unauthorized("Invalid or expired refresh token".into()))?;
+    // Validate the JWT signature and expiry. Discriminate expired-vs-invalid
+    // via the jsonwebtoken error kind so the frontend can react to
+    // `token_expired` distinctly from `token_invalid` (the expired-refresh
+    // path is a re-login prompt; other failures are revocation or tampering).
+    let claims =
+        auth_service::validate_refresh_token(&cookie_value, &state.config).map_err(|e| match e
+            .kind()
+        {
+            jsonwebtoken::errors::ErrorKind::ExpiredSignature => Error::token_expired(),
+            _ => Error::token_invalid("Invalid refresh token"),
+        })?;
     // Record `user_id` here — JWT signature has been verified, so `claims.sub`
     // is trustworthy. Earlier failure modes (wrong token type, user not found,
     // version mismatch) all surface with `user_id` populated, which is exactly
@@ -304,19 +312,19 @@ pub async fn refresh(
 
     // Reject if token_type is not "refresh"
     if claims.token_type != "refresh" {
-        return Err(Error::Unauthorized("Invalid token type".into()));
+        return Err(Error::token_invalid("Invalid token type"));
     }
 
     // Look up user and check refresh_token_version
     let user = db_query(users::Entity::find_by_id(&claims.sub).one(&state.db))
         .await?
-        .ok_or_else(|| Error::Unauthorized("User not found".into()))?;
+        .ok_or_else(|| Error::token_invalid("User not found"))?;
     let user_id = UserId::from_db(&user.id)?;
     let username = Username::from_db(user.username, "users.username")?;
 
     // Version mismatch means the token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
-        return Err(Error::Unauthorized("Refresh token has been revoked".into()));
+        return Err(Error::token_invalid("Refresh token has been revoked"));
     }
 
     // Issue new tokens
@@ -403,7 +411,7 @@ pub async fn change_password(
         auth_service::verify_password(&state.argon2_limit, body.current_password, stored_hash)
             .await?;
     if !current_ok {
-        return Err(Error::Unauthorized("Current password is incorrect".into()));
+        return Err(Error::invalid_credentials());
     }
 
     // Hash new password

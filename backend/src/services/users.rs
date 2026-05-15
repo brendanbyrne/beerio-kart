@@ -99,9 +99,7 @@ pub async fn update_profile(
     req: UpdateProfileRequest,
 ) -> Result<UserDetailProfile, Error> {
     if actor_user_id != target_user_id {
-        return Err(Error::Forbidden(
-            "You can only update your own profile".to_string(),
-        ));
+        return Err(Error::forbidden("You can only update your own profile"));
     }
 
     let user = db_query(users::Entity::find_by_id(target_user_id).one(db))
@@ -219,7 +217,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(Error::Forbidden(_))));
+        assert!(matches!(result, Err(Error::Forbidden { .. })));
     }
 
     #[tokio::test]

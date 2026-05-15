@@ -39,18 +39,26 @@ impl FromRequestParts<crate::AppState> for User {
             .headers
             .get("Authorization")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| Error::Unauthorized("Missing Authorization header".to_string()))?;
+            .ok_or_else(|| Error::token_invalid("Missing Authorization header"))?;
 
-        let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
-            Error::Unauthorized("Invalid Authorization header format".to_string())
-        })?;
+        let token = auth_header
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| Error::token_invalid("Invalid Authorization header format"))?;
 
-        let claims = crate::services::auth::validate_access_token(token, &state.config)
-            .map_err(|_| Error::Unauthorized("Invalid or expired token".to_string()))?;
+        // Discriminate expired-vs-invalid via the jsonwebtoken error kind so
+        // the frontend can react to `token_expired` by refreshing without
+        // re-prompting for credentials. Any other failure mode (signature
+        // mismatch, malformed JWT, wrong algorithm) is `token_invalid`.
+        let claims = crate::services::auth::validate_access_token(token, &state.config).map_err(
+            |e| match e.kind() {
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => Error::token_expired(),
+                _ => Error::token_invalid("Invalid token"),
+            },
+        )?;
 
         // Reject refresh tokens used as access tokens
         if claims.token_type != "access" {
-            return Err(Error::Unauthorized("Invalid token type".to_string()));
+            return Err(Error::token_invalid("Invalid token type"));
         }
 
         // `sub` is mint-controlled by `create_access_token`, which always
@@ -63,7 +71,7 @@ impl FromRequestParts<crate::AppState> for User {
         let user_id: UserId = claims
             .sub
             .parse()
-            .map_err(|_| Error::Unauthorized("Invalid user id in token".to_string()))?;
+            .map_err(|_| Error::token_invalid("Invalid user id in token"))?;
 
         Ok(Self {
             user_id,
@@ -100,10 +108,10 @@ impl FromRequestParts<crate::AppState> for AdminUser {
             .config
             .admin_user_id
             .as_ref()
-            .ok_or_else(|| Error::Forbidden("Admin access not configured".to_string()))?;
+            .ok_or_else(Error::admin_required)?;
 
         if auth_user.user_id != *admin_id {
-            return Err(Error::Forbidden("Admin access required".to_string()));
+            return Err(Error::admin_required());
         }
 
         Ok(Self {

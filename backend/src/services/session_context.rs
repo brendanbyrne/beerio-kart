@@ -63,7 +63,7 @@ impl SessionContext {
     /// Returns `Forbidden` if `user_id` is not the host.
     pub fn require_host(&self, user_id: &UserId) -> Result<(), Error> {
         if self.host_id != *user_id {
-            return Err(Error::Forbidden("Only the host can do that".into()));
+            return Err(Error::forbidden("Only the host can do that"));
         }
         Ok(())
     }
@@ -169,7 +169,7 @@ mod tests {
         let ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
 
         let err = ctx.require_host(&other).unwrap_err();
-        assert!(matches!(err, Error::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden { .. }));
     }
 
     #[tokio::test]
@@ -187,7 +187,7 @@ mod tests {
         // Forbidden path: another user isn't.
         let outsider = create_user(&db, "outsider").await;
         let err = ctx.require_participant(&db, &outsider).await.unwrap_err();
-        assert!(matches!(err, Error::Forbidden(_)));
+        assert!(matches!(err, Error::Forbidden { .. }));
     }
 
     #[tokio::test]
