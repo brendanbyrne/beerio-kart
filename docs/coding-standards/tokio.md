@@ -363,15 +363,25 @@ The 5-minute "close stale sessions" task is the canonical example for this proje
 
 - **Rule:** Wrap every external call (DB, HTTP) in `tokio::time::timeout`. Service-layer functions don't always run in HTTP-request context (background tasks, future CLI tools), so per-call timeouts give site-specific budgets that Tower middleware can't replicate. Defense in depth: pool acquire timeout + per-call timeout + request-level timeout, all three.
   - **Why:** Without a timeout, a stuck call holds a connection, a permit, and the calling task forever. SeaORM's transaction methods will wait indefinitely if SQLite is locked. Per-call also lets auth verification have a 1s ceiling where a stats aggregation gets 5s — Tower's `TimeoutLayer` is uniform.
+  - **Helper:** `backend/src/timeout.rs` exposes two function wrappers backed by `tokio::time::timeout`:
+    - `db_query(fut).await?` — 2 s budget. Use around every single-statement read or write (`Entity::find().one()`, `Entity::find().all()`, `ActiveModel::insert()`, `update()`, `delete()`, `update_many().exec()`). Per-statement budget applies inside transactions too.
+    - `db_txn(fut).await?` — 5 s budget. Use around `db.begin()`, `txn.commit()`, and `txn.rollback()` — i.e. the transaction-frame statements themselves. The body of the transaction stays per-statement-budgeted via `db_query` on each call inside.
+  - **Why function wrappers over a `db_timeout!` macro:** the macro form was the original suggestion (compliance-plan PR-F4, [Issue #123](https://github.com/brendanbyrne/beerio-kart/issues/123)). Functions ended up cleaner because tracing spans from PR-F5 already supply call-site context, so there's no need for `stringify!` to capture the expression. The function form composes with `?` naturally and doesn't fight `rustfmt` on multi-line builder chains.
+  - **Elapsed → 504:** an elapsed budget produces `Error::Timeout { budget }`, which `IntoResponse` maps to `504 Gateway Timeout` with a generic `"Request timed out"` body. The budget is logged via `tracing::warn!(budget_ms = …)` for operators, never returned to clients. Distinct from `Error::Internal` (500) so timeout rates can be charted independently of generic 500-class failures. SQLite is the "upstream" in the 504 sense; the proxy-flavoured status code is semantically apt even though the database is in-process.
   - **Example:**
     ```rust
-    let row = tokio::time::timeout(
-        Duration::from_secs(2),
-        users::Entity::find_by_id(id.to_string()).one(db),
-    ).await
-        .map_err(|_| AppError::Internal("db timeout".into()))??;
+    use crate::timeout::{db_query, db_txn};
+
+    // Single-statement read.
+    let row = db_query(users::Entity::find_by_id(id).one(db)).await?;
+
+    // Transaction with two writes inside — frame uses db_txn,
+    // each inner statement still uses db_query.
+    let txn = db_txn(db.begin()).await?;
+    db_query(users::ActiveModel { /* … */ }.insert(&txn)).await?;
+    db_query(active_session.update(&txn)).await?;
+    db_txn(txn.commit()).await?;
     ```
-  - **Note on boilerplate:** If `tokio::time::timeout(Duration::from_secs(2), ...)` becomes pervasive, introduce a thin helper macro `db_timeout!` or function wrapper to keep call sites tidy without losing the per-call budget knob.
 
 - **Rule:** Cap concurrent expensive operations with a `tokio::sync::Semaphore`.
   - **Why:** Argon2 hashing on `spawn_blocking` is bounded only by the blocking pool size (default 512). Login storms can exhaust that for unrelated traffic. Front login with a semaphore (e.g., 16 concurrent hashes).
@@ -482,3 +492,4 @@ Anyone modifying async code in this repo should have read at least the first thr
 - 2026-05-02 — Split into `docs/coding-standards/tokio.md`. Added `'static` discussion + scoped-task-trilemma reference in § 9. Held § 12 timeout rule strict (per project's "no corner cutting" stance). Took position on async traits in § 11 (native + trait-variant for spawn).
 - 2026-05-04 — § 12 semaphore example: switched from `let permit = …; drop(permit);` to the idiomatic `let _permit = …;` RAII binding, and added a pitfall callout for the bare-`_` foot-gun. Surfaced during PR #27 review (back-and-forth on which form to use); the explicit-drop form was the anti-RAII pattern. Standard now matches what idiomatic Rust would write.
 - 2026-05-12 — § 12 request-level limits rule: corrected the timeout layer from `tower::timeout::TimeoutLayer` to `tower_http::timeout::TimeoutLayer` (constructed via `TimeoutLayer::with_status_code`). The tower version's `BoxError` doesn't compose with `axum::Router::layer`, which requires `Error: Into<Infallible>`. Added a "Why" paragraph explaining the bound + the cleaner 408-response behavior of the tower-http sibling. Surfaced while implementing PR-F3 ([#132](https://github.com/brendanbyrne/beerio-kart/issues/132)) — the original rule didn't compile.
+- 2026-05-14 — § 12 per-call-timeout rule: replaced the inline `tokio::time::timeout` example (which used the stale `AppError::Internal("db timeout".into())` shape, doubly out of date after PR-C1/C2's `Error` rename and anyhow reshape) with the `timeout::{db_query, db_txn}` helpers added in PR-F4 ([#123](https://github.com/brendanbyrne/beerio-kart/issues/123)). New subsections cover the helper budgets (2 s query, 5 s txn-frame), the function-vs-macro rationale, and the elapsed → `Error::Timeout` → 504 mapping with the SQLite-as-upstream caveat. The macro alternative noted in the prior "Note on boilerplate" was tried-and-discarded in PR-F4 — functions composed better with `?` and didn't fight `rustfmt`.
