@@ -4,13 +4,27 @@
 //! consumed by [`super::detail`] aggregation (or vice versa). Living at a
 //! layer below both submodules breaks what would otherwise be a
 //! `detail` ↔ `races` cycle on [`SessionRaceInfo`] / [`get_pending_races`],
-//! and a `races` → `lifecycle` cycle on [`REJOIN_GRACE_MINUTES`].
+//! and a `races` ↔ `lifecycle` cycle on [`RACE_WINDOW_HOURS`].
 //!
 //! [`get_pending_races`]: super::races::get_pending_races
 
 use chrono::{DateTime, Utc};
 
 use crate::domain::{ImagePath, SessionRaceId, UserId, Username};
+
+/// The single timeout that anchors session lifetime (ADR-0035).
+///
+/// A `session_races` row is submittable for this many hours from its
+/// `created_at`; after that the race is expired and drops out of every
+/// pending list. The same window doubles as the session bootstrap grace:
+/// a brand-new session with no race chosen yet is considered alive for
+/// this long from its own `created_at`.
+///
+/// Consumed by [`super::lifecycle`] (the stale-session sweeper and the two
+/// "are you in a session" liveness predicates) and [`super::races`]
+/// (`get_pending_races`). Defined here so neither submodule depends on the
+/// other for it.
+pub const RACE_WINDOW_HOURS: i64 = 1;
 
 /// Submission info for a single participant in a race.
 #[derive(serde::Serialize, Clone)]
@@ -45,16 +59,3 @@ pub struct SessionRaceInfo {
     /// Per-participant submissions; empty until runs come in.
     pub submissions: Vec<RaceSubmission>,
 }
-
-/// Grace window for "rejoin without losing pre-leave pending races."
-///
-/// Within this window of `left_at`, rejoining preserves `joined_at` (and
-/// therefore preserves access to pre-leave pending races, per the §3 grace
-/// semantics). After this window, `joined_at` is reset to `NOW()`, forfeiting
-/// any pre-gap pending records.
-///
-/// Defined here (not in [`super::lifecycle`], where it semantically
-/// originates) because both [`super::lifecycle::join_session`] and the
-/// pending-races query in [`super::races`] consume it; living at the shared
-/// layer keeps the submodule dependency graph acyclic.
-pub const REJOIN_GRACE_MINUTES: i64 = 5;

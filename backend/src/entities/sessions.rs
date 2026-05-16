@@ -13,7 +13,6 @@ pub struct Model {
     pub least_played_drink_category: Option<DrinkCategory>,
     pub status: SessionStatus,
     pub created_at: DateTime,
-    pub last_activity_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

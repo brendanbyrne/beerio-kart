@@ -263,15 +263,18 @@ impl MigrationTrait for Migration {
                     ruleset TEXT NOT NULL,
                     least_played_drink_category TEXT,
                     status TEXT NOT NULL,
-                    created_at datetime_text NOT NULL,
-                    last_activity_at datetime_text NOT NULL
+                    created_at datetime_text NOT NULL
                 )",
         )
         .await?;
 
+        // Supports the race-derived stale-session sweeper (ADR-0035):
+        // `close_stale_sessions` filters `status = 'active' AND created_at <
+        // cutoff`. The session has no maintained activity column anymore —
+        // liveness is derived from `session_races.created_at`.
         conn.execute_unprepared(
-            "CREATE INDEX idx_sessions_status_last_activity
-                 ON sessions(status, last_activity_at)",
+            "CREATE INDEX idx_sessions_status_created_at
+                 ON sessions(status, created_at)",
         )
         .await?;
 

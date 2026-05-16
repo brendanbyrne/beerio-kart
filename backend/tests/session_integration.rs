@@ -276,7 +276,7 @@ async fn test_full_session_lifecycle() {
 }
 
 #[tokio::test]
-async fn test_list_sessions_returns_only_active_sorted_by_last_activity() {
+async fn test_list_sessions_returns_only_active() {
     let (server, _db) = setup_test_app().await;
     let (token, _) = register_and_get_token(&server, "host").await;
 
@@ -484,7 +484,8 @@ async fn test_stale_session_cleanup() {
     let session: Value = res.json();
     let session_id = session["id"].as_str().unwrap().to_string();
 
-    // Manually set last_activity_at to 2 hours ago
+    // Backdate created_at to 2 hours ago — a session with no races that was
+    // created over an hour ago is stale (ADR-0035 race-derived sweeper).
     let two_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(2)).naive_utc();
     let session_model = sessions::Entity::find_by_id(&session_id)
         .one(&db)
@@ -492,7 +493,7 @@ async fn test_stale_session_cleanup() {
         .unwrap()
         .unwrap();
     let mut active: sessions::ActiveModel = session_model.into();
-    active.last_activity_at = Set(two_hours_ago);
+    active.created_at = Set(two_hours_ago);
     active.update(&db).await.unwrap();
 
     // Run cleanup

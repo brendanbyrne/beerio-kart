@@ -1,11 +1,8 @@
 //! `ActiveModelBehavior` for [`super::sessions`].
 //!
-//! Stamps `created_at` on insert. `last_activity_at` is *not* touched here —
-//! it's an application-managed activity timestamp, advanced explicitly by
-//! `services::helpers::touch_session` when something happens in the session
-//! (a join, a race transition, etc.). Treating it as a generic `updated_at`
-//! would advance it on every write, which would defeat the stale-session
-//! cleanup loop. See `docs/coding-standards/seaorm.md` § 1.
+//! Stamps `created_at` on insert. The session carries no maintained activity
+//! column — liveness is derived from `session_races.created_at` (ADR-0035),
+//! so there is nothing for `before_save` to advance on update.
 
 use async_trait::async_trait;
 use chrono::Utc;

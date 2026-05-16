@@ -290,10 +290,11 @@ async fn main() -> anyhow::Result<()> {
             ServeDir::new(&static_dir).fallback(ServeFile::new(format!("{static_dir}/index.html"))),
         );
 
-    // Spawn background task to close stale sessions (no activity for 1 hour).
-    // Runs every 5 minutes. PR-F2 (#58) extracts the closure body into
-    // `services::sessions::session_cleanup_loop`; the `shutdown::supervised`
-    // wrapping stays, the body moves.
+    // Spawn background task to close stale sessions (race-derived liveness,
+    // ADR-0035). Runs every 15 minutes — relaxed from the legacy 5-minute
+    // cadence because every user-facing read path now derives liveness from
+    // race timestamps directly, so the sweep is purely DB hygiene and no
+    // read depends on it having run recently.
     //
     // Shutdown-safe (tokio.md § 13 final rule): `close_stale_sessions` runs
     // SELECT + two UPDATEs inside one transaction that only commits at the
@@ -303,7 +304,7 @@ async fn main() -> anyhow::Result<()> {
     tracker.spawn(shutdown::supervised("session cleanup task", {
         let cancel = cancel.clone();
         async move {
-            let mut tick = tokio::time::interval(Duration::from_secs(300));
+            let mut tick = tokio::time::interval(Duration::from_secs(900));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 tokio::select! {

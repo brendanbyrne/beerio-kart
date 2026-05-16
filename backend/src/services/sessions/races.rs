@@ -15,7 +15,7 @@ use sea_orm::{
     QueryOrder, Set, TransactionTrait,
 };
 
-use super::types::{REJOIN_GRACE_MINUTES, SessionRaceInfo};
+use super::types::{RACE_WINDOW_HOURS, SessionRaceInfo};
 use crate::{
     domain::{ImagePath, SessionId, SessionRaceId, UserId},
     entities::{cups, runs, session_race_participations, session_races},
@@ -39,28 +39,28 @@ struct PendingRaceRow {
 /// Return the requesting user's pending races within a session, oldest first.
 ///
 /// A race is **pending** for user `U` iff all of the following hold (per
-/// docs/design.md "Pending Race Tracking"):
+/// docs/data-model.md "Pending Race Tracking", ADR-0035):
 ///
 /// 1. A `session_race_participations` row exists for `(SR.id, U.id)` —
 ///    proves `U` was present when `SR` was created.
 /// 2. `skipped_at IS NULL` on that row — `U` hasn't explicitly forfeited.
 /// 3. No `runs` row exists for `(SR.id, U.id)` — `U` hasn't submitted.
-/// 4. `U` is currently within grace — `session_participants.left_at IS NULL`
-///    OR `NOW() - left_at <= REJOIN_GRACE_MINUTES`.
-/// 5. `SR.created_at >= session_participants.joined_at` — excludes pre-gap
-///    pending after a long-gap rejoin reset `joined_at`.
-/// 6. `sessions.status = 'active'` — closed sessions accept no further
+/// 4. `SR.created_at >= NOW() - RACE_WINDOW_HOURS` — the race is still inside
+///    its 1-hour submission window. Expired races drop out for everyone.
+/// 5. `sessions.status = 'active'` — closed sessions accept no further
 ///    submissions, so any "pending" entries on them are phantom (the user
-///    has no API path to resolve them). Required in addition to the grace
-///    clause: a session can close while users are still inside their
-///    5-minute grace window (e.g. via `close_stale_sessions`, or as part of
-///    the host-leaves-last cascade).
+///    has no API path to resolve them).
 ///
-/// Returns empty if the user is not a participant, all races are submitted/
-/// skipped, the session is closed, or the user is past the grace window.
+/// Note this no longer consults `session_participants` at all: a user's
+/// `left_at` is irrelevant to pending access (ADR-0035). A flaked-out user
+/// keeps their pending races until each race expires on its own clock; they
+/// rejoin to act on them. The race window is the single timeout.
 ///
-/// **Lazy check note:** The grace-period predicate is computed at query time
-/// from `NOW()` and stored timestamps. No background task touches
+/// Returns empty if the user is not a participant, all races are submitted /
+/// skipped / expired, or the session is closed.
+///
+/// **Lazy check note:** The expiry predicate is computed at query time from
+/// `NOW()` and stored timestamps. No background task touches
 /// `session_race_participations` rows — they remain in the DB for history
 /// regardless of accessibility.
 ///
@@ -81,8 +81,7 @@ pub async fn get_pending_races(
     session_id: &SessionId,
     user_id: &UserId,
 ) -> Result<Vec<SessionRaceInfo>, Error> {
-    let now = Utc::now().naive_utc();
-    let grace_cutoff = now - chrono::Duration::minutes(REJOIN_GRACE_MINUTES);
+    let window_start = (Utc::now() - chrono::Duration::hours(RACE_WINDOW_HOURS)).naive_utc();
 
     let rows = db_query(
         PendingRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
@@ -96,21 +95,18 @@ pub async fn get_pending_races(
         JOIN sessions s ON s.id = sr.session_id
         JOIN tracks t ON sr.track_id = t.id
         JOIN cups c ON t.cup_id = c.id
-        JOIN session_participants sp
-          ON sp.session_id = sr.session_id AND sp.user_id = srp.user_id
         WHERE sr.session_id = $1
           AND srp.user_id = $2
           AND s.status = 'active'
           AND srp.skipped_at IS NULL
-          AND sr.created_at >= sp.joined_at
-          AND (sp.left_at IS NULL OR sp.left_at >= $3)
+          AND sr.created_at >= $3
           AND NOT EXISTS (
               SELECT 1 FROM runs r
               WHERE r.session_race_id = sr.id AND r.user_id = srp.user_id
           )
         ORDER BY sr.race_number ASC
         "#,
-            [session_id.into(), user_id.into(), grace_cutoff.into()],
+            [session_id.into(), user_id.into(), window_start.into()],
         ))
         .all(db),
     )
@@ -159,9 +155,9 @@ pub async fn get_pending_races(
 ///   directions; see also the matching skip-then-submit guard in
 ///   `services::runs::create_run`).
 /// - `Forbidden` if the user is not currently an active participant of the
-///   session. A user who left (even within their grace window) must rejoin
-///   before they can act on pending races; otherwise the symmetry with
-///   `create_run` breaks (which also requires an active participant).
+///   session. A user who left must rejoin before they can act on pending
+///   races; otherwise the symmetry with `create_run` breaks (which also
+///   requires an active participant).
 ///
 /// # Errors
 ///
@@ -189,9 +185,9 @@ pub async fn skip_pending_race(
             other => other,
         })?;
     // Symmetry with `create_run`: the user must currently be in the session
-    // to act on pending races. Within-grace users (`left_at IS NOT NULL`)
-    // still see their pending races via `get_pending_races` clause 4, but
-    // they need to rejoin before they can submit or skip.
+    // to act on pending races. A user who left still sees their pending
+    // races (until each race expires), but must rejoin before they can
+    // submit or skip.
     helpers::require_active_participant(db, session_id, user_id).await?;
 
     // Verify the race belongs to this session. Looking up by ID first and
@@ -245,8 +241,6 @@ pub async fn skip_pending_race(
     let mut active: session_race_participations::ActiveModel = participation.into();
     active.skipped_at = Set(Some(now));
     db_query(active.update(&txn)).await?;
-
-    helpers::touch_session(&txn, session_id).await?;
 
     db_txn(txn.commit()).await?;
 
@@ -311,7 +305,6 @@ pub async fn next_track(
     .await?;
 
     helpers::insert_race_participations(&txn, session_id, &race_id).await?;
-    helpers::touch_session(&txn, session_id).await?;
 
     db_txn(txn.commit()).await?;
 
@@ -426,7 +419,6 @@ pub async fn skip_turn(
     .await?;
 
     helpers::insert_race_participations(&txn, session_id, &race_id).await?;
-    helpers::touch_session(&txn, session_id).await?;
 
     db_txn(txn.commit()).await?;
 
@@ -459,11 +451,10 @@ mod tests {
     use super::*;
     use crate::{
         domain::enums::SessionStatus,
-        entities::sessions,
-        services::sessions::{close_stale_sessions, create_session, join_session, leave_session},
+        services::sessions::{create_session, join_session, leave_session},
         test_helpers::{
-            backdate_participant, create_user, insert_participant, insert_race_participation,
-            insert_session, insert_session_race, seed_tracks_for_test, setup_db,
+            create_user, insert_participant, insert_race_participation, insert_session,
+            insert_session_race, seed_tracks_for_test, setup_db,
         },
     };
 
@@ -918,7 +909,7 @@ mod tests {
         assert_eq!(pending.len(), 5, "API returns all; UI applies the cap");
     }
 
-    // ── Grace period (PR 3D-1) ──────────────────────────────────────────
+    // ── Per-race expiry + session-status filter (ADR-0035) ───────────────
 
     #[tokio::test]
     async fn test_pending_accessible_when_currently_in_session() {
@@ -929,88 +920,101 @@ mod tests {
         next_track(&db, &session.id, &host_id).await.unwrap();
 
         let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
-        assert_eq!(pending.len(), 1, "left_at IS NULL → pending accessible");
+        assert_eq!(pending.len(), 1, "fresh race → pending accessible");
     }
 
     #[tokio::test]
-    async fn test_pending_accessible_when_within_grace() {
-        // Two participants so the session stays active after user_b leaves
-        // (host transfer keeps it open). This isolates the grace check from
-        // the session-status filter — we want to assert grace alone keeps
-        // pending accessible.
+    async fn test_pending_includes_race_within_window() {
+        // A race created well inside the 1-hour window is still pending.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
-        let user_b = create_user(&db, "b").await;
-        let session = create_session(&db, &host_id, "random").await.unwrap();
-        join_session(&db, &session.id, &user_b).await.unwrap();
-        next_track(&db, &session.id, &host_id).await.unwrap();
-        leave_session(&db, &session.id, &user_b).await.unwrap();
-
-        // Backdate user_b's left_at to 3 minutes ago — well inside the
-        // 5-minute window. Session is still active (host remained).
-        let three_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(3);
-        backdate_participant(&db, &session.id, &user_b, None, Some(three_min_ago)).await;
-
-        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
-        assert_eq!(
-            pending.len(),
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        let race_id = insert_session_race(
+            &db,
+            &session_id,
             1,
-            "within grace + active session → pending accessible"
-        );
+            1,
+            (Utc::now() - chrono::Duration::minutes(30)).naive_utc(),
+        )
+        .await;
+        insert_race_participation(&db, &race_id, &host_id, None).await;
+
+        let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
+        assert_eq!(pending.len(), 1, "race within the window stays pending");
     }
 
     #[tokio::test]
-    async fn test_pending_inaccessible_when_grace_expired() {
-        // Two participants so the session stays active — this isolates the
-        // grace check from the status filter, proving exclusion is from
-        // grace expiration alone.
+    async fn test_pending_excludes_expired_race() {
+        // A race created over an hour ago has expired — it drops out of the
+        // pending list even though the participation row is unresolved.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
-        let user_b = create_user(&db, "b").await;
-        let session = create_session(&db, &host_id, "random").await.unwrap();
-        join_session(&db, &session.id, &user_b).await.unwrap();
-        next_track(&db, &session.id, &host_id).await.unwrap();
-        leave_session(&db, &session.id, &user_b).await.unwrap();
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        let race_id = insert_session_race(
+            &db,
+            &session_id,
+            1,
+            1,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
+        insert_race_participation(&db, &race_id, &host_id, None).await;
 
-        // Backdate user_b's left_at to 6 minutes ago — past the 5-minute window.
-        let six_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(6);
-        backdate_participant(&db, &session.id, &user_b, None, Some(six_min_ago)).await;
+        let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
+        assert!(pending.is_empty(), "expired race drops from pending");
 
-        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
-        assert!(pending.is_empty(), "grace expired → no accessible pending");
-
-        // The row still exists in the DB (lazy check, no cleanup).
+        // The participation row itself stays for history (lazy check).
         let count = session_race_participations::Entity::find()
-            .filter(session_race_participations::Column::UserId.eq(user_b))
+            .filter(session_race_participations::Column::UserId.eq(host_id))
             .count(&db)
             .await
             .unwrap();
         assert_eq!(count, 1, "participation row remains for history");
     }
 
+    #[tokio::test]
+    async fn test_pending_unaffected_by_user_left_at() {
+        // A user who has left the session still sees their pending races
+        // (until each race expires) — `left_at` no longer gates pending
+        // access at all (ADR-0035). Two participants so the session stays
+        // active after user_b leaves.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user_b = create_user(&db, "b").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user_b).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        leave_session(&db, &session.id, &user_b).await.unwrap();
+
+        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "a left user still sees their unexpired pending race"
+        );
+    }
+
     /// Documents intent: no background timer or sweeper task touches
     /// `session_race_participations`. Pending accessibility is a pure read-time
-    /// derivation from `(session_race_participations, session_participants,
-    /// runs)` — see `get_pending_races`. Forfeited rows remain in the DB
-    /// indefinitely as historical state. If a future PR adds a sweeper, this
-    /// assertion (and the design rationale in docs/design.md "Pending Race
-    /// Tracking") needs to be revisited.
+    /// derivation from `(session_race_participations, session_races, runs)`
+    /// plus the per-race expiry clock — see `get_pending_races`. Resolved /
+    /// expired rows remain in the DB indefinitely as historical state.
     #[tokio::test]
     async fn test_lazy_check_assertion() {
         // No-op test by design — this comment IS the assertion.
     }
 
     #[tokio::test]
-    async fn test_pending_excludes_closed_session_even_within_grace() {
-        // Regression: `close_stale_sessions` (and the host-leaves-last
-        // cascade in leave_session) sets `left_at = NOW()` for still-active
-        // participants and flips `status` to closed in the same transaction.
-        // Within the next 5 minutes, those users are inside the grace window
-        // — but the session can no longer accept submissions or skips, so
-        // the pending entries are phantom. `get_pending_races` must filter
-        // them out via `sessions.status = 'active'`.
+    async fn test_pending_excludes_closed_session() {
+        // A closed session can no longer accept submissions or skips, so any
+        // "pending" entries on it are phantom. `get_pending_races` must
+        // filter them out via `sessions.status = 'active'`.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
@@ -1021,27 +1025,11 @@ mod tests {
         let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
         assert_eq!(pending.len(), 1);
 
-        // Backdate last_activity_at past the stale threshold so
-        // close_stale_sessions catches it; this mirrors the production path
-        // (sets left_at = NOW() and status = 'closed' atomically).
-        let two_hours_ago = Utc::now().naive_utc() - chrono::Duration::hours(2);
-        let s = sessions::Entity::find_by_id(session.id)
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap();
-        let mut active: sessions::ActiveModel = s.into();
-        active.last_activity_at = Set(two_hours_ago);
-        active.update(&db).await.unwrap();
-        close_stale_sessions(&db).await.unwrap();
+        // The solo host leaving closes the session inline.
+        leave_session(&db, &session.id, &host_id).await.unwrap();
 
-        // Host's left_at is now ~now (well within the 5-min grace), but the
-        // session is closed — pending must be empty.
         let pending = get_pending_races(&db, &session.id, &host_id).await.unwrap();
-        assert!(
-            pending.is_empty(),
-            "closed session must not return pending even within grace window"
-        );
+        assert!(pending.is_empty(), "closed session must not return pending");
 
         // The participation row itself stays in the DB for history.
         let count = session_race_participations::Entity::find()

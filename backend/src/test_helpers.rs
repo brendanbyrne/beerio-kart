@@ -129,12 +129,32 @@ pub async fn insert_session(
         least_played_drink_category: Set(None),
         status: Set(status),
         created_at: NotSet,
-        last_activity_at: Set(Utc::now().naive_utc()),
     }
     .insert(db)
     .await
     .expect("insert session");
     id
+}
+
+/// Backdate a session's `created_at`. Tests use this to simulate a session
+/// that was created N hours ago without sleeping — e.g. to drive the
+/// race-derived stale-session sweeper or the liveness predicates.
+pub async fn backdate_session(
+    db: &DatabaseConnection,
+    session_id: &SessionId,
+    created_at: chrono::NaiveDateTime,
+) {
+    use sea_orm::EntityTrait;
+
+    let row = sessions::Entity::find_by_id(session_id)
+        .one(db)
+        .await
+        .expect("query session")
+        .expect("session exists");
+
+    let mut active: sessions::ActiveModel = row.into();
+    active.created_at = Set(created_at);
+    active.update(db).await.expect("backdate session");
 }
 
 /// Insert a participant into a session. Pass `None` for `left_at` to create
@@ -169,17 +189,24 @@ pub async fn insert_session_race(
     created_at: chrono::NaiveDateTime,
 ) -> SessionRaceId {
     let id = SessionRaceId::new_v4();
-    session_races::ActiveModel {
+    let model = session_races::ActiveModel {
         id: Set((&id).into()),
         session_id: Set(session_id.into()),
         race_number: Set(race_number),
         track_id: Set(track_id),
         chosen_by: Set(None),
-        created_at: Set(created_at),
+        created_at: NotSet,
     }
     .insert(db)
     .await
     .expect("insert session race");
+    // `session_races::before_save` stamps `created_at = now` on every insert,
+    // overriding any value passed to the `ActiveModel`. Apply the requested
+    // timestamp with a follow-up update so tests can build races at an
+    // arbitrary age (e.g. to drive per-race expiry or the stale sweeper).
+    let mut active: session_races::ActiveModel = model.into();
+    active.created_at = Set(created_at);
+    active.update(db).await.expect("backdate session race");
     id
 }
 

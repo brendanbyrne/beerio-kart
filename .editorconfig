@@ -14,5 +14,11 @@ trim_trailing_whitespace = false
 [*.{yml,yaml,json}]
 indent_size = 2
 
+# Frontend (React/TypeScript) is written 2-space; the global 4-space default
+# is for the Rust backend. Prettier honors .editorconfig, so this keeps
+# `prettier --check` in agreement with the established frontend house style.
+[*.{ts,tsx,js,jsx,mjs,cjs,css}]
+indent_size = 2
+
 [Makefile]
 indent_style = tab

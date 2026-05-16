@@ -7,7 +7,6 @@ use chrono::Utc;
 use rand::seq::SliceRandom;
 use sea_orm::{
     ColumnTrait, Condition, ConnectionTrait, EntityTrait, PrimaryKeyTrait, QueryFilter, Set,
-    sea_query::Expr,
 };
 
 use crate::{
@@ -133,28 +132,6 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
 
     db_query(session_race_participations::Entity::insert_many(rows).exec(txn)).await?;
 
-    Ok(())
-}
-
-/// Bump the session's `last_activity_at` column to now. Single `UPDATE`,
-/// no prior read required.
-///
-/// # Errors
-///
-/// Returns `Internal` for unexpected DB failures.
-#[tracing::instrument(level = "debug", skip(db), fields(session_id = %session_id))]
-pub async fn touch_session<C: ConnectionTrait>(
-    db: &C,
-    session_id: &SessionId,
-) -> Result<(), Error> {
-    let now = Utc::now().naive_utc();
-    db_query(
-        sessions::Entity::update_many()
-            .col_expr(sessions::Column::LastActivityAt, Expr::value(now))
-            .filter(sessions::Column::Id.eq(session_id))
-            .exec(db),
-    )
-    .await?;
     Ok(())
 }
 
@@ -331,41 +308,6 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, Error::Forbidden { .. }));
-    }
-
-    // --- touch_session ---
-
-    #[tokio::test]
-    async fn touch_session_updates_last_activity_at() {
-        let db = setup_db().await;
-        let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
-
-        let before = sessions::Entity::find_by_id(session_id)
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap()
-            .last_activity_at;
-
-        // Sleep a millisecond so the new timestamp is strictly later. SQLite's
-        // DateTime has microsecond precision; 1ms of real wall-clock time is
-        // comfortably over the resolution boundary.
-        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
-
-        touch_session(&db, &session_id).await.unwrap();
-
-        let after = sessions::Entity::find_by_id(session_id)
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap()
-            .last_activity_at;
-
-        assert!(
-            after > before,
-            "expected last_activity_at to advance: before={before}, after={after}"
-        );
     }
 
     // --- require_exists ---

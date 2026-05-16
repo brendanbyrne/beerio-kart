@@ -115,8 +115,6 @@ pub struct SessionDetail {
     pub status: SessionStatus,
     /// Session-creation timestamp, UTC.
     pub created_at: DateTime<Utc>,
-    /// Most recent activity timestamp; used by stale-session cleanup.
-    pub last_activity_at: DateTime<Utc>,
     /// All participants who have ever joined this session, in join order.
     pub participants: Vec<ParticipantInfo>,
     /// 1-indexed race count: 1 means "no races completed; race 1 is up next".
@@ -126,9 +124,10 @@ pub struct SessionDetail {
     /// All races for this session, oldest first.
     pub races: Vec<RaceInfo>,
     /// Pending races for the requesting user, oldest first. Empty if the
-    /// user is not in this session, has no pending races, or is past the
-    /// 5-minute grace window after leaving. The API returns all matching
-    /// rows; the UI applies the "max 3 pending" cap.
+    /// user has no unresolved races, or all their pending races have expired
+    /// (each race is submittable for 1 hour from its creation — ADR-0035).
+    /// The API returns all matching rows; the UI applies the "max 3 pending"
+    /// cap.
     pub your_pending: Vec<SessionRaceInfo>,
 }
 
@@ -347,7 +346,6 @@ pub async fn get_session_detail(
         ruleset: session.ruleset,
         status: session.status,
         created_at: session.created_at.and_utc(),
-        last_activity_at: session.last_activity_at.and_utc(),
         participants,
         race_number,
         current_race,

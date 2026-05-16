@@ -68,7 +68,6 @@ export interface SessionSummary {
   participant_count: number
   race_number: number
   ruleset: string
-  last_activity_at: string
 }
 
 export interface ParticipantInfo {
@@ -156,7 +155,6 @@ export interface SessionDetail {
   ruleset: string
   status: string
   created_at: string
-  last_activity_at: string
   participants: ParticipantInfo[]
   race_number: number
   current_race: SessionRaceInfo | null
