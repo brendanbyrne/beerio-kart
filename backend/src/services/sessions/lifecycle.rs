@@ -119,9 +119,14 @@ pub async fn get_active_session_id(
 /// joining a new one. The stale session's `status` and any other participants'
 /// rows are left for the sweeper (eventual consistency — its remaining job).
 ///
-/// **Precondition:** the caller has already passed `check_not_in_any_session`,
-/// so any dangling row found here belongs to a session with no race-derived
-/// liveness left. Settling it is therefore always correct.
+/// **Why this is safe:** the caller has already passed
+/// `check_not_in_any_session`, so any dangling row found here belonged to a
+/// race-derived-stale session *as of that check*. The check runs before the
+/// transaction, so a concurrent `next_track` from another participant could
+/// in principle revive that session in the gap — but settling the row is
+/// still correct regardless: the user is explicitly starting or joining a
+/// new session, and the one-active-session invariant requires them to leave
+/// the old one either way.
 ///
 /// # Errors
 ///
@@ -554,7 +559,7 @@ struct StaleSessionRow {
 #[tracing::instrument(skip(db))]
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error> {
     let now = Utc::now().naive_utc();
-    let window_start = (Utc::now() - chrono::Duration::hours(RACE_WINDOW_HOURS)).naive_utc();
+    let window_start = now - chrono::Duration::hours(RACE_WINDOW_HOURS);
 
     let txn = db_txn(db.begin()).await?;
 
@@ -1137,6 +1142,17 @@ mod tests {
         create_session(&db, &user_id, "random")
             .await
             .expect("user in a stale session may create a fresh one");
+
+        // The dangling row in the stale session was settled — this pins
+        // `settle_dangling_participation`'s direct effect, not just the
+        // side effect that the new-session INSERT didn't collide.
+        assert!(
+            participant_row(&db, &stale_id, &user_id)
+                .await
+                .left_at
+                .is_some(),
+            "the dangling row in the stale session is settled"
+        );
     }
 
     #[tokio::test]
@@ -1157,5 +1173,13 @@ mod tests {
         join_session(&db, &fresh.id, &user_id)
             .await
             .expect("user in a stale session may join a fresh one");
+
+        assert!(
+            participant_row(&db, &stale_id, &user_id)
+                .await
+                .left_at
+                .is_some(),
+            "the dangling row in the stale session is settled"
+        );
     }
 }

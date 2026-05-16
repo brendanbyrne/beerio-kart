@@ -328,6 +328,19 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
+        // Backs the race-derived liveness subqueries (ADR-0035): the
+        // `EXISTS` in `get_active_session_id` and the `NOT EXISTS` in
+        // `close_stale_sessions` both correlate on
+        // `session_id = ? AND created_at >= ?`. The `UNIQUE(session_id,
+        // race_number)` index above can seek `session_id` but leaves the
+        // `created_at` filter as a residual scan; this index covers both.
+        // Also backs the `list_active_sessions` JOIN on `session_id`.
+        conn.execute_unprepared(
+            "CREATE INDEX idx_session_races_session_created
+                 ON session_races(session_id, created_at)",
+        )
+        .await?;
+
         // ---- Session race participations ----
         //
         // One row per (race, user) for every user present at race-creation
