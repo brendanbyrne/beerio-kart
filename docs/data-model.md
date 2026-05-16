@@ -145,15 +145,15 @@ sessions
 ├── ruleset: TEXT (not null — "random", "default", "least_played", "round_robin")
 ├── least_played_drink_category: TEXT (nullable — "alcoholic" or "non_alcoholic"; only used when ruleset is "least_played")
 ├── status: TEXT (not null — "active", "closed")
-├── created_at: TIMESTAMP (not null)
-└── last_activity_at: TIMESTAMP (not null)
+└── created_at: TIMESTAMP (not null)
 ```
 
 Notes:
 - `host_id` is set to the creating user when the session is created. If the host leaves, host role transfers to the earliest-joined remaining participant.
 - `least_played_drink_category` stores values as `"alcoholic"` or `"non_alcoholic"` (snake_case, per database convention). The frontend maps these to display text with hyphens ("non-alcoholic").
 - Ruleset-specific config uses explicit nullable columns rather than a JSON blob. With four well-defined rulesets, explicit columns are safer (database can enforce CHECK constraints) and queryable. New config options require a migration, but that's the right tradeoff for known rulesets.
-- Session auto-closes after 1 hour of no activity. No further run submissions accepted after close. A lightweight Tokio background task checks for and closes stale sessions periodically (e.g., every 5 minutes) so they don't linger in the active sessions list. Actions that update `last_activity_at`: run submission, track selection (next-track, choose-track), join, leave, skip-turn (chooser pass), skip-pending-race (forfeit a pending race).
+- Session liveness is **race-derived** per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md). A session is alive iff `status = 'active'` AND (a race exists within the last hour OR `created_at` is within the last hour). The same predicate is applied at every user-facing read path (`get_pending_races`, `check_not_in_any_session`, `get_active_session_id`) and by the stale-session sweeper. There is no maintained `last_activity_at` column — each meaningful user action lands its own row (`session_races`, `runs`, `session_participants`) and liveness reads from those.
+- A periodic Tokio task (`close_stale_sessions`, every 15 minutes) flips `status` to `'closed'` for sessions failing the liveness predicate. Pure DB hygiene — no user-facing read depends on the sweeper having run recently. Clean exits (last participant leaves) close the session inline via `leave_session`'s `transfer_host_or_close` path; the sweeper handles only the abandoned case (tab closed, phone died).
 - Future consideration: `password_hash` column for session passwords. Deferred — the `POST /sessions/:id/join` endpoint is designed as a dedicated action so password checking can be added later without restructuring the join flow.
 - A user can only be active in one session at a time (enforced by a partial unique index on `session_participants(user_id) WHERE left_at IS NULL`).
 - **Session UI icons:** The host is indicated by a 🏠 (house) icon, not a crown. The 👑 (crown) is reserved for the player with the most fastest track times in the session — an earned distinction, not a role.
@@ -176,9 +176,9 @@ Constraints:
 
 Notes:
 - "Currently in session" = `left_at` is null.
-- On rejoin within 5 minutes of `left_at`: clear `left_at` (set to NULL). `joined_at` is **not** changed — the user is treated as having been continuously present.
-- On rejoin after 5+ minutes since `left_at`: clear `left_at` AND reset `joined_at` to NOW(). This forfeits any pre-gap pending races (they remain in the database for history but are excluded from the user's accessible pending list — see Pending Race Tracking).
-- Grace period is checked lazily at query time (compare `NOW()` against `left_at`) — no background timer needed.
+- `joined_at` is **monotonic** — set when the row is first inserted, never reset on rejoin. Genuinely means "when did this user first join this session."
+- On rejoin (any duration): clear `left_at` (set to NULL). `joined_at` is untouched. Pending races remain accessible iff their own per-race 1-hour window hasn't expired (per ADR-0035). No 5-minute grace concept — race-anchored expiry replaces it.
+- **Settle-on-new-join.** The schema's partial unique index `UNIQUE(user_id) WHERE left_at IS NULL` allows at most one active participation per user. When a user starts or joins a *new* session (`create_session` / `join_session`), the same transaction also sets `left_at = NOW()` on any pre-existing `left_at IS NULL` row for that user in a *different* session. Semantically: starting or joining a new session is an implicit leave of any abandoned one. Without this, the application-level race-derived liveness predicate would let the check pass while the INSERT collided with the partial unique index — so lockout would still be sweep-bound. The stale session's `status` and other participants' rows are left to the sweeper (eventual consistency).
 - Per-race presence (which races the user was actually present for at creation time) is NOT derived from this table — see `session_race_participations`.
 
 ### Session Races
@@ -225,7 +225,7 @@ Notes:
 - `skipped_at IS NULL` AND no corresponding `runs` row = pending state.
 - `skipped_at IS NOT NULL` = user explicitly forfeited this race.
 - A `runs` row for `(session_race_id, user_id)` = user submitted; pending state cleared by row presence in `runs`.
-- Rows are never deleted. After grace expires or after a session closes, rows remain in the DB for history; they just become inaccessible via normal API paths. Both filters are required — the grace check **and** the `session.status = 'active'` check — because a session can close (via `close_stale_sessions` or the host-leaves-last cascade) while users are still inside their 5-minute grace window. See the Pending Race Tracking derivation below.
+- Rows are never deleted. After a race ages out of its 1-hour window or after a session closes, rows remain in the DB for history; they just become inaccessible via normal API paths. Both filters are required — the per-race expiry check **and** the `session.status = 'active'` check — because a session can close (via `close_stale_sessions` or the host-leaves-last cascade) while individual races within it are still inside their 1-hour window. See the Pending Race Tracking derivation below.
 
 ### Runs
 
@@ -326,14 +326,13 @@ This approach supports an unbounded number of rivals — no tracking table neede
 
 Within a session, a participant may have "pending" races — session races they were present for but haven't yet submitted a time. The UI caps pending races at 3 (oldest expire first), but the schema places no limit, allowing this cap to be adjusted later.
 
-**Derivation.** A `session_race_participations` row represents pending state for user `U` and race `SR` iff **all** of the following hold:
+**Derivation** (per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md)). A `session_race_participations` row represents pending state for user `U` and race `SR` iff **all** of the following hold:
 
 1. The row exists (i.e. `U` was present when `SR` was created).
 2. `skipped_at IS NULL` on the row.
 3. No `runs` row exists for `(SR.id, U.id)`.
-4. `U` is currently within grace — `session_participants.left_at IS NULL` OR `NOW() - left_at <= 5min`.
-5. `SR.created_at >= session_participants.joined_at` for `U` (excludes pre-gap pending after a long-gap rejoin reset `joined_at`).
-6. `sessions.status = 'active'` for `SR.session_id`. Closed sessions accept no further submissions or skips, so any pending entries on them would be phantom (no API path to resolve them). This is a separate filter from the grace check, not a substitute for it: a session can close while users are still inside their grace window (via `close_stale_sessions`, or as part of the host-leaves-last cascade in `leave_session`).
+4. `SR.created_at >= NOW() - INTERVAL 1 HOUR` — the per-race submission window.
+5. `sessions.status = 'active'` for `SR.session_id`. Closed sessions accept no further submissions or skips, so any pending entries on them would be phantom (no API path to resolve them).
 
 Pending races are returned ordered by `session_races.race_number ASC`. The API returns all; the UI applies the 3-cap.
 
@@ -341,7 +340,7 @@ Pending races are returned ordered by `session_races.race_number ASC`. The API r
 
 **Session advancement.** If the session advances while a participant hasn't submitted, they see their pending list (oldest first) when they go to submit, and must resolve them in order before submitting for the current race. This ensures no one person holds up the group, consistent with "never feel rushed."
 
-**Forfeiture vs. deletion.** Forfeited pending records (those filtered out by grace expiration, `joined_at` reset, or session close) are **not deleted** from `session_race_participations`. They remain as historical state and become inaccessible via the derivation above. This preserves the audit trail of "what was pending at any moment" for debugging and future analytics.
+**Forfeiture vs. deletion.** Forfeited pending records (those filtered out by race expiry or session close) are **not deleted** from `session_race_participations`. They remain as historical state and become inaccessible via the derivation above. This preserves the audit trail of "what was pending at any moment" for debugging and future analytics.
 
 ### Session Rulesets
 

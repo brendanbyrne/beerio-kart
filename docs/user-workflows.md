@@ -58,10 +58,10 @@ Earmarked: the track selection sub-workflow (how the chooser browses/searches fo
 ### 1.5 Leaving a session / session end
 
 1. Player taps "Leave Session."
-2. If they have pending races: warning that pending times will be forfeited after a 5-minute grace period. If they rejoin within the grace period, pending races are preserved.
+2. If they have pending races: warning that each race must be submitted within 1 hour of when it started; rejoining the session at any point within that hour preserves the pending race.
 3. If the leaving player is the host: host role transfers to the earliest-joined remaining participant.
 4. Session ends when all participants have left.
-5. If no activity for 1 hour, session auto-closes and no further run submissions are accepted.
+5. Sessions whose races have all aged past their 1-hour window auto-close on the next sweeper pass — no further run submissions accepted.
 
 ### 1.6 Checking personal stats
 

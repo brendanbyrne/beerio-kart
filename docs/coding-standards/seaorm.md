@@ -42,19 +42,19 @@
         .ok_or_else(|| error::Error::NotFound("session".into()))?
         .into();
     am.status = Set(SessionStatus::Closed.into());
-    am.last_activity_at = Set(Utc::now().to_rfc3339());
+    am.host_id = Set(new_host_id.to_string());
     am.update(db).await?;
     ```
   - **Source:** <https://www.sea-ql.org/SeaORM/docs/basic-crud/update/>
 
 - **Rule:** For set-based updates, use `Entity::update_many().filter(...).col_expr(...)` — not fetch + save in a loop.
   - **Why:** A single `UPDATE ... WHERE` is one round-trip and atomic; the loop is N round-trips and a race condition. Particularly important for SQLite where every write serializes globally.
-  - **Example (the planned 1-hour stale-session cleanup):**
+  - **Example (the participant-cleanup pass inside `close_stale_sessions`):**
     ```rust
-    sessions::Entity::update_many()
-        .col_expr(sessions::Column::Status, Expr::value("closed"))
-        .filter(sessions::Column::LastActivityAt.lt(threshold_iso))
-        .filter(sessions::Column::Status.eq("active"))
+    session_participants::Entity::update_many()
+        .col_expr(session_participants::Column::LeftAt, Expr::value(now))
+        .filter(session_participants::Column::SessionId.eq(closed_session_id))
+        .filter(session_participants::Column::LeftAt.is_null())
         .exec(db).await?;
     ```
 

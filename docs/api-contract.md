@@ -155,13 +155,24 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 - **Decision:** `GET /sessions/:id` (the polling endpoint, called every 2–3s per § 1.5) supports `ETag` / `If-None-Match`. The backend computes a strong ETag from session state; clients sending `If-None-Match: <etag>` get `304 Not Modified` with an empty body when nothing's changed.
 - **Why:** Without conditional GETs, every poll transfers the full session state — participants, races, submission status, pending lists. With ~10 active users polling a multi-participant session every 2s, that's a lot of redundant JSON. A 304 response is dozens of bytes. On mobile, the bandwidth and battery savings are real; on the server, the CPU savings are smaller but real.
 - **Implementation:**
-  - Compute the ETag as a hash of `(session.last_activity_at, session.status, max(session_races.created_at), max(runs.created_at where session_race.session_id = :id))`. Anything that would change the response body changes one of those four timestamps.
-  - Use a `BLAKE3` or `xxhash` hash of the four values; format as `W/"<hex>"` (weak ETag, since two semantically-equivalent responses might serialize differently).
-  - In the handler: compute the ETag *before* loading the full state. If `If-None-Match` matches, return 304 immediately. Otherwise load and return 200 with the new ETag in the response header.
+  - Compute the ETag as a hash of seven values:
+    1. `session.status`
+    2. `COALESCE(MAX(session_races.created_at), '1970-01-01T00:00:00Z')` for this session
+    3. `COALESCE(MAX(runs.created_at), '1970-01-01T00:00:00Z')` where the run's `session_race.session_id = :id`
+    4. `COALESCE(MAX(session_participants.joined_at), '1970-01-01T00:00:00Z')` for this session
+    5. `COALESCE(MAX(session_participants.left_at), '1970-01-01T00:00:00Z')` for this session
+    6. `COALESCE(MAX(session_race_participations.skipped_at), '1970-01-01T00:00:00Z')` for races in this session
+    7. `FLOOR(NOW().unix_timestamp / 60)` — a one-minute time bucket
+  - **Why these seven.** The first six are the derived-data signals for every state mutation: status change, new race, new run, join, leave/rejoin (rejoin clears the leaver's `left_at` to NULL, which changes the MAX-of-remaining), and skip-pending-race. The seventh bucket exists because ADR-0035 introduced a time-based invalidation that no stored data captures: at minute 60 after a race's creation, that race silently drops out of the per-user pending list (per the `sr.created_at >= NOW() - 1 hour` clause in `get_pending_races`). Without the bucket, a conditional poll mid-expiry returns 304 against a now-stale cached pending list. The 60-second bucket bounds the staleness window to ≤ 60s past expiry; clients re-polling every 2.5s will see the change on the first poll after the bucket rolls.
+  - Use `BLAKE3` (or `xxhash`) of the seven values concatenated with a separator; format as `W/"<hex>"` (weak ETag, since two semantically-equivalent responses might serialize differently). `COALESCE` keeps NULL inputs from causing spurious churn.
+  - In the handler: compute the seven inputs *before* loading the full state (one query for the four `MAX(...)` aggregates, one for the session row). If `If-None-Match` matches, return 304 immediately. Otherwise load and return 200 with the new ETag in the response header.
   - Apply the same pattern only to `GET /sessions/:id` for now — it's the only high-frequency endpoint. Other GETs don't need it.
 - **Trade-offs considered:**
   - **WebSockets / SSE:** § 1.5 already decided polling. ETags make polling cheap enough that we don't need to revisit.
-  - **`Last-Modified` header alone:** Less robust because it's second-resolution (`last_activity_at` updates within seconds of joins/leaves; second-resolution can race).
+  - **`Last-Modified` header alone:** Less robust because it's second-resolution; multiple state mutations can land within the same wall-clock second and would collide.
+  - **Hash the participant set directly** instead of MAX(joined_at) + MAX(left_at): strictly more precise but more expensive per poll (table scan + digest) without practical added coverage at this scale. MAX-of-`left_at` correctly captures re-leaves and rejoins because clearing one user's `left_at` to NULL changes the MAX-of-remaining.
+  - **Reintroduce a maintained `sessions.updated_at`** column bumped on every membership / skip event: rejected as the same anti-pattern ADR-0035 removed (maintained state instead of derived).
+  - **Defer the ETag spec until scale demands it.** Reasonable position — at single-friend-group scale the savings are theoretical. Kept the spec in place because the design cost is small and the implementation can ride a later perf-pass PR.
 - **Source:** <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag>, <https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests>
 
 ---

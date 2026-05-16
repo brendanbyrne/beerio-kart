@@ -22,6 +22,7 @@ The original critique was structured as a side-by-side analysis of four mockup s
 
 **Specific items from the critique:**
 
+
 - Primary CTAs ("Submit Time", "Submit Run") → `py-4` (≈52px).
 - Pending race Submit/Skip → 48px+, full-width Submit, secondary Skip beside it.
 - Participant expand button → `py-2` minimum (≈40px).
@@ -94,7 +95,7 @@ Specific sub-items from the critique:
 
 Three smaller questions raised in the critique — design choices, not yet decisions:
 
-- **6.1 Leave Session confirmation.** Should "Leave Session" require a confirmation bottom sheet ("Your pending races will be saved for 5 minutes")? The 5-minute grace period message in the spec implied a confirmation step.
+- **6.1 Leave Session confirmation.** Should "Leave Session" require a confirmation bottom sheet ("Your pending races will be saved for 5 minutes")? The 5-minute grace period message in the spec implied a confirmation step. — *Note (2026-05-16):* The 5-minute grace concept was removed by [ADR-0035](../decisions/0035-race-anchored-session-lifetime.md); the underlying UX question (whether Leave Session needs a confirmation) is still live, but the proposed copy is stale — see `user-workflows.md` § 1.5 for the current "races expire 1 hour after they start" framing.
 - **6.2 Non-host version of "Waiting for Track".** Frame 4 of the original mockup showed the host view (with "Pick Next Track" button). A non-host sees the dashed empty card with no button — worth a separate empty-state design?
 - **6.3 Race history default-open after 3+ races.** Auto-expanding once history is useful might save a tap.
 
