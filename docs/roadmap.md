@@ -34,7 +34,7 @@ OCR work (was Phase 7) is **not** yet milestoned — too speculative to commit t
 | Topic | Work chunk | Status | Closed |
 |-------|------------|--------|--------|
 | Docs | Documentation overhaul (renamed from `Special:` for convention consistency, 2026-05-11) | Closed | 2026-05-11 |
-| Hardening | Backend compliance plan — code hygiene, standards conformance, type-driven design, infrastructure (per `designs/archive/compliance-plan.md`, archived) | Open (all issues closed; milestone awaiting closure) | — |
+| Hardening | Backend compliance plan — code hygiene, standards conformance, type-driven design, infrastructure (per `designs/archive/compliance-plan.md`, archived) | Closed | 2026-05-15 |
 
 ---
 
@@ -102,7 +102,7 @@ Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-ho
 
 ## Hardening — Backend compliance plan
 
-**Status:** Plan signed off 2026-05-15; all 33 tracked Issues closed. Milestone awaits closure in GitHub.
+**Status:** Closed 2026-05-15.
 
 **Type:** Workstream. Ran concurrent with product cups; spanned Star.
 
