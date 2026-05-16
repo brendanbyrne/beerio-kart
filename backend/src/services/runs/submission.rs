@@ -248,9 +248,8 @@ async fn validate_run_request(
     Ok((session_race, times))
 }
 
-/// Insert the run row and bump the session's `last_activity_at`, atomically.
-/// Returns the new run's ID. Caller is expected to have already validated
-/// the request via `validate_run_request`.
+/// Insert the run row. Returns the new run's ID. Caller is expected to have
+/// already validated the request via `validate_run_request`.
 async fn insert_run(
     db: &DatabaseConnection,
     user_id: &UserId,
@@ -285,9 +284,6 @@ async fn insert_run(
         .insert(&txn),
     )
     .await?;
-
-    let session_id = SessionId::from_db(&session_race.session_id)?;
-    helpers::touch_session(&txn, &session_id).await?;
 
     db_txn(txn.commit()).await?;
 
@@ -344,8 +340,6 @@ pub async fn delete_run(
     let txn = db_txn(db.begin()).await?;
 
     db_query(run.delete(&txn)).await?;
-
-    helpers::touch_session(&txn, &session_id).await?;
 
     db_txn(txn.commit()).await?;
 

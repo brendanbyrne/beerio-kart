@@ -1,7 +1,7 @@
 //! Session services — split by concern.
 //!
 //! - [`types`]: shared DTOs and constants (`SessionRaceInfo`,
-//!   `RaceSubmission`, `REJOIN_GRACE_MINUTES`). Lives below the other
+//!   `RaceSubmission`, `RACE_WINDOW_HOURS`). Lives below the other
 //!   submodules so the dependency graph stays acyclic.
 //! - [`lifecycle`]: create, join, leave, host transfer, close-stale, listing.
 //! - [`detail`]: aggregated read for the polling endpoint

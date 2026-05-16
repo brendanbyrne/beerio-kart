@@ -1,8 +1,8 @@
 //! Loaded-and-validated session bundle.
 //!
 //! Aggregates the helpers from `services::helpers` so service functions that
-//! start by loading an active session, checking host/participant, and touching
-//! activity can read top-to-bottom without repeating the ceremony.
+//! start by loading an active session and checking host/participant can read
+//! top-to-bottom without repeating the ceremony.
 
 use sea_orm::ConnectionTrait;
 
@@ -86,32 +86,10 @@ impl SessionContext {
     ) -> Result<session_participants::Model, Error> {
         helpers::require_active_participant(db, &self.session_id, user_id).await
     }
-
-    /// Bump `last_activity_at` to now in both the DB and this struct.
-    /// Delegates the UPDATE to `helpers::touch_session`, then refreshes
-    /// the in-memory field so callers that read it post-touch see the
-    /// updated value.
-    ///
-    /// # Errors
-    ///
-    /// Propagates the errors of [`helpers::touch_session`] — currently only
-    /// `Internal` for unexpected DB failures.
-    #[tracing::instrument(
-        level = "debug",
-        skip(self, db),
-        fields(session_id = %self.session_id),
-    )]
-    pub async fn touch<C: ConnectionTrait>(&mut self, db: &C) -> Result<(), Error> {
-        helpers::touch_session(db, &self.session_id).await?;
-        self.session.last_activity_at = chrono::Utc::now().naive_utc();
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use sea_orm::EntityTrait;
-
     use super::*;
     use crate::{
         domain::enums::SessionStatus,
@@ -188,36 +166,5 @@ mod tests {
         let outsider = create_user(&db, "outsider").await;
         let err = ctx.require_participant(&db, &outsider).await.unwrap_err();
         assert!(matches!(err, Error::Forbidden { .. }));
-    }
-
-    #[tokio::test]
-    async fn touch_bumps_last_activity_at_in_db_and_struct() {
-        let db = setup_db().await;
-        let host = create_user(&db, "host").await;
-        let session_id = insert_session(&db, &host, SessionStatus::Active).await;
-        let mut ctx = SessionContext::load_active(&db, &session_id).await.unwrap();
-
-        let before = ctx.session.last_activity_at;
-        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
-        ctx.touch(&db).await.unwrap();
-
-        // In-memory field is updated.
-        assert!(
-            ctx.session.last_activity_at > before,
-            "struct field should advance: before={before}, after={}",
-            ctx.session.last_activity_at
-        );
-
-        // DB is also updated.
-        let db_value = sessions::Entity::find_by_id(session_id)
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap()
-            .last_activity_at;
-        assert!(
-            db_value > before,
-            "DB should advance: before={before}, after={db_value}"
-        );
     }
 }

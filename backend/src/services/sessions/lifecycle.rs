@@ -4,17 +4,17 @@
 //! Detail aggregation lives in [`super::detail`]; race orchestration in
 //! [`super::races`].
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, Condition, ConnectionTrait,
-    DatabaseConnection, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder,
-    QuerySelect, Set, TransactionTrait, sea_query::Expr,
+    DatabaseConnection, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, Set,
+    TransactionTrait, sea_query::Expr,
 };
 use uuid::Uuid;
 
 use super::{
     detail::{SessionDetail, get_session_detail},
-    types::REJOIN_GRACE_MINUTES,
+    types::RACE_WINDOW_HOURS,
 };
 use crate::{
     domain::{
@@ -33,43 +33,35 @@ struct ActiveParticipantRow {
     session_id: String,
 }
 
-/// Check that the user is not already active in any *active* session.
+/// Check that the user is not already active in any *live* session.
 /// Returns an error with the existing session ID if they are.
-/// JOINs sessions to ensure closed sessions don't block the user.
+///
+/// Delegates the liveness logic to [`get_active_session_id`] so both the
+/// "are you in a session" answers come from one query — see that function
+/// for the race-derived liveness predicate (ADR-0035).
 async fn check_not_in_any_session(
     db: &impl ConnectionTrait,
     user_id: &UserId,
 ) -> Result<(), Error> {
-    let existing = db_query(
-        ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
-            db.get_database_backend(),
-            r#"
-            SELECT sp.session_id
-            FROM session_participants sp
-            JOIN sessions s ON sp.session_id = s.id
-            WHERE sp.user_id = $1
-              AND sp.left_at IS NULL
-              AND s.status = 'active'
-            LIMIT 1
-            "#,
-            [user_id.into()],
-        ))
-        .one(db),
-    )
-    .await?;
-
-    if let Some(row) = existing {
-        return Err(Error::conflict(format!(
-            "Already in session {}",
-            row.session_id
-        )));
+    if let Some(session_id) = get_active_session_id(db, user_id).await? {
+        return Err(Error::conflict(format!("Already in session {session_id}")));
     }
-
     Ok(())
 }
 
 /// Returns the session ID the user is currently active in, or None.
-/// Only considers active sessions (not closed/stale ones).
+///
+/// "Currently active in" means: the user has a `session_participants` row
+/// with `left_at IS NULL`, the session's `status` is `'active'`, **and** the
+/// session is race-derived *live* — it has a `session_races` row created
+/// within the last [`RACE_WINDOW_HOURS`], or the session itself was created
+/// that recently (the bootstrap case: a brand-new session with no race
+/// chosen yet).
+///
+/// The liveness clause is what decouples user lockout from sweep timing
+/// (ADR-0035): a user whose abandoned session has gone stale is freed
+/// immediately by this read path, without waiting for `close_stale_sessions`
+/// to flip `status` to `'closed'`.
 ///
 /// # Errors
 ///
@@ -79,6 +71,8 @@ pub async fn get_active_session_id(
     db: &impl ConnectionTrait,
     user_id: &UserId,
 ) -> Result<Option<SessionId>, Error> {
+    let window_start = (Utc::now() - chrono::Duration::hours(RACE_WINDOW_HOURS)).naive_utc();
+
     let row = db_query(
         ActiveParticipantRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
             db.get_database_backend(),
@@ -89,15 +83,66 @@ pub async fn get_active_session_id(
         WHERE sp.user_id = $1
           AND sp.left_at IS NULL
           AND s.status = 'active'
+          AND (
+            s.created_at >= $2
+            OR EXISTS (
+              SELECT 1 FROM session_races sr
+              WHERE sr.session_id = s.id
+                AND sr.created_at >= $2
+            )
+          )
         LIMIT 1
         "#,
-            [user_id.into()],
+            [user_id.into(), window_start.into()],
         ))
         .one(db),
     )
     .await?;
 
     row.map(|r| SessionId::from_db(&r.session_id)).transpose()
+}
+
+/// Mark the user's dangling participant row (`left_at IS NULL`) as left, if
+/// one exists.
+///
+/// The partial unique index `idx_session_participants_one_active_session`
+/// permits a user at most one `left_at IS NULL` participant row across all
+/// sessions. A user abandoned in a session that has since gone race-derived
+/// *stale* (ADR-0035) still holds such a row — and the `INSERT` of a fresh
+/// participant row in `create_session` / `join_session` would collide with
+/// that index before the periodic sweeper gets around to settling it.
+///
+/// Calling this inside the create/join transaction settles that dangling row
+/// up front, so user lockout is genuinely decoupled from sweep timing — not
+/// merely decoupled at the application-level `check_not_in_any_session`.
+/// Semantically: a user implicitly leaves an abandoned session by starting or
+/// joining a new one. The stale session's `status` and any other participants'
+/// rows are left for the sweeper (eventual consistency — its remaining job).
+///
+/// **Precondition:** the caller has already passed `check_not_in_any_session`,
+/// so any dangling row found here belongs to a session with no race-derived
+/// liveness left. Settling it is therefore always correct.
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures.
+async fn settle_dangling_participation(
+    txn: &impl ConnectionTrait,
+    user_id: &UserId,
+) -> Result<(), Error> {
+    let now = Utc::now().naive_utc();
+    db_query(
+        session_participants::Entity::update_many()
+            .col_expr(session_participants::Column::LeftAt, Expr::value(now))
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::UserId.eq(user_id))
+                    .add(session_participants::Column::LeftAt.is_null()),
+            )
+            .exec(txn),
+    )
+    .await?;
+    Ok(())
 }
 
 /// Create a new session. The creator becomes both the host and the first
@@ -129,14 +174,18 @@ pub async fn create_session(
 
     check_not_in_any_session(db, user_id).await?;
 
-    // `last_activity_at` and `joined_at` are application-managed (not handled
-    // by `before_save` — see `entities/sessions_behavior.rs` for why), so
-    // capture `now` here and stamp them by hand. `sessions.created_at` is
-    // populated by `ActiveModelBehavior::before_save`.
+    // `joined_at` is application-managed (not handled by `before_save` — see
+    // `entities/sessions_behavior.rs` for why), so capture `now` here and
+    // stamp it by hand. `sessions.created_at` is populated by
+    // `ActiveModelBehavior::before_save`.
     let now = Utc::now().naive_utc();
     let session_id = SessionId::new_v4();
 
     let txn = db_txn(db.begin()).await?;
+
+    // Settle any dangling row from a now-stale session so the new
+    // participant INSERT doesn't collide with the one-active-session index.
+    settle_dangling_participation(&txn, user_id).await?;
 
     db_query(
         sessions::ActiveModel {
@@ -146,7 +195,6 @@ pub async fn create_session(
             least_played_drink_category: Set(None),
             status: Set(SessionStatus::Active),
             created_at: NotSet,
-            last_activity_at: Set(now),
         }
         .insert(&txn),
     )
@@ -182,8 +230,6 @@ pub struct SessionSummary {
     pub race_number: i64,
     /// Track-selection ruleset chosen at session creation.
     pub ruleset: SessionRuleset,
-    /// Most recent activity timestamp, used by the stale-session cleanup.
-    pub last_activity_at: DateTime<Utc>,
 }
 
 /// Row shape returned by the list-sessions JOIN query.
@@ -194,11 +240,19 @@ struct SessionSummaryRow {
     participant_count: i64,
     race_count: i64,
     ruleset: SessionRuleset,
-    last_activity_at: NaiveDateTime,
 }
 
-/// List active sessions sorted by `last_activity_at` DESC.
-/// Uses a single JOIN query instead of N+1 queries.
+/// List active sessions, most recently active first.
+///
+/// "Activity" is race-derived (ADR-0035): sessions sort by their newest
+/// `session_races.created_at`, falling back to `sessions.created_at` for a
+/// session that has no races yet. Uses a single JOIN query instead of N+1.
+///
+/// Note this filters only on `status = 'active'` and does not apply the
+/// race-derived liveness predicate — a session whose races have all expired
+/// but that the sweeper hasn't closed yet still appears here until the next
+/// sweep. That is acceptable for a listing surface; the frontend filters
+/// near-stale sessions out of the join UI (ADR-0035 § Negative consequences).
 ///
 /// # Errors
 ///
@@ -214,15 +268,14 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
             u.username AS host_username,
             COUNT(DISTINCT CASE WHEN sp.left_at IS NULL THEN sp.id END) AS participant_count,
             COUNT(DISTINCT sr.id) AS race_count,
-            s.ruleset,
-            s.last_activity_at
+            s.ruleset
         FROM sessions s
         JOIN users u ON s.host_id = u.id
         LEFT JOIN session_participants sp ON sp.session_id = s.id
         LEFT JOIN session_races sr ON sr.session_id = s.id
         WHERE s.status = 'active'
         GROUP BY s.id
-        ORDER BY s.last_activity_at DESC
+        ORDER BY COALESCE(MAX(sr.created_at), s.created_at) DESC
         "#,
             [],
         ))
@@ -238,7 +291,6 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
                 participant_count: r.participant_count,
                 race_number: r.race_count.max(1),
                 ruleset: r.ruleset,
-                last_activity_at: r.last_activity_at.and_utc(),
             })
         })
         .collect()
@@ -247,14 +299,12 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
 /// Join (or rejoin) a session. **Single mutable row per (session, user)** —
 /// first join INSERTs, rejoin mutates the existing row.
 ///
-/// Rejoin behavior:
-/// - **Within grace** (`NOW() - left_at <= 5 min`): clear `left_at`, leave
-///   `joined_at` untouched. The user is treated as continuously present, so
-///   any pending races created before the leave remain accessible.
-/// - **Outside grace** (`NOW() - left_at > 5 min`): clear `left_at` AND reset
-///   `joined_at = NOW()`. Pre-gap pending records remain in the DB for
-///   history but are filtered out by the pending-races query
-///   (`session_races.created_at >= session_participants.joined_at`).
+/// Rejoin clears `left_at` unconditionally and never touches `joined_at`
+/// (ADR-0035). `joined_at` is therefore monotonic — set once on first join,
+/// it genuinely means "when this user first joined this session." Pending-race
+/// access no longer depends on it: a flaked-out user's pending races stay
+/// pending until each race expires on its own 1-hour clock, regardless of how
+/// long they were gone.
 ///
 /// # Errors
 ///
@@ -289,6 +339,11 @@ pub async fn join_session(
     let now = Utc::now().naive_utc();
     let txn = db_txn(db.begin()).await?;
 
+    // Settle any dangling row from a now-stale session so a fresh
+    // participant INSERT doesn't collide with the one-active-session index.
+    // A rejoin of *this* session is unaffected — its row has `left_at` set.
+    settle_dangling_participation(&txn, user_id).await?;
+
     match existing {
         None => {
             db_query(
@@ -304,7 +359,7 @@ pub async fn join_session(
             .await?;
         }
         Some(row) => {
-            let Some(left_at) = row.left_at else {
+            if row.left_at.is_none() {
                 // Defensive: should be unreachable in normal flow. `existing`
                 // is filtered to (session_id, user_id), so a row with
                 // `left_at IS NULL` here means the user is already active in
@@ -316,23 +371,14 @@ pub async fn join_session(
                 return Err(Error::conflict(
                     "Already an active participant in this session",
                 ));
-            };
-
-            let mut active: session_participants::ActiveModel = row.into();
-            active.left_at = Set(None);
-
-            let gap = now.signed_duration_since(left_at);
-            if gap > chrono::Duration::minutes(REJOIN_GRACE_MINUTES) {
-                // Outside grace — reset joined_at so pre-gap pending records
-                // are filtered out of the user's pending list.
-                active.joined_at = Set(now);
             }
 
+            // Rejoin: clear `left_at`, leave `joined_at` untouched (monotonic).
+            let mut active: session_participants::ActiveModel = row.into();
+            active.left_at = Set(None);
             db_query(active.update(&txn)).await?;
         }
     }
-
-    helpers::touch_session(&txn, session_id).await?;
 
     db_txn(txn.commit()).await?;
 
@@ -361,12 +407,10 @@ enum HostDisposition {
 /// counts active participants via `left_at IS NULL`, and relies on the
 /// leaver's row being excluded by the prior update.
 ///
-/// **Note on `joined_at` semantics:** `joined_at` is the start of the
-/// participant's *current* presence segment, which gets reset on a long-gap
-/// rejoin (see `join_session`). So "earliest-joined" effectively means
-/// "most-tenured in the current segment." That's the right host successor —
-/// someone who just rejoined after a long break shouldn't outrank a steadily
-/// present participant.
+/// **Note on `joined_at` semantics:** `joined_at` is monotonic (ADR-0035) —
+/// set once on first join and never reset, even across a leave/rejoin. So
+/// "earliest-joined" genuinely means "first to ever join this session,"
+/// which is a stable, well-defined host successor.
 async fn transfer_host_or_close(
     txn: &impl ConnectionTrait,
     session_id: &SessionId,
@@ -449,32 +493,53 @@ pub async fn leave_session(
     // `sessions.host_id` as 500 rather than a silent false-negative compare.
     let host_id = UserId::from_db(&session.host_id)?;
     let is_host_leaving = host_id == *user_id;
-    let mut active_session: sessions::ActiveModel = session.into();
     let disposition = transfer_host_or_close(&txn, session_id, user_id, is_host_leaving).await?;
 
+    // Only write the session row when the disposition actually changes a
+    // column. The session carries no activity timestamp to bump anymore
+    // (ADR-0035), so the `NoChange` case has nothing to UPDATE.
     match disposition {
         HostDisposition::TransferredTo(new_host_id) => {
+            let mut active_session: sessions::ActiveModel = session.into();
             active_session.host_id = Set((&new_host_id).into());
+            db_query(active_session.update(&txn)).await?;
         }
         HostDisposition::SessionClosed => {
+            let mut active_session: sessions::ActiveModel = session.into();
             active_session.status = Set(SessionStatus::Closed);
+            db_query(active_session.update(&txn)).await?;
         }
         HostDisposition::NoChange => {}
     }
-
-    active_session.last_activity_at = Set(now);
-    db_query(active_session.update(&txn)).await?;
 
     db_txn(txn.commit()).await?;
 
     Ok(())
 }
 
-/// Close sessions that have had no activity for over an hour.
+/// Row shape for the stale-session SELECT.
+#[derive(Debug, FromQueryResult)]
+struct StaleSessionRow {
+    id: String,
+}
+
+/// Close sessions whose race window has fully elapsed (ADR-0035).
 ///
-/// Also marks all remaining active participants as left, preventing
-/// users from being soft-locked out of creating/joining new sessions.
-/// Returns the number of sessions closed.
+/// A session is *stale* when it is `status = 'active'`, was created more than
+/// [`RACE_WINDOW_HOURS`] ago, **and** has no `session_races` row created
+/// within that same window. The `created_at` clause handles the bootstrap
+/// case: a brand-new session with no race chosen yet keeps its first hour
+/// from its own creation timestamp before it can go stale.
+///
+/// This is purely DB hygiene. Clean exits already close their session inline
+/// via `leave_session`; every user-facing read path derives liveness from
+/// race timestamps directly (see [`get_active_session_id`] and
+/// `get_pending_races`), so no read depends on this sweep having run recently.
+/// The sweep only keeps `sessions.status` eventually consistent with that
+/// derived truth.
+///
+/// Also marks all remaining active participants of the closed sessions as
+/// left. Returns the number of sessions closed.
 ///
 /// The cleanup runs as two set-based `UPDATE`s in one transaction
 /// (`seaorm.md` § 1) — one to flip the matching session rows to
@@ -488,30 +553,38 @@ pub async fn leave_session(
 /// UPDATE statements that drive the cleanup.
 #[tracing::instrument(skip(db))]
 pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error> {
-    let one_hour_ago = (Utc::now() - chrono::Duration::hours(1)).naive_utc();
     let now = Utc::now().naive_utc();
+    let window_start = (Utc::now() - chrono::Duration::hours(RACE_WINDOW_HOURS)).naive_utc();
 
     let txn = db_txn(db.begin()).await?;
 
-    // Capture the stale ids once. We can't derive them from the sessions
-    // `update_many`'s result (it returns a count, not a row set), and using
-    // a subquery in the participants filter pulls the same SELECT into the
-    // engine implicitly. The explicit form keeps the filter expressions
-    // readable and short-circuits cleanly when the cleanup has nothing to
-    // do (the common case).
+    // Capture the stale ids once. The `NOT EXISTS` subquery against
+    // `session_races` is awkward in the builder API, so this read is
+    // hand-rolled SQL (`seaorm.md` § 1 — raw SQL for clumsy multi-table
+    // shapes). Both `UPDATE`s below scope to the captured set, and the
+    // empty-set case short-circuits cleanly (the common case).
     let stale_ids: Vec<String> = db_query(
-        sessions::Entity::find()
-            .select_only()
-            .column(sessions::Column::Id)
-            .filter(
-                Condition::all()
-                    .add(sessions::Column::Status.eq(SessionStatus::Active))
-                    .add(sessions::Column::LastActivityAt.lt(one_hour_ago)),
-            )
-            .into_tuple()
-            .all(&txn),
+        StaleSessionRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            txn.get_database_backend(),
+            r#"
+            SELECT s.id
+            FROM sessions s
+            WHERE s.status = 'active'
+              AND s.created_at < $1
+              AND NOT EXISTS (
+                  SELECT 1 FROM session_races sr
+                  WHERE sr.session_id = s.id
+                    AND sr.created_at >= $1
+              )
+            "#,
+            [window_start.into()],
+        ))
+        .all(&txn),
     )
-    .await?;
+    .await?
+    .into_iter()
+    .map(|r| r.id)
+    .collect();
 
     if stale_ids.is_empty() {
         db_txn(txn.commit()).await?;
@@ -549,11 +622,9 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        services::sessions::get_pending_races,
-        test_helpers::{
-            backdate_participant, create_user, insert_participant, insert_session, setup_db,
-        },
+    use crate::test_helpers::{
+        backdate_session, create_user, insert_participant, insert_session, insert_session_race,
+        setup_db,
     };
 
     // ── transfer_host_or_close ───────────────────────────────────────
@@ -851,190 +922,240 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    // ── close_stale_sessions (race-derived sweeper, ADR-0035) ────────────
+
+    /// Fetch a participant row by (session, user).
+    async fn participant_row(
+        db: &DatabaseConnection,
+        session_id: &SessionId,
+        user_id: &UserId,
+    ) -> session_participants::Model {
+        session_participants::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_participants::Column::SessionId.eq(session_id))
+                    .add(session_participants::Column::UserId.eq(user_id)),
+            )
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    /// Fetch a session's current status.
+    async fn session_status(db: &DatabaseConnection, session_id: &SessionId) -> SessionStatus {
+        sessions::Entity::find_by_id(session_id)
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap()
+            .status
+    }
+
     #[tokio::test]
     async fn test_stale_cleanup_marks_participants_as_left() {
         let db = setup_db().await;
         let host_id = create_user(&db, "host").await;
         let user_id = create_user(&db, "user").await;
 
-        let session = create_session(&db, &host_id, "random").await.unwrap();
-        join_session(&db, &session.id, &user_id).await.unwrap();
+        // A session created over an hour ago with no races is stale.
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        insert_participant(&db, &session_id, &user_id, None).await;
+        backdate_session(
+            &db,
+            &session_id,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
 
-        // Backdate last_activity_at past the stale threshold
-        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
-        let s = sessions::Entity::find_by_id(session.id)
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap();
-        let mut active: sessions::ActiveModel = s.into();
-        active.last_activity_at = Set(two_hours_ago);
-        active.update(&db).await.unwrap();
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 1, "the stale session is closed");
 
-        close_stale_sessions(&db).await.unwrap();
-
-        // Both users must be able to create a new session after their old one times out
-        assert!(
-            create_session(&db, &host_id, "random").await.is_ok(),
-            "host should be freed from stale session"
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Closed
         );
         assert!(
-            create_session(&db, &user_id, "random").await.is_ok(),
-            "user should be freed from stale session"
+            participant_row(&db, &session_id, &host_id)
+                .await
+                .left_at
+                .is_some(),
+            "host participant marked as left"
+        );
+        assert!(
+            participant_row(&db, &session_id, &user_id)
+                .await
+                .left_at
+                .is_some(),
+            "user participant marked as left"
         );
     }
 
-    // ── Rejoin grace (verifies join_session's grace-window logic by
-    //    inspecting downstream pending state) ───────────────────────────
+    #[tokio::test]
+    async fn test_close_stale_keeps_recent_bootstrap_session() {
+        // A brand-new session with no races yet is alive for its first hour
+        // from its own creation timestamp.
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 0, "fresh session is not stale");
+        assert_eq!(
+            session_status(&db, &session.id).await,
+            SessionStatus::Active
+        );
+    }
 
     #[tokio::test]
-    async fn test_rejoin_within_grace_preserves_pending() {
+    async fn test_close_stale_closes_old_bootstrap_session() {
+        // A session created over an hour ago that never picked a track is
+        // stale — the bootstrap window has elapsed.
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        backdate_session(
+            &db,
+            &session_id,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 1);
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Closed
+        );
+    }
+
+    #[tokio::test]
+    async fn test_close_stale_keeps_session_with_recent_race() {
+        // Even though the session was created over an hour ago, a race
+        // created within the window keeps it alive.
         let db = setup_db().await;
         crate::test_helpers::seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        backdate_session(
+            &db,
+            &session_id,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
+        // A race created just now — well inside the window.
+        insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 0, "a recent race keeps the session alive");
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Active
+        );
+    }
+
+    #[tokio::test]
+    async fn test_close_stale_closes_session_with_all_races_expired() {
+        // The session has a race, but it was created over an hour ago — the
+        // race has expired and nothing keeps the session alive.
+        let db = setup_db().await;
+        crate::test_helpers::seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        backdate_session(
+            &db,
+            &session_id,
+            (Utc::now() - chrono::Duration::hours(3)).naive_utc(),
+        )
+        .await;
+        insert_session_race(
+            &db,
+            &session_id,
+            1,
+            1,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 1, "all races expired → session closed");
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Closed
+        );
+    }
+
+    // ── Monotonic joined_at + lockout decoupling (ADR-0035) ──────────────
+
+    #[tokio::test]
+    async fn test_rejoin_does_not_advance_joined_at() {
+        // `joined_at` is monotonic — leave/rejoin clears `left_at` but never
+        // touches `joined_at`, regardless of how long the user was gone.
+        let db = setup_db().await;
         let host_id = create_user(&db, "host").await;
         let user_b = create_user(&db, "b").await;
         let session = create_session(&db, &host_id, "random").await.unwrap();
         join_session(&db, &session.id, &user_b).await.unwrap();
-        crate::services::sessions::next_track(&db, &session.id, &host_id)
-            .await
-            .unwrap();
 
-        // Capture B's joined_at, then leave + backdate left_at to 3 min ago.
-        let original_joined = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session.id))
-                    .add(session_participants::Column::UserId.eq(user_b)),
-            )
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap()
-            .joined_at;
+        let original_joined = participant_row(&db, &session.id, &user_b).await.joined_at;
+
         leave_session(&db, &session.id, &user_b).await.unwrap();
-        let three_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(3);
-        backdate_participant(&db, &session.id, &user_b, None, Some(three_min_ago)).await;
-
         join_session(&db, &session.id, &user_b).await.unwrap();
 
-        let row = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session.id))
-                    .add(session_participants::Column::UserId.eq(user_b)),
-            )
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap();
+        let row = participant_row(&db, &session.id, &user_b).await;
         assert!(row.left_at.is_none(), "left_at cleared on rejoin");
         assert_eq!(
             row.joined_at, original_joined,
-            "within-grace rejoin must NOT advance joined_at"
-        );
-
-        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
-        assert_eq!(
-            pending.len(),
-            1,
-            "pre-leave pending preserved on within-grace rejoin"
+            "rejoin must never advance joined_at"
         );
     }
 
     #[tokio::test]
-    async fn test_rejoin_after_grace_resets_joined_at_and_forfeits_pending() {
-        use crate::entities::session_race_participations;
-
+    async fn test_user_in_stale_session_can_create_fresh_session() {
+        // The user still has an active participant row in a session that has
+        // gone stale (created over an hour ago, no races) but that the
+        // sweeper has not yet flipped to `closed`. Lockout must not depend on
+        // sweep timing — the user can immediately create a new session.
         let db = setup_db().await;
-        crate::test_helpers::seed_tracks_for_test(&db).await;
-        let host_id = create_user(&db, "host").await;
-        let user_b = create_user(&db, "b").await;
-        let session = create_session(&db, &host_id, "random").await.unwrap();
-        join_session(&db, &session.id, &user_b).await.unwrap();
-        crate::services::sessions::next_track(&db, &session.id, &host_id)
+        let user_id = create_user(&db, "user").await;
+        let stale_id = insert_session(&db, &user_id, SessionStatus::Active).await;
+        insert_participant(&db, &stale_id, &user_id, None).await;
+        backdate_session(
+            &db,
+            &stale_id,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
+
+        // Sanity: the stale session is still `active` in the DB.
+        assert_eq!(session_status(&db, &stale_id).await, SessionStatus::Active);
+
+        create_session(&db, &user_id, "random")
             .await
-            .unwrap();
-
-        let original_joined = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session.id))
-                    .add(session_participants::Column::UserId.eq(user_b)),
-            )
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap()
-            .joined_at;
-
-        leave_session(&db, &session.id, &user_b).await.unwrap();
-        // Backdate left_at to 20 min ago — well past the 5-minute window.
-        let twenty_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(20);
-        backdate_participant(&db, &session.id, &user_b, None, Some(twenty_min_ago)).await;
-
-        join_session(&db, &session.id, &user_b).await.unwrap();
-
-        let row = session_participants::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(session_participants::Column::SessionId.eq(session.id))
-                    .add(session_participants::Column::UserId.eq(user_b)),
-            )
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(row.left_at.is_none(), "left_at cleared on rejoin");
-        assert!(
-            row.joined_at > original_joined,
-            "outside-grace rejoin must advance joined_at: was {}, now {}",
-            original_joined,
-            row.joined_at,
-        );
-
-        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
-        assert!(
-            pending.is_empty(),
-            "pre-gap pending is forfeited (filtered by created_at >= joined_at)"
-        );
-
-        // The participation row itself stays for history.
-        let count = session_race_participations::Entity::find()
-            .filter(session_race_participations::Column::UserId.eq(user_b))
-            .count(&db)
-            .await
-            .unwrap();
-        assert_eq!(count, 1, "forfeited participation row remains in DB");
+            .expect("user in a stale session may create a fresh one");
     }
 
     #[tokio::test]
-    async fn test_multiple_short_flaps_within_grace_preserve_pending() {
+    async fn test_user_in_stale_session_can_join_fresh_session() {
         let db = setup_db().await;
-        crate::test_helpers::seed_tracks_for_test(&db).await;
-        let host_id = create_user(&db, "host").await;
-        let user_b = create_user(&db, "b").await;
-        let session = create_session(&db, &host_id, "random").await.unwrap();
-        join_session(&db, &session.id, &user_b).await.unwrap();
-        crate::services::sessions::next_track(&db, &session.id, &host_id)
+        let user_id = create_user(&db, "user").await;
+        let other_host = create_user(&db, "other").await;
+        let stale_id = insert_session(&db, &user_id, SessionStatus::Active).await;
+        insert_participant(&db, &stale_id, &user_id, None).await;
+        backdate_session(
+            &db,
+            &stale_id,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
+
+        let fresh = create_session(&db, &other_host, "random").await.unwrap();
+        join_session(&db, &fresh.id, &user_id)
             .await
-            .unwrap();
-
-        // Flap 1: leave, backdate left_at to 2 min ago, rejoin.
-        leave_session(&db, &session.id, &user_b).await.unwrap();
-        let two_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(2);
-        backdate_participant(&db, &session.id, &user_b, None, Some(two_min_ago)).await;
-        join_session(&db, &session.id, &user_b).await.unwrap();
-
-        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
-        assert_eq!(pending.len(), 1, "after first short flap, pending intact");
-
-        // Flap 2: leave again, backdate left_at to 1 min ago, rejoin.
-        leave_session(&db, &session.id, &user_b).await.unwrap();
-        let one_min_ago = Utc::now().naive_utc() - chrono::Duration::minutes(1);
-        backdate_participant(&db, &session.id, &user_b, None, Some(one_min_ago)).await;
-        join_session(&db, &session.id, &user_b).await.unwrap();
-
-        let pending = get_pending_races(&db, &session.id, &user_b).await.unwrap();
-        assert_eq!(pending.len(), 1, "multiple short flaps preserve pending");
+            .expect("user in a stale session may join a fresh one");
     }
 }
