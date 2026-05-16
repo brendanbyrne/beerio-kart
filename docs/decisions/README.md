@@ -52,6 +52,9 @@ See `template.md` for the starting point. Files are named `NNNN-kebab-case-title
 | [0033](0033-cloudflare-tunnel-for-exposure.md) | Cloudflare Tunnel for exposure, not port forwarding | accepted | 2026-05-05 |
 | [0034](0034-docker-compose-manager-for-deployment.md) | Docker Compose Manager plugin on Unraid for container management | accepted | 2026-05-05 |
 | [0035](0035-race-anchored-session-lifetime.md) | Race-anchored session lifetime: replace idle-session sweeper with race-derived sweeper | accepted | 2026-05-11 |
+| [0036](0036-error-code-rollout.md) | Error code rollout shape | accepted | 2026-05-15 |
+| [0037](0037-pending-races-dropped-on-session-close.md) | Pending races dropped on session close | accepted | 2026-05-16 |
+| [0038](0038-notifications-system.md) | Notifications system | accepted | 2026-05-16 |
 | [0036](0036-error-code-rollout.md) | Error code rollout shape: `ErrorCode` enum + hybrid helper API | accepted | 2026-05-15 |
 
 ## Adding a new ADR

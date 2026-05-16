@@ -183,9 +183,18 @@ Each section above carries its own approval checkbox. Once all are checked:
 - Add a top-of-file "Superseded by ADR-0035 (§ 3 grace semantics)" note to `docs/designs/archive/2026-04-19-pending-races-and-grace-period.md`.
 - File implementation issues per the PR split above under Milestone Star.
 
+## Implementation notes (added 2026-05-16, post-merge)
+
+One behavioral detail not covered in the ADR's literal text surfaced during implementation:
+
+**Settle-on-new-join.** The schema carries a partial unique index `idx_session_participants_one_active_session` (`UNIQUE(user_id) WHERE left_at IS NULL`) that the ADR doesn't mention. Pushing the race-derived liveness clause into `check_not_in_any_session` and `get_active_session_id` decouples lockout from sweep timing **at the application level** — but the INSERT in `create_session` / `join_session` still collides with the partial unique index when a user holds a `left_at IS NULL` row in a now-stale session. To actually deliver the ADR's stated goal of decoupled lockout, the create/join transaction now also calls `settle_dangling_participation`, which sets `left_at = NOW()` on the user's pre-existing dangling row before the new INSERT. Semantically: starting or joining a new session is an implicit leave of any abandoned one. The stale session's `status` and its other participants' rows are left to the sweeper (eventual consistency).
+
+This is captured in `docs/data-model.md` § Session Participants as the "Settle-on-new-join" bullet. The ADR's body retains its application-level framing for readability; this addendum is the schema-level wrinkle that makes the framing actually work.
+
 ## Links
 
 - Source: ad-hoc (Cowork chat discussion, 2026-05-11)
+- Narrowed by: [ADR-0037](./0037-pending-races-dropped-on-session-close.md) (2026-05-16) — the rejoin-anytime-within-the-hour promise becomes "rejoin while the session is still active." Per-race expiry clause removed from `get_pending_races`; sweeper predicate extended to honor all activity signals, not just race creation.
 - Supersedes: `docs/designs/archive/2026-04-19-pending-races-and-grace-period.md` § 3 (grace period semantics)
 - Related ADRs: 0013 (pending race cap — unchanged), 0014 (host transfer — cleaner under monotonic `joined_at`), 0015 (skip-turn semantics — unchanged), 0018 (polling — unchanged)
 - Implementing PRs: <to fill in>

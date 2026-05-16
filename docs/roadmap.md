@@ -157,6 +157,7 @@ Each ruleset is its own Rust trait impl per ADR 0022. **Six test scenarios per r
 - Cup-level leaderboard — same toggle.
 - Global leaderboard — most track records held (per ADR 0003).
 - User rank pinned at the bottom of leaderboards when not in the top N.
+- Notification variants for leaderboard-relevant events (per [ADR-0038](./decisions/0038-notifications-system.md)): `TrackRecordLost` (notify the previous holder when their track or lap record is beaten) and `LeaderboardRankChanged` (notify users whose top-N position shifts). Trigger sites in `services::runs::create_run` and `delete_run`.
 
 **Success criteria.** A user can find their PB on any track in two taps. Leaderboards refresh as runs come in. The drink-category toggle feels natural, not buried.
 
@@ -179,6 +180,7 @@ Each ruleset is its own Rust trait impl per ADR 0022. **Six test scenarios per r
 - Flagging a run — user-initiated, preset reasons + freeform note + visibility choice (`hide_while_pending` per ADR 0029). User can only flag their own runs, and only if a photo is attached.
 - Admin page — lightweight, env-variable-gated (per ADR 0008 / 0019).
 - Admin actions on flagged runs — resolve, edit-and-resolve (admin-only exception to immutability per ADR 0009), or delete.
+- `H2hLeadChanged` notification variant (per [ADR-0038](./decisions/0038-notifications-system.md)) — notify users when a head-to-head record flips winner against an opponent they share session races with. Trigger sites in `services::runs::create_run` and `delete_run`; H2H derivation already lives in this cup.
 
 **Success criteria.** From any player's profile, see your H2H record against them in one tap. Flagged runs appear in admin's queue with all the context needed to resolve.
 
