@@ -29,7 +29,7 @@ beerio-kart/
 │   └── workflows/                 # link-check.yml (lychee), coverage.yml
 │
 ├── backend/                       # Rust + Axum API server
-│   ├── Cargo.toml
+│   ├── Cargo.toml                 # Backend package manifest (workspace member)
 │   ├── README.md
 │   ├── CLAUDE.md                  # Backend-specific conventions (loaded when working in backend/)
 │   ├── migration/                 # SeaORM migrations (single consolidated file prelaunch)
@@ -74,6 +74,7 @@ beerio-kart/
 │   ├── db/                        # SQLite database file (gitignored)
 │   └── uploads/                   # User-uploaded run photos (gitignored)
 │
+├── Cargo.toml, Cargo.lock         # Rust virtual workspace root (members: backend/, backend/migration/)
 ├── compose.yaml, Dockerfile       # Single-container deployment (Axum serves API + frontend bundle)
 ├── justfile                       # Developer workflow recipes (`just dev`, `just test`, ...)
 ├── package.json, bun.lock         # Bun root workspace + dev tooling (lefthook hooks)
@@ -131,7 +132,7 @@ Open `http://localhost:5173` in your browser. The Vite dev server proxies API ca
 To run them separately:
 
 ```sh
-cd backend && cargo run    # API server on port 3000
+cargo run                  # API server on port 3000
 cd frontend && bun dev     # Dev server on port 5173
 ```
 
@@ -163,7 +164,7 @@ docker compose down -v   # removes volumes (deletes all data)
 ## Running tests
 
 ```sh
-cd backend && cargo test
+cargo test
 ```
 
 ## Linting & Formatting
@@ -188,7 +189,7 @@ To run manually:
 
 ```sh
 # Backend (or `just fmt` for the format step)
-cd backend && cargo +nightly fmt --check && cargo clippy -- -D warnings
+cargo +nightly fmt --check && cargo clippy -- -D warnings
 
 # Frontend
 cd frontend && bunx eslint src/ && bunx prettier --check "src/**/*.{ts,tsx,css,json}"

@@ -36,15 +36,14 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          workspaces: backend
+          workspaces: .
 
       - name: Generate coverage report
-        working-directory: backend
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
-          files: backend/lcov.info
+          files: lcov.info
           fail_ci_if_error: true
           flags: backend

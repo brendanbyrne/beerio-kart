@@ -1,0 +1,39 @@
+# Virtual workspace — all Rust source lives in backend/. See backend/CLAUDE.md.
+[workspace]
+members = ["backend", "backend/migration"]
+resolver = "3"
+default-members = ["backend"]
+
+[workspace.lints.rust]
+warnings = "deny"
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "warn", priority = -1 }
+# Enforces `rust.md` § 6 on `pub` items. Rustc's lint only covers `pub`
+# visibility (not `pub(crate)`), so cross-module-`pub(crate)` regressions
+# still rely on review; the broader `clippy::missing_docs_in_private_items`
+# would also force docs on bare-private items, which § 6 doesn't require.
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# `cargo` group — relevant for crates.io publishing, not an internal binary:
+cargo_common_metadata = "allow"
+multiple_crate_versions = "allow"
+# Phase H scaffolding — clear each in a follow-up PR per rust.md § 8:
+needless_raw_string_hashes = "allow"
+too_many_lines = "allow"
+# High-value extras:
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+todo = "warn"
+unimplemented = "warn"
+expect_used = "warn"
+unwrap_used = "warn"
+panic = "warn"
+# Async (catastrophic if missed) — see tokio.md § 3:
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+unused_async = "warn"
