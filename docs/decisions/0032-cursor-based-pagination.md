@@ -36,6 +36,12 @@ Chosen: **Option B** — Cursor-based pagination using `created_at` + `id` (comp
 
 - Slightly more complex to implement and explain. Acceptable: if the implementation burden is real, offset-based can be substituted later with a note about the tradeoff.
 
+## Implementation status
+
+Not yet implemented in any list endpoint as of 2026-05-17. Both `GET /runs` ([`services/runs/read.rs`](../../backend/src/services/runs/read.rs)) and `GET /me/notifications` ([`services/notifications.rs`](../../backend/src/services/notifications.rs)) currently use a flat `LIMIT 100` cap — the ADR-sanctioned substitute (see Negative consequences). Future history endpoints under `/stats/personal/...` should be built keyset-native rather than retrofitted.
+
+Project-wide rollout is tracked in [#166](https://github.com/brendanbyrne/beerio-kart/issues/166).
+
 ## Links
 
 - Source: `ad-hoc`
