@@ -69,11 +69,14 @@ Open follow-up: [#84](https://github.com/brendanbyrne/beerio-kart/issues/84) tra
 WSL2 accessing `/mnt/c/` is slower than the native Linux filesystem, especially for `cargo build`. If build times become painful, configure Cargo to put build artifacts on the Linux filesystem while keeping source on Windows:
 
 ```toml
-# backend/.cargo/config.toml
+# .cargo/config.toml (at the repo root)
 [build]
 target-dir = "/home/bbyrne/.cargo-target/beerio-kart"
 ```
 
+Cargo discovers `.cargo/config.toml` by walking up from the directory the command is invoked in, so placing it at the workspace root (the repo root) makes it apply to every `cargo` invocation regardless of where in the tree you run it.
+
 ## Document history
 
 - 2026-05-08 — Initial creation as part of PR 6 / Issue [#79](https://github.com/brendanbyrne/beerio-kart/issues/79). Sourced from root `.claude/CLAUDE.md` § Schema changes (prelaunch), § Testing, § Conventions (Rust style + naming), and § Repo Location (WSL2 build tip). Errors section pointer added with reference to [#84](https://github.com/brendanbyrne/beerio-kart/issues/84). Pointers to coding-standards/, data-model.md, api-contract.md, compliance-plan.md added.
+- 2026-05-17 — WSL2 perf snippet path updated for workspace-root move (Issue [#169](https://github.com/brendanbyrne/beerio-kart/issues/169)): `backend/.cargo/config.toml` → `.cargo/config.toml` at the repo root, with a note that Cargo discovers the config by walking up from the invocation directory.

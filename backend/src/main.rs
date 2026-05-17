@@ -61,8 +61,11 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    // Default path is relative to the current working directory. Since the
+    // Cargo workspace root is the repo root (Issue #169), `cargo run` is run
+    // from the repo root, so the default resolves to `<repo>/data/db/`.
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:../data/db/beerio-kart.db?mode=rwc".to_string());
+        .unwrap_or_else(|_| "sqlite:data/db/beerio-kart.db?mode=rwc".to_string());
 
     // Load config from env vars (errors if JWT_SECRET is missing)
     let config = Config::from_env()?;
@@ -165,9 +168,10 @@ async fn main() -> anyhow::Result<()> {
         }
     }));
 
-    // STATIC_DIR defaults to ../frontend/dist for local dev (running from backend/).
-    // In Docker, set to /app/static where the built frontend is copied.
-    let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "../frontend/dist".to_string());
+    // STATIC_DIR defaults to frontend/dist, relative to the repo root — the
+    // working directory `cargo run` is invoked from (Issue #169). In Docker,
+    // set to /app/static where the built frontend is copied.
+    let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".to_string());
 
     let app = Router::new()
         .route("/api/v1/hello", get(hello))

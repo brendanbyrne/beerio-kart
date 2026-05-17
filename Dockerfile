@@ -16,21 +16,24 @@ FROM docker.io/library/rust:1-bookworm AS chef
 RUN cargo install cargo-chef
 WORKDIR /app
 
+# The Cargo workspace root is the repo root (a virtual manifest); the backend
+# crate lives in backend/. chef must see the root Cargo.toml + Cargo.lock plus
+# the member crates under backend/ to resolve the workspace.
 FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
 COPY backend/ ./backend/
-WORKDIR /app/backend
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 3: Build backend (dependencies cached separately from source)
 FROM chef AS backend-build
-COPY --from=planner /app/backend/recipe.json /app/backend/recipe.json
-WORKDIR /app/backend
+COPY --from=planner /app/recipe.json /app/recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
-COPY backend/ ./
+COPY Cargo.toml Cargo.lock ./
+COPY backend/ ./backend/
 # Seed data is embedded at compile time via include_str!() with paths
-# relative to src/ (e.g., ../../data/cups.json), so data/ must exist
-# at the expected location relative to the backend workspace.
+# relative to the source file (e.g., ../../data/cups.json from backend/src/),
+# so data/ must exist at /app/data/ — the repo root inside the build context.
 COPY data/ /app/data/
 RUN cargo build --release
 
@@ -44,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy the compiled binary
-COPY --from=backend-build /app/backend/target/release/beerio-kart ./beerio-kart
+COPY --from=backend-build /app/target/release/beerio-kart ./beerio-kart
 
 # Copy the built frontend
 COPY --from=frontend-build /app/frontend/dist/ ./static/
