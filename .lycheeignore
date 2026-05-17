@@ -26,3 +26,13 @@
 
 # nx.dev/docs: routinely times out under GitHub Actions network conditions.
 ^https?://nx\.dev/docs/
+
+# npmjs.com package pages: 403 anti-bot on unauthenticated traffic. Package
+# existence is verifiable via the registry API (registry.npmjs.org), which
+# does not bot-block; the package-page links are fine for human readers.
+^https?://(www\.)?npmjs\.com/
+
+# tanstack.com docs: pages respond in <200ms from a normal network but the
+# GitHub Actions IP range gets silently dropped (Cloudflare anti-bot), so
+# lychee times out. Same CI-only-unreachable pattern as nx.dev/docs above.
+^https?://tanstack\.com/
