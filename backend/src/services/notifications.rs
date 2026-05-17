@@ -151,10 +151,10 @@ pub async fn record(
 /// # Errors
 ///
 /// Propagates the errors of [`record`].
-#[tracing::instrument(
-    skip(txn),
-    fields(user_id = %user_id, session_id = %session_id, dropped_count),
-)]
+// `dropped_count` is intentionally not named in `fields(...)` — a bare name
+// there declares an empty span field that nothing records. As an unskipped
+// `Copy` argument it is auto-captured into the span by `#[instrument]`.
+#[tracing::instrument(skip(txn), fields(user_id = %user_id, session_id = %session_id))]
 pub async fn record_pending_drops(
     txn: &impl ConnectionTrait,
     user_id: &UserId,
