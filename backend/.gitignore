@@ -1,8 +1,5 @@
-# Build artifacts
-/target/
-
-# Cargo.lock is checked in for binaries, but ignore if this were a library
-# (keeping it checked in since this is an application)
+# Rust build artifacts (target/) and Cargo.lock now live at the workspace
+# root — see the root .gitignore. Nothing crate-specific to ignore here.
 
 # Environment
 .env

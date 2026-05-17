@@ -9,6 +9,8 @@ data/uploads/*
 # Rust build artifacts
 target/
 .cargo/
+# Coverage report from `just coverage-lcov` (written to the workspace root)
+lcov.info
 
 # Environment files
 .env
