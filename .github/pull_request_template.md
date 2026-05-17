@@ -20,8 +20,11 @@
 
 <!-- Reviewer's step-by-step checklist. Embed commands in fenced code blocks
      so they get a copy button. Each step has its success criterion built in.
-     If no manual verification is needed (typo fix, dep bump, etc.), write
-     "Skip — diff review only." Do not leave this section blank. -->
+     Make the blocks self-contained: capture any value a later step needs
+     (auth tokens, resource IDs) into a shell variable — e.g. via `jq` — so
+     the reviewer can run the block top-to-bottom without hand-substituting
+     placeholders. If no manual verification is needed (typo fix, dep bump,
+     etc.), write "Skip — diff review only." Do not leave this section blank. -->
 
 - [ ] 
 

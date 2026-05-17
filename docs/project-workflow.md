@@ -196,7 +196,7 @@ The template at `.github/pull_request_template.md` has these sections, in order:
 1. **Reviewer notes** — surprises, gotchas, dependent PRs, alternatives tried. At the top so it lands first.
 2. **Summary** — what the PR did, in 1-3 sentences.
 3. **Linked work** — `Closes #NN`, ADRs implemented, design records cited.
-4. **How to verify** — reviewer's step-by-step checklist. Each step has its success criterion built in. Embed commands in fenced code blocks so they get a copy button. If no manual verification is needed (typo fix, dep bump), write "Skip — diff review only." Do not leave this section blank.
+4. **How to verify** — reviewer's step-by-step checklist. Each step has its success criterion built in. Embed commands in fenced code blocks so they get a copy button, and make those blocks self-contained — capture any value a later step needs (auth tokens, resource IDs) into a shell variable, e.g. via `jq`, so the reviewer can run the block top-to-bottom without hand-substituting placeholders. If no manual verification is needed (typo fix, dep bump), write "Skip — diff review only." Do not leave this section blank.
 5. **Author checklist** — confirms before requesting review (Issue linked, tests added, docs updated, schema-change verified, tested locally).
 
 ## Triage
@@ -297,3 +297,4 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 - 2026-05-08 — Updated handoff and self-notes path references throughout (`docs/handoffs/` → `.agents/handoffs/`, `.claude/*-notes.md` → `.agents/memory/*.md`) per the AI-state reorg in [#79](https://github.com/brendanbyrne/beerio-kart/issues/79).
 - 2026-05-14 — Added `### Title` subsection under `## PR conventions` documenting the `<issue_number>: <Title>` PR title format (mirrors the existing commit-message convention). Captured so Claude Code applies the format when creating PRs.
 - 2026-05-15 — Updated the intro paragraph's reference for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
+- 2026-05-17 — § PR template structure item 4 (How to verify): added the rule that verification command blocks must be self-contained — capture values a later step needs (auth tokens, resource IDs) into shell variables, e.g. via `jq`, rather than asking the reviewer to substitute placeholders by hand. Mirrored in the `.github/pull_request_template.md` "How to verify" comment. Surfaced by PR [#165](https://github.com/brendanbyrne/beerio-kart/pull/165) review feedback.
