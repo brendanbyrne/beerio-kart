@@ -1,0 +1,378 @@
+# TypeScript — General Coding Standards
+
+> **Scope.** General TypeScript patterns for the `beerio-kart` frontend. TypeScript 5.9+, ES2023+ target, Vite + esbuild toolchain, ESLint flat config. Language-level rules only — React-specific patterns are in [`react.md`](./react.md), styling rules in [`tailwind.md`](./tailwind.md).
+> **Format.** Each rule: *Rule / Why / Example / Source*.
+> **Companions.** `react.md`, `tailwind.md`, `../api-contract.md`. Compliance plan: `../designs/2026-05-16-frontend-compliance-plan.md`.
+
+## Index
+
+1. [tsconfig strictness](#1-tsconfig-strictness)
+2. [Type system — `type` vs `interface`, `satisfies`, `as`](#2-type-system--type-vs-interface-satisfies-as)
+3. [Branded types](#3-branded-types)
+4. [Discriminated unions & exhaustiveness](#4-discriminated-unions--exhaustiveness)
+5. [Module & export style](#5-module--export-style)
+6. [Error handling](#6-error-handling)
+7. [Async patterns & cancellation](#7-async-patterns--cancellation)
+8. [Runtime validation at the API boundary](#8-runtime-validation-at-the-api-boundary)
+9. [Lints, formatter, editor config](#9-lints-formatter-editor-config)
+10. [Anti-patterns](#10-anti-patterns)
+11. [Backend interop](#11-backend-interop)
+
+---
+
+## 1. tsconfig strictness
+
+The configuration in `frontend/tsconfig.app.json` and `frontend/tsconfig.node.json` is the source of truth. Both files share the same strictness floor.
+
+- **Rule:** `"strict": true` plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `isolatedModules`, and `verbatimModuleSyntax`. All seven are required.
+  - **Why:** `strict` enables the eight original strict flags (`noImplicitAny`, `strictNullChecks`, etc.) but does *not* include the index-access or exact-optional checks, which catch the two highest-frequency runtime bugs in React apps: array/record lookups assumed to be defined, and `{ foo: undefined }` being silently distinct from `{}`. TS 5.9's `tsc --init` template ships `isolatedModules` and `verbatimModuleSyntax` because they're required for per-file transpilers (Vite/esbuild) — match that default.
+  - **Example:**
+    ```jsonc
+    // tsconfig.app.json
+    {
+      "compilerOptions": {
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "noImplicitOverride": true,
+        "noFallthroughCasesInSwitch": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": true
+      }
+    }
+    ```
+  - **Source:** <https://www.typescriptlang.org/tsconfig/> · <https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html> · <https://www.typescriptlang.org/tsconfig/noUncheckedIndexedAccess.html>
+
+- **Rule:** `noUncheckedSideEffectImports: true` and `erasableSyntaxOnly: true` are also on.
+  - **Why:** `noUncheckedSideEffectImports` makes `import './foo.css'` fail typecheck if `./foo.css` isn't a declared module — caught at compile time instead of at bundle time. `erasableSyntaxOnly` enforces that no TS syntax survives transpilation as runtime constructs (it bans `enum`, `namespace` with runtime emit, parameter properties), which is the precondition for Node 22+ native TS execution and matches what we lint in § 10.
+  - **Source:** <https://www.typescriptlang.org/tsconfig/noUncheckedSideEffectImports.html> · <https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html#--erasablesyntaxonly>
+
+- **Rule:** Do not weaken `strict` per-file via `// @ts-nocheck` or per-block via `// @ts-ignore`. If something genuinely can't typecheck, use `// @ts-expect-error: <reason>`.
+  - **Why:** `@ts-expect-error` fails the build *when the underlying error goes away*, which prevents zombie suppressions. `@ts-ignore` is silently still suppressing the day someone else fixes the upstream type. See § 10 for the lint rule.
+  - **Source:** <https://typescript-eslint.io/rules/ban-ts-comment/>
+
+## 2. Type system — `type` vs `interface`, `satisfies`, `as`
+
+- **Rule:** Default to `type`. Use `interface` only when you genuinely need declaration merging (rare in app code; common when augmenting third-party types like `Window` or `ImportMetaEnv`) or when extending a long chain of base types where TS's interface-inheritance fast path measurably matters (verified by profiler, not assumed).
+  - **Why:** `type` expresses everything (unions, mapped, conditional, tuples, primitives) while `interface` silently merges across declarations — which is a footgun in app code. The handbook's old "prefer interface" guidance is outdated; current community consensus (Matt Pocock, the TS perf wiki) is `type` by default. Use `consistent-type-definitions: ["error", "type"]` to enforce.
+  - **Example:**
+    ```ts
+    type Run = { id: RunId; trackId: TrackId; timeMs: number };
+
+    // interface only when extending into Window / Module / etc.
+    // Global augmentation must be inside `declare global` when the file is a module:
+    declare global {
+      interface Window {
+        __BEERIOKART_VERSION__: string;
+      }
+    }
+    ```
+  - **Source:** <https://www.totaltypescript.com/type-vs-interface-which-should-you-use> · <https://github.com/microsoft/TypeScript/wiki/Performance#preferring-interfaces-over-intersections>
+
+- **Rule:** Use `satisfies` to validate a value against a type without widening. Use `as` only to tell the compiler something it can't verify (DOM event narrowing, branded-type minting at a trusted boundary). Use a plain type annotation when you want the wider type to win.
+  - **Why:** Annotations widen (lose literal types), `as` lies (no checking), `satisfies` checks-but-preserves. This is the right tool for config objects, route maps, `as const` shape enforcement, and tuple-like literals.
+  - **Example:**
+    ```ts
+    const routes = {
+      home: '/',
+      session: '/sessions/:id',
+    } satisfies Record<string, `/${string}`>;
+    // routes.home is the literal '/', not string — usable as a typed route key.
+    ```
+  - **Source:** <https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html> · <https://www.totaltypescript.com/clarifying-the-satisfies-operator>
+
+- **Rule:** `as` casts and non-null assertions (`!`) require a one-line justifying comment, and the lint rules `no-explicit-any`, `no-non-null-assertion`, and `consistent-type-assertions: { assertionStyle: "as", objectLiteralTypeAssertions: "never" }` are on.
+  - **Why:** Most `!` is "I know better than the compiler" and is wrong eventually (see `Session.tsx:13` in the audit, where `useParams<{ id: string }>()` actually returns `Partial<{ id: string }>`). Most `as` casts silently break when the source type changes. Both should be visible and rare.
+  - **Source:** <https://typescript-eslint.io/rules/no-non-null-assertion/> · <https://typescript-eslint.io/rules/consistent-type-assertions/>
+
+- **Rule:** Prefer `T | null` over `T | undefined` when modeling "explicitly absent." Reserve `undefined` for "this property is missing entirely" (consistent with `exactOptionalPropertyTypes`).
+  - **Why:** `exactOptionalPropertyTypes` makes `{ foo?: string }` strictly distinct from `{ foo: string | undefined }` — the first omits the key, the second sets it to `undefined`. Picking one convention prevents both shapes leaking into the same DTO.
+
+## 3. Branded types
+
+The structural type system has no built-in way to say "`SessionId` and `UserId` are both strings but you cannot pass one where the other is expected." We solve it with phantom-property brands, applied at the API boundary.
+
+- **Rule:** Every domain identifier crossing a module boundary is branded. Centralize the brand helper.
+  - **Why:** The Rust backend has `nutype` newtypes for every ID, every username, every race-time. Without branded mirrors on the TS side, the type-safety stops at the wire. Branded types are zero-cost (a phantom symbol property erased at runtime), JSON-round-trippable (the value is still a plain string/number), and produce tolerable error messages.
+  - **Example:**
+    ```ts
+    // src/api/brand.ts
+    declare const brand: unique symbol;
+    export type Brand<T, B> = T & { readonly [brand]: B };
+
+    // src/api/ids.ts
+    export type UserId    = Brand<string, 'UserId'>;
+    export type SessionId = Brand<string, 'SessionId'>;
+    export type RunId     = Brand<string, 'RunId'>;
+    export type RaceId    = Brand<string, 'RaceId'>;
+
+    export type CharacterId = Brand<number, 'CharacterId'>;
+    export type TrackId     = Brand<number, 'TrackId'>;
+    // ... and so on for each numeric ID
+
+    // Constructor — the only place an unbranded value gains the brand.
+    // Used by the runtime parser (§ 8), not scattered through call sites.
+    export const UserId = (s: string): UserId => s as UserId;
+    ```
+  - **Source:** <https://www.typescriptlang.org/play/typescript/language-extensions/nominal-typing.ts.html> · <https://www.totaltypescript.com/workshops/advanced-typescript-patterns/branded-types/using-branded-types-as-entity-id-s/solution>
+
+- **Rule:** Brand at the runtime-parse boundary (see § 8), not at each call site. Inside the typed API layer, IDs are already branded; consumers receive `SessionId`, not `string`.
+  - **Why:** "Mint where you validate" is the same principle as Rust's *parse, don't validate*. If every component re-brands via `s as SessionId`, you've reintroduced the unsafety the brand exists to prevent.
+
+- **Rule:** Do not brand bools or `Date`. Reserve brands for primitives whose context is genuinely ambiguous (string-shaped IDs, numeric-shaped IDs, time durations in ms vs s).
+  - **Why:** Mirrors `rust.md` § 2's "don't newtype bools" rule. Brand cost is real (every consumer sees the phantom in error messages); apply it where the ambiguity is real.
+
+## 4. Discriminated unions & exhaustiveness
+
+- **Rule:** Model "this thing is one of several shapes" as a discriminated union keyed on a literal `kind` field. Use `kind` as the discriminator name to match the Rust backend's serde tag convention.
+  - **Why:** DUs let TS narrow the *whole shape* (not just the tag) and align directly with serde's `#[serde(tag = "kind")]` output — zero translation logic at the boundary. The existing notification payload types around `frontend/src/api/types.ts:170-185` are already structured this way (single-variant today, expandable to a full union) and are the model for everything else.
+  - **Example:**
+    ```ts
+    type SessionStatus =
+      | { kind: 'open'; participantCount: number }
+      | { kind: 'in_progress'; currentRaceId: RaceId }
+      | { kind: 'closed'; endedAt: string };
+    ```
+  - **Source:** <https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions>
+
+- **Rule:** Exhaustiveness check unions with a `never`-typed default arm.
+  - **Why:** Adding a variant later (e.g., a new session status) becomes a compile error at every consumer instead of a silent fallthrough. Same role as `#[non_exhaustive]` + match-arm wildcards on the Rust side.
+  - **Example:**
+    ```ts
+    function label(s: SessionStatus): string {
+      switch (s.kind) {
+        case 'open':         return `Open · ${s.participantCount}`;
+        case 'in_progress':  return 'Racing';
+        case 'closed':       return 'Closed';
+        default: {
+          const _exhaustive: never = s;
+          return _exhaustive;
+        }
+      }
+    }
+    ```
+
+- **Rule:** Do not use the TS `enum` keyword. Use `as const` objects or string-literal unions instead.
+  - **Why:** `enum` emits runtime code; numeric enums are not type-safe (any number assigns); `const enum` breaks under `isolatedModules`/`verbatimModuleSyntax` — exactly the toolchain we use. ESLint's `no-restricted-syntax` covers it; the project is already enum-free (audited 2026-05-16).
+  - **Example:**
+    ```ts
+    // Instead of `enum Cup { Mushroom, Flower }`:
+    const Cup = { Mushroom: 'mushroom', Flower: 'flower' } as const;
+    type Cup = (typeof Cup)[keyof typeof Cup]; // 'mushroom' | 'flower'
+    ```
+  - **Source:** <https://www.typescriptlang.org/tsconfig/isolatedModules.html#const-enums>
+
+## 5. Module & export style
+
+- **Rule:** Named exports only. One primary export per file, file name matches the export. No default exports anywhere — pages, components, hooks, utilities, API helpers.
+  - **Why:** Default exports break rename-refactors (the importer picks an arbitrary name; grep fails), break tree-shaking heuristics, and let two files declare the same default with no compiler help. Enforced via `import/no-default-export`.
+  - **Example:**
+    ```ts
+    // Good
+    export function SessionPanel() { /* ... */ }
+    // bad
+    export default function SessionPanel() { /* ... */ }
+    ```
+  - **Source:** <https://github.com/import-js/eslint-plugin-import/blob/main/docs/rules/no-default-export.md>
+
+- **Rule:** Type-only imports use `import type`; type-only exports use `export type`. The `verbatimModuleSyntax` flag (§ 1) enforces this — imports without `type` are emitted verbatim, imports *with* `type` are dropped, no "elide on emit" guesswork.
+  - **Why:** Per-file transpilers like esbuild don't have a whole-program view. Without `verbatimModuleSyntax` they sometimes leave dead `import { Foo }` lines that, at runtime, reach for an export that was type-only — a circular-import footgun. The verbatim model is the only one that's correct under per-file transpilation.
+  - **Example:**
+    ```ts
+    import { fetchRuns } from './api';
+    import type { Run, RunId } from './api/types';
+    export type { Run };
+    ```
+  - **Source:** <https://www.typescriptlang.org/tsconfig/verbatimModuleSyntax.html>
+
+- **Rule:** Do not include `.js` extensions in source-relative imports. Vite/esbuild resolves `.ts` and `.tsx` for you.
+  - **Why:** `.js` extensions are only required when you're targeting raw Node ESM with no bundler. Adding them under Vite creates path-noise and breaks `tsc`-driven IDEs that resolve via the TS file map.
+  - **Source:** <https://vite.dev/guide/features.html#typescript>
+
+- **Rule:** Module path aliases (`@/components/...`) go through `vite.config.ts` `resolve.alias` *and* `tsconfig.app.json` `paths` so both the bundler and the type-checker agree.
+  - **Why:** If only the bundler knows, `tsc --noEmit` fails. If only `tsc` knows, the dev server breaks. Either set both or neither.
+
+## 6. Error handling
+
+The split mirrors the backend's: *expected* failures are values, *unexpected* failures throw and are caught at the boundary.
+
+- **Rule:** Use a small `Result<T, E>` shape for *expected* domain failures returned from API helpers — validation rejections, 4xx responses, parse errors. Use `throw` for *unexpected* failures (network down, 5xx, programmer error) and catch them at an error boundary (see [`react.md`](./react.md) § Error boundaries).
+  - **Why:** Results make handleable failure visible in the signature — you can't forget to handle a domain error. But wrapping every fetch in Result is noisy; for *exceptional* paths, `throw` + boundary is simpler. The error-code envelope from `api-contract.md` § 8 is the natural shape for the `E` side of `Result`.
+  - **Example:**
+    ```ts
+    export type Result<T, E> =
+      | { ok: true; value: T }
+      | { ok: false; error: E };
+
+    // The backend already emits `{ error, code }` per api-contract.md § 8.
+    // ApiError is a discriminated union on the registry's code values:
+    export type ApiError =
+      | { code: 'invalid_credentials'; message: string }
+      | { code: 'username_taken'; message: string }
+      | { code: 'not_found';           message: string }
+      // ... one variant per registry entry
+      | { code: 'unknown'; message: string }; // fallback for unmapped codes
+
+    export async function login(
+      username: string, password: string,
+    ): Promise<Result<AuthResponse, ApiError>> {
+      const res = await fetch('/api/auth/login', { /* ... */ });
+      if (res.ok) return { ok: true, value: await parseAuth(res) };
+      return { ok: false, error: await parseError(res) };
+    }
+    ```
+
+- **Rule:** When you re-throw, preserve the chain with `Error.cause`.
+  - **Why:** `Error.cause` (ES2022, baseline-supported in every target browser) keeps the original stack reachable through wrapping. Lose-the-cause re-throws are the frontend equivalent of `unwrap()`-and-pray.
+  - **Example:**
+    ```ts
+    try {
+      return await loadRun(id);
+    } catch (e) {
+      throw new Error(`loadRun(${id}) failed`, { cause: e });
+    }
+    ```
+  - **Source:** <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/cause>
+
+- **Rule:** Use a discriminated union for `ApiError`, not `Error` subclasses.
+  - **Why:** Discriminated unions travel naturally over JSON from the backend (which already serializes its `ErrorCode` enum exactly this way). `instanceof MyError` doesn't survive a `JSON.parse` round-trip; a `kind`/`code` field does.
+
+- **Rule:** Error-message strings constructed in TS follow the same convention as `rust.md` § 1: start with a capital letter, no trailing punctuation. User-facing copy may diverge if the design calls for it (sentence punctuation in long-form error messages), but the internal `Error.message` we synthesize for logs follows the rule.
+  - **Why:** Consistency with the backend so `error.message` strings read identically across the wire.
+
+## 7. Async patterns & cancellation
+
+- **Rule:** Every fetch accepts an `AbortSignal` and passes it through to `fetch`. Hooks that initiate fetches create an `AbortController` in their effect and `controller.abort()` in cleanup.
+  - **Why:** Without cancellation, navigating away mid-fetch triggers a `setState` on an unmounted component (React 19 dev warns; Strict Mode double-mount surfaces it loudly). With TanStack Query (see `react.md` § Data fetching), cancellation is built in — but our underlying `fetch` wrapper still needs to honor the signal.
+  - **Example:**
+    ```ts
+    export async function fetchSession(
+      id: SessionId, signal?: AbortSignal,
+    ): Promise<Result<SessionDetail, ApiError>> {
+      const res = await apiFetch(`/api/sessions/${id}`, { signal });
+      // ...
+    }
+    ```
+  - **Source:** <https://developer.mozilla.org/en-US/docs/Web/API/AbortController> · <https://tanstack.com/query/latest/docs/framework/react/guides/query-cancellation>
+
+- **Rule:** `Promise.all` when failures should short-circuit (loading a page that needs all data). `Promise.allSettled` when each task is independent (parallel widgets, fan-out telemetry).
+  - **Why:** `Promise.all` rejects as soon as any input rejects — the others keep running but their results are lost. `allSettled` waits and reports each outcome. Picking the wrong one silently loses errors or silently loses data.
+  - **Source:** <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled>
+
+- **Rule:** No floating promises. `@typescript-eslint/no-floating-promises` is on. If you genuinely want fire-and-forget, write `void promise()` explicitly.
+  - **Why:** A dropped promise rejection becomes an unhandled rejection at the window level — invisible during local dev unless you check the console, fatal in production telemetry. The explicit `void` documents intent.
+  - **Source:** <https://typescript-eslint.io/rules/no-floating-promises/>
+
+## 8. Runtime validation at the API boundary
+
+- **Rule:** Every response read from `fetch` is parsed through a runtime schema before being treated as typed data. Use [Zod](https://zod.dev) (`zod` package) for the schemas; the TS types are inferred from the schemas, not declared separately.
+  - **Why:** `await res.json()` returns `any`. Assigning it to `SessionDetail` is a lie — the compiler stops checking and the next time the backend renames a field, the bug appears at the first downstream read, far from the cause. Zod parses *and* infers, so the type definition and the runtime check stay in lockstep. This is also where branded IDs (§ 3) get minted: the schema transforms `string` → `UserId` once, at the boundary, and consumers see `UserId` everywhere downstream.
+  - **Example:**
+    ```ts
+    import { z } from 'zod';
+
+    const SessionDetailSchema = z.object({
+      id: z.string().transform((s) => s as SessionId),
+      status: z.enum(['open', 'in_progress', 'closed']),
+      participants: z.array(z.object({
+        user_id: z.string().transform((s) => s as UserId),
+        username: z.string(),
+      })),
+    });
+
+    export type SessionDetail = z.infer<typeof SessionDetailSchema>;
+
+    export async function fetchSession(id: SessionId, signal?: AbortSignal) {
+      const raw = await apiFetch(`/api/sessions/${id}`, { signal });
+      return SessionDetailSchema.parse(raw);
+    }
+    ```
+  - **Source:** <https://zod.dev/?id=basic-usage>
+
+- **Rule:** Validation failures are surfaced as `ApiError { code: 'response_shape_mismatch', ... }` and treated as a programmer error (logged, error boundary, fail-loud) — not silently coerced.
+  - **Why:** A schema mismatch means the contract drifted. Silently coercing means the bug ships. Loud failure surfaces drift on the first dev run.
+
+- **Rule:** Do not use Zod for form input validation today. Native HTML validation (`required`, `pattern`, `type="email"`) plus a one-shot schema check at submit is sufficient for our form complexity. Revisit if forms grow live cross-field validation.
+  - **Why:** Form-validation libraries (React Hook Form + Zod resolver) are a real adoption with real bundle cost; we're not paying for a problem we don't have. The audit shows our forms are small and submit-time-validated already.
+
+## 9. Lints, formatter, editor config
+
+- **Rule:** ESLint flat config (`eslint.config.js`) extending `typescript-eslint`'s `strictTypeChecked` and `stylisticTypeChecked` presets. Configure `parserOptions.projectService: true` so type-aware rules pick up the project automatically. Required additional plugins: `eslint-plugin-react-hooks` (recommended), `eslint-plugin-jsx-a11y` (recommended; see `react.md` § Accessibility), `eslint-plugin-import` (for `no-default-export` and `consistent-type-specifier-style`), `eslint-config-prettier` (to disable rules Prettier owns).
+  - **Why:** `strict-type-checked` is the superset of `recommended` + `strict` + the type-aware rules that catch the high-value bugs (`no-floating-promises`, `no-misused-promises`, `no-unsafe-*`, `await-thenable`). `stylistic-type-checked` adds cheap consistency rules. The type-checked variants are slower (TS has to build the project) but worth it for app code; opt out per-file with overrides if a generated file makes it impractical.
+  - **Example:**
+    ```js
+    // eslint.config.js
+    import tseslint from 'typescript-eslint';
+    import reactHooks from 'eslint-plugin-react-hooks';
+    import jsxA11y from 'eslint-plugin-jsx-a11y';
+    import importPlugin from 'eslint-plugin-import';
+    import prettier from 'eslint-config-prettier';
+
+    export default tseslint.config(
+      ...tseslint.configs.strictTypeChecked,
+      ...tseslint.configs.stylisticTypeChecked,
+      reactHooks.configs.recommended,
+      jsxA11y.flatConfigs.recommended,
+      importPlugin.flatConfigs.recommended,
+      prettier,
+      {
+        languageOptions: { parserOptions: { projectService: true } },
+        rules: {
+          '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
+          '@typescript-eslint/consistent-type-imports': 'error',
+          'import/no-default-export': 'error',
+          'no-restricted-syntax': [
+            'error',
+            { selector: 'TSEnumDeclaration',
+              message: 'Use `as const` objects or string-literal unions instead of enum.' },
+          ],
+        },
+      },
+    );
+    ```
+  - **Source:** <https://typescript-eslint.io/users/configs/> · <https://typescript-eslint.io/getting-started/typed-linting/>
+
+- **Rule:** Key rules to confirm on: `no-floating-promises`, `no-misused-promises`, `await-thenable`, `no-explicit-any`, `no-non-null-assertion`, `consistent-type-imports`, `ban-ts-comment`, `no-unnecessary-condition`, `consistent-type-definitions: ["error", "type"]`, `import/no-default-export`, `react-hooks/rules-of-hooks`, `react-hooks/exhaustive-deps`, `jsx-a11y/recommended`.
+  - **Why:** These are the rules that defend the standard. Disabling any of them mid-file requires an inline `// eslint-disable-next-line <rule>: <reason>` comment.
+
+- **Rule:** Prettier owns formatting. Settings in `frontend/.prettierrc` (default config + `singleQuote: true`, `semi: true`, `trailingComma: 'all'`). Both Prettier and ESLint run pre-commit via lefthook.
+  - **Why:** No bikeshedding on style; the formatter resolves it. `trailingComma: 'all'` minimizes diff noise on list edits.
+  - **Source:** <https://prettier.io/docs/options>
+
+- **Rule:** `frontend/.editorconfig` (or root `.editorconfig`) enforces LF endings, UTF-8, final newline, two-space indent for `*.{ts,tsx,js,jsx,css,json}` and tab indent for `*.go`/`Makefile`-style files (none in this project, but documented).
+  - **Why:** Mirrors `rust.md` § 16. LF endings are required by the cross-cutting `CLAUDE.md` convention.
+
+## 10. Anti-patterns
+
+| Anti-pattern | Why bad | Use instead |
+|---|---|---|
+| `any` | Silently disables type-checking; infects callers via `no-unsafe-*` | `unknown` + narrow, or a Zod schema |
+| `x!` non-null assertion | Crashes at runtime if wrong; hides nullability bugs | Narrow with `if (x)`, use `??`, or change the source type |
+| `x as T` (type assertion) | Lies to the compiler | `satisfies T`, a Zod parse, or a type guard |
+| `// @ts-ignore` | Silently rots — masks unrelated errors that surface later | `// @ts-expect-error: <reason>` |
+| `Function` type | Equivalent to `any` for arguments/return | `(...args: Args) => Ret` |
+| `Object` / `{}` | Means "anything except null/undefined" | `Record<string, unknown>` or a real shape |
+| TS `enum` | Runtime emit, broken under per-file transpile | `as const` object + `keyof typeof` |
+| `useEffect` to fetch / derive | See [`react.md`](./react.md) § Effects | TanStack Query / `useMemo` / derived state |
+| `await res.json()` typed as a DTO | Untyped, no runtime check | Zod schema + `parse` |
+| String-concatenated class names | Hard to read, drifts | `clsx` (see `tailwind.md`) |
+
+Each row in this table maps to an ESLint rule listed in § 9.
+
+## 11. Backend interop
+
+- **Rule:** The wire format defined in `../api-contract.md` is the source of truth. TS types in `frontend/src/api/types.ts` must match it field-for-field, including snake_case field names (we do *not* rename to camelCase at the boundary; the wire shape is established by the endpoint examples throughout `api-contract.md` and the existing `frontend/src/api/types.ts`).
+  - **Why:** Renaming at the boundary adds translation code on every request and creates a third name for every concept (Rust field, wire field, TS field). Match the wire and the cost is zero.
+
+- **Rule:** Discriminator field is `kind` to match the backend's `#[serde(tag = "kind")]` convention.
+  - **Why:** Zero translation logic at the parse step. Already in use for `NotificationPayload`; extend to every other tagged enum.
+
+- **Rule:** Error envelope is `{ error: string, code: ErrorCode }` per `api-contract.md` § 8. The TS `ApiError` union derives its `code` values directly from the registry; treat additions to the registry as a frontend breaking change that requires updating the union.
+  - **Why:** The `code` is the machine-readable contract; relying on `error` text for branching is the anti-pattern the registry exists to eliminate.
+
+- **Rule:** Type-sync between Rust DTOs and TS DTOs is currently hand-maintained, with `frontend/src/api/types.ts` as the mirror. CI does not yet enforce drift detection. See `../research/rust-to-ts-codegen.md` for the evaluation of automated options (typeshare, ts-rs, specta, schemars, utoipa) — the recommendation as of 2026-05-16 is to stay hand-rolled until DTO count crosses ~30 types, then adopt `schemars` + `json-schema-to-typescript` (which is the only path that natively understands our `nutype` newtypes).
+  - **Why:** Every tool that parses Rust source directly (typeshare, ts-rs, specta) fails on `nutype`-generated structs because `nutype` rewrites the struct during macro expansion. `schemars` works because `nutype` has a first-class `schemars08` feature flag. Hand-rolling preserves optionality and keeps the contract legible to both Cowork and Claude Code in the meantime.
+
+## Document history
+
+- 2026-05-16 — Initial creation. Sourced from research conducted 2026-05-16 (TypeScript 5.9, ESLint 9, React 19.2 baselines). Companion files: `react.md`, `tailwind.md`, both created same day. Compliance plan: `../designs/2026-05-16-frontend-compliance-plan.md`. Type-sync research: `../research/rust-to-ts-codegen.md`.
