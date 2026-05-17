@@ -1015,9 +1015,9 @@ mod tests {
     /// `(session_race_participations, session_races, runs)` — see
     /// `get_pending_races`. No periodic timer ages a row out on its own
     /// clock. The one writer of `dropped_at` is the session-close transaction
-    /// (`close_session_and_drop_pending`, ADR-0037), which runs inline on the
-    /// last leave or via the stale-session sweeper. Resolved rows (`skipped`,
-    /// `raced`, `dropped`) remain in the DB indefinitely as historical state.
+    /// (`close_session`, ADR-0037), which runs inline on the last leave or via
+    /// the stale-session sweeper. Resolved rows (`skipped`, `raced`,
+    /// `dropped`) remain in the DB indefinitely as historical state.
     #[tokio::test]
     async fn test_lazy_check_assertion() {
         // No-op test by design — this comment IS the assertion.
