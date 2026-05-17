@@ -126,6 +126,7 @@ Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-ho
 
 **Scope.**
 
+- Extract the existing inline Random logic (`services/sessions/races.rs::next_track`, `services/helpers.rs::pick_random_track`) into a `Ruleset` trait under `backend/src/services/rulesets/` per ADR-0022, with `Random` as the first impl. Prereq for Default / Least Played / Round-robin below. (Lifted out of #72 during the 2026-05-16 audit.)
 - Default ruleset — lowest-leaderboard-points player chooses, with recusal; falls back to random when everyone recuses. Tiebreaker: oldest account creation time.
 - Least Played ruleset — track with fewest runs in the chosen drink category. Drink-category config picked at session creation; defaults to the host's preferred drink category.
 - Round-robin ruleset — "Can Choose" / "Can't Choose" groups; recusal moves you to "Can't Choose"; resets when "Can Choose" is empty.
@@ -152,11 +153,15 @@ Each ruleset is its own Rust trait impl per ADR 0022. **Six test scenarios per r
 - Personal stats page — PBs, averages, run count, most-played track, best track.
 - Session history in profile — date, participants, race count, personal W-L per session. Tap into a session for race-by-race breakdown.
 - Full run history with detail view, paginated per ADR 0032.
+- Extended `GET /runs` filters: `drink_type_id`, `alcoholic`, `disqualified`, `after`, `before`, `sort`, `limit`. (Lifted out of #65 during the 2026-05-16 audit — Star shipped with just `session_race_id` / `user_id` / `track_id`.)
+- Cursor-based pagination on `GET /runs` per ADR-0032. (Same provenance.)
 - Per-track time-series chart of all runs.
 - Track leaderboard — alcoholic / non-alcoholic / combined toggle (per ADR 0006); DQ'd runs excluded (per ADR 0012); user's preferred drink category sets the default toggle position.
 - Cup-level leaderboard — same toggle.
 - Global leaderboard — most track records held (per ADR 0003).
 - User rank pinned at the bottom of leaderboards when not in the top N.
+- Recent runs widget on Home (5 most recent for the signed-in user). (Lifted out of #59 during the 2026-05-16 audit — Star shipped the active-sessions list and Start-a-Session CTA; recent runs deferred to Banana with the rest of the personal-history surface.)
+- User rank summary on Home — "most track records held" per ADR-0003. The global leaderboard's primary metric, surfaced as a Home-screen widget. (Same provenance as above.)
 - Notification variants for leaderboard-relevant events (per [ADR-0038](./decisions/0038-notifications-system.md)): `TrackRecordLost` (notify the previous holder when their track or lap record is beaten) and `LeaderboardRankChanged` (notify users whose top-N position shifts). Trigger sites in `services::runs::create_run` and `delete_run`.
 
 **Success criteria.** A user can find their PB on any track in two taps. Leaderboards refresh as runs come in. The drink-category toggle feels natural, not buried.
