@@ -160,3 +160,32 @@ export interface SessionDetail {
   current_race: SessionRaceInfo | null
   races: RaceInfo[]
 }
+
+// ── Notifications (ADR-0038) ──────────────────────────────────────────
+//
+// Hand-written counterpart of the Rust `NotificationPayload` enum
+// (backend/src/services/notifications.rs). Kept in sync via PR review —
+// no codegen for MVP. Add a new payload interface + union member here
+// whenever a variant is added on the Rust side.
+
+export interface PendingRacesDroppedPayload {
+  kind: 'pending_races_dropped'
+  session_id: string
+  dropped_count: number
+}
+
+// Discriminated union of notification payload kinds. MVP carries one
+// variant; future kinds (h2h_lead_changed, track_record_lost,
+// leaderboard_rank_changed) join this union as they land.
+export type NotificationPayload = PendingRacesDroppedPayload
+
+export interface Notification {
+  id: string
+  created_at: string
+  read_at: string | null
+  payload: NotificationPayload
+}
+
+export interface UnreadCountResponse {
+  count: number
+}

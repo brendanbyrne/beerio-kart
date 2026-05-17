@@ -62,8 +62,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use beerio_kart::entities::{
-    bodies, characters, cups, drink_types, gliders, run_flags, runs, session_participants,
-    session_race_participations, session_races, sessions, tracks, users, wheels,
+    bodies, characters, cups, drink_types, gliders, notifications, run_flags, runs,
+    session_participants, session_race_participations, session_races, sessions, tracks, users,
+    wheels,
 };
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{Database, EntityTrait, QuerySelect};
@@ -90,6 +91,11 @@ async fn each_entity_can_load_from_a_fresh_migrated_db() {
     cups::Entity::find().limit(0).all(&db).await.unwrap();
     drink_types::Entity::find().limit(0).all(&db).await.unwrap();
     gliders::Entity::find().limit(0).all(&db).await.unwrap();
+    notifications::Entity::find()
+        .limit(0)
+        .all(&db)
+        .await
+        .unwrap();
     run_flags::Entity::find().limit(0).all(&db).await.unwrap();
     runs::Entity::find().limit(0).all(&db).await.unwrap();
     session_participants::Entity::find()

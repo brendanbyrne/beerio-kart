@@ -142,6 +142,7 @@ uuid_id_newtype!(SessionRaceId, "session_races.id");
 uuid_id_newtype!(SessionParticipantId, "session_participants.id");
 uuid_id_newtype!(RunFlagId, "run_flags.id");
 uuid_id_newtype!(DrinkTypeId, "drink_types.id");
+uuid_id_newtype!(NotificationId, "notifications.id");
 
 // ── Integer-backed ID newtypes ──────────────────────────────────────────
 //

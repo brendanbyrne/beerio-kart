@@ -11,6 +11,7 @@ pub mod characters;
 pub mod cups;
 pub mod drink_types;
 pub mod gliders;
+pub mod notifications;
 pub mod run_flags;
 pub mod runs;
 pub mod session_participants;
@@ -26,6 +27,7 @@ pub mod wheels;
 // service code never sets these by hand. See `docs/coding-standards/seaorm.md`
 // § 1 (and PR-E1 / Issue #137 for the migration that introduced this split).
 mod drink_types_behavior;
+mod notifications_behavior;
 mod run_flags_behavior;
 mod runs_behavior;
 mod session_race_participations_behavior;

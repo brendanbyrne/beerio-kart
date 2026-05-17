@@ -10,7 +10,7 @@ pub mod race_setup;
 pub mod strings;
 
 pub use ids::{
-    BodyId, CharacterId, CupId, DrinkTypeId, GliderId, RunFlagId, RunId, SessionId,
+    BodyId, CharacterId, CupId, DrinkTypeId, GliderId, NotificationId, RunFlagId, RunId, SessionId,
     SessionParticipantId, SessionRaceId, TrackId, UserId, WheelId,
 };
 pub(crate) use numeric::assert_lap_sum;

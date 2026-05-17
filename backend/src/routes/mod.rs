@@ -4,6 +4,8 @@ pub mod auth;
 pub mod drink_types;
 /// Read-only seeded game data: characters, bodies, wheels, gliders, cups, tracks.
 pub mod game_data;
+/// Per-user notifications inbox — list, unread-count, mark-all-read.
+pub mod notifications;
 /// Run recording — create / list / get / delete individual race runs.
 pub mod runs;
 /// Session lifecycle — create, join, leave, list, get, race orchestration.

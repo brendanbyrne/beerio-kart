@@ -67,7 +67,7 @@ POST   /sessions                   Create a new session (choose ruleset)
 GET    /sessions                   List active sessions (sorted by most recent activity)
 GET    /sessions/:id               Get session details (participants, current race, state)
 POST   /sessions/:id/join          Join a session (dedicated endpoint — designed for future password support)
-POST   /sessions/:id/leave         Leave a session (triggers grace period for pending races)
+POST   /sessions/:id/leave         Leave a session (if you were the last to leave, the session closes and unresolved pending races are dropped)
 POST   /sessions/:id/next-track    Trigger next track selection (host or chooser, depending on ruleset)
 POST   /sessions/:id/choose-track  Choose a specific track (for rulesets where a player picks)
 POST   /sessions/:id/skip-turn     Pass the chooser's turn to the next person (any participant can trigger)
@@ -107,7 +107,17 @@ GET    /stats/head-to-head/:user_id_1/:user_id_2   H2H record between two player
 
 All leaderboard endpoints accept `?alcoholic=true|false|all` to filter by drink category. Default matches the requesting user's preferred drink category. DQ'd runs are excluded from leaderboard calculations.
 
-### 1.8 Admin
+### 1.8 Notifications
+
+```
+GET    /me/notifications               List the caller's notifications, newest first (unread only; ?include_read=true for all)
+GET    /me/notifications/unread-count  Cheap unread tally for the home-screen badge — returns { "count": N }
+POST   /me/notifications/read-all      Mark all of the caller's unread notifications as read (204 No Content)
+```
+
+Per-user inbox of asynchronous events ([ADR-0038](./decisions/0038-notifications-system.md)). All three endpoints scope to the authenticated user. The first (MVP) event kind is `pending_races_dropped` — emitted when a session closes around unresolved pending races ([ADR-0037](./decisions/0037-pending-races-dropped-on-session-close.md)). `GET /me/notifications` is capped at 100 rows; cursor pagination per [ADR-0032](./decisions/0032-cursor-based-pagination.md) is a project-wide follow-up (no list endpoint uses keyset pagination yet — `GET /runs` shares the flat cap).
+
+### 1.9 Admin
 
 ```
 GET    /admin/flags                List unresolved flags (admin only)
@@ -155,17 +165,16 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 - **Decision:** `GET /sessions/:id` (the polling endpoint, called every 2–3s per § 1.5) supports `ETag` / `If-None-Match`. The backend computes a strong ETag from session state; clients sending `If-None-Match: <etag>` get `304 Not Modified` with an empty body when nothing's changed.
 - **Why:** Without conditional GETs, every poll transfers the full session state — participants, races, submission status, pending lists. With ~10 active users polling a multi-participant session every 2s, that's a lot of redundant JSON. A 304 response is dozens of bytes. On mobile, the bandwidth and battery savings are real; on the server, the CPU savings are smaller but real.
 - **Implementation:**
-  - Compute the ETag as a hash of seven values:
+  - Compute the ETag as a hash of six values:
     1. `session.status`
     2. `COALESCE(MAX(session_races.created_at), '1970-01-01T00:00:00Z')` for this session
     3. `COALESCE(MAX(runs.created_at), '1970-01-01T00:00:00Z')` where the run's `session_race.session_id = :id`
     4. `COALESCE(MAX(session_participants.joined_at), '1970-01-01T00:00:00Z')` for this session
     5. `COALESCE(MAX(session_participants.left_at), '1970-01-01T00:00:00Z')` for this session
     6. `COALESCE(MAX(session_race_participations.skipped_at), '1970-01-01T00:00:00Z')` for races in this session
-    7. `FLOOR(NOW().unix_timestamp / 60)` — a one-minute time bucket
-  - **Why these seven.** The first six are the derived-data signals for every state mutation: status change, new race, new run, join, leave/rejoin (rejoin clears the leaver's `left_at` to NULL, which changes the MAX-of-remaining), and skip-pending-race. The seventh bucket exists because ADR-0035 introduced a time-based invalidation that no stored data captures: at minute 60 after a race's creation, that race silently drops out of the per-user pending list (per the `sr.created_at >= NOW() - 1 hour` clause in `get_pending_races`). Without the bucket, a conditional poll mid-expiry returns 304 against a now-stale cached pending list. The 60-second bucket bounds the staleness window to ≤ 60s past expiry; clients re-polling every 2.5s will see the change on the first poll after the bucket rolls.
-  - Use `BLAKE3` (or `xxhash`) of the seven values concatenated with a separator; format as `W/"<hex>"` (weak ETag, since two semantically-equivalent responses might serialize differently). `COALESCE` keeps NULL inputs from causing spurious churn.
-  - In the handler: compute the seven inputs *before* loading the full state (one query for the four `MAX(...)` aggregates, one for the session row). If `If-None-Match` matches, return 304 immediately. Otherwise load and return 200 with the new ETag in the response header.
+  - **Why these six.** They are the derived-data signals for every state mutation: status change, new race, new run, join, leave/rejoin (rejoin clears the leaver's `left_at` to NULL, which changes the MAX-of-remaining), and skip-pending-race. ADR-0035 had also added a seventh input — a `FLOOR(NOW() / 60)` one-minute time bucket — because the per-race 1-hour expiry was a time-based invalidation no stored data captured. [ADR-0037](./decisions/0037-pending-races-dropped-on-session-close.md) removed that per-race timer: a pending race now drops out only when `dropped_at` is stamped at session close, which already moves either `session.status` (clean last-leave) or `session_participants.left_at` (the leave that triggered the close) — both already inputs. No time-based predicate silently ages a row out anymore, so the bucket no longer earns its keep and is dropped. The six inputs here are the same activity signals the stale-session sweeper's predicate enumerates (see `close_stale_sessions`); the two formulas share a maintenance contract — a new activity-producing endpoint means adding inputs to both.
+  - Use `BLAKE3` (or `xxhash`) of the six values concatenated with a separator; format as `W/"<hex>"` (weak ETag, since two semantically-equivalent responses might serialize differently). `COALESCE` keeps NULL inputs from causing spurious churn.
+  - In the handler: compute the six inputs *before* loading the full state (one query for the `MAX(...)` aggregates, one for the session row). If `If-None-Match` matches, return 304 immediately. Otherwise load and return 200 with the new ETag in the response header.
   - Apply the same pattern only to `GET /sessions/:id` for now — it's the only high-frequency endpoint. Other GETs don't need it.
 - **Trade-offs considered:**
   - **WebSockets / SSE:** § 1.5 already decided polling. ETags make polling cheap enough that we don't need to revisit.
@@ -281,3 +290,4 @@ The list of stable `code` values returned in error responses. Add to this list w
 - 2026-05-10 — Renamed `AppError` → `error::Error` in the § 3 (error response contract) prose and example. Companion to the module-name-repetition cleanup in PR-H1+ (d). PR #103 sequence.
 - 2026-05-15 — § 8 error code registry: added `504 | gateway_timeout` for the per-call DB timeout path introduced in PR-F4. The `code` field is deferred per § 3, so this isn't a wire-contract change today — the registry already documents codes ahead of implementation (e.g., `lap_times_mismatch`), and adding this row avoids drift when the `code` field eventually lands. PR [#155](https://github.com/brendanbyrne/beerio-kart/pull/155).
 - 2026-05-15 — `code` field rollout (#157). § 3 rewritten: dropped the speculative `Implementation:` block (the codebase shape is now real); references to "deferred" replaced with the actually-emitted shape; pointer to ADR 0036 added for the design rationale. § 8 grew two rows for the path/json extractor failures (`invalid_path_param`, `invalid_request_body`) added by the custom extractors that closed #146 as part of #157. The `code` field is now emitted on every error response.
+- 2026-05-16 — ADR-0037 + ADR-0038. New § 1.8 Notifications endpoint group (`GET /me/notifications`, `GET /me/notifications/unread-count`, `POST /me/notifications/read-all`); Admin renumbered 1.8 → 1.9. § 4 ETag formula dropped from seven inputs to six — the `FLOOR(NOW() / 60)` time bucket is removed now that ADR-0037 deleted the per-race expiry timer (no time-based predicate silently ages a pending row out anymore). § 1.5 `POST /sessions/:id/leave` description updated: leaving as the last participant closes the session and drops unresolved pending races. Issues [#58](https://github.com/brendanbyrne/beerio-kart/issues/58), [#164](https://github.com/brendanbyrne/beerio-kart/issues/164).

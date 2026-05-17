@@ -15,7 +15,7 @@ use sea_orm::{
     QueryOrder, Set, TransactionTrait,
 };
 
-use super::types::{RACE_WINDOW_HOURS, SessionRaceInfo};
+use super::types::SessionRaceInfo;
 use crate::{
     domain::{ImagePath, SessionId, SessionRaceId, UserId},
     entities::{cups, runs, session_race_participations, session_races},
@@ -39,30 +39,33 @@ struct PendingRaceRow {
 /// Return the requesting user's pending races within a session, oldest first.
 ///
 /// A race is **pending** for user `U` iff all of the following hold (per
-/// docs/data-model.md "Pending Race Tracking", ADR-0035):
+/// docs/data-model.md "Pending Race Tracking", ADR-0037):
 ///
 /// 1. A `session_race_participations` row exists for `(SR.id, U.id)` —
 ///    proves `U` was present when `SR` was created.
 /// 2. `skipped_at IS NULL` on that row — `U` hasn't explicitly forfeited.
 /// 3. No `runs` row exists for `(SR.id, U.id)` — `U` hasn't submitted.
-/// 4. `SR.created_at >= NOW() - RACE_WINDOW_HOURS` — the race is still inside
-///    its 1-hour submission window. Expired races drop out for everyone.
-/// 5. `sessions.status = 'active'` — closed sessions accept no further
-///    submissions, so any "pending" entries on them are phantom (the user
-///    has no API path to resolve them).
+/// 4. `dropped_at IS NULL` on that row — the session hasn't closed around it.
 ///
-/// Note this no longer consults `session_participants` at all: a user's
-/// `left_at` is irrelevant to pending access (ADR-0035). A flaked-out user
-/// keeps their pending races until each race expires on its own clock; they
-/// rejoin to act on them. The race window is the single timeout.
+/// **The session is the deadline (ADR-0037).** A pending race stays
+/// submittable for as long as the session is alive. There is no per-race
+/// timer and no `sessions.status` filter: when a session closes — via clean
+/// last-leave or via the sweeper — the close transaction stamps `dropped_at`
+/// on every unresolved row, so clause 4 alone captures "the session is over."
+/// A race created four hours ago in a still-active session is still pending.
 ///
-/// Returns empty if the user is not a participant, all races are submitted /
-/// skipped / expired, or the session is closed.
+/// This no longer consults `session_participants`: a user's `left_at` is
+/// irrelevant to pending access (ADR-0035). A flaked-out user keeps their
+/// pending races until the session closes; they rejoin to act on them.
 ///
-/// **Lazy check note:** The expiry predicate is computed at query time from
-/// `NOW()` and stored timestamps. No background task touches
-/// `session_race_participations` rows — they remain in the DB for history
-/// regardless of accessibility.
+/// Returns empty if the user is not a participant, or all races are
+/// submitted / skipped / dropped.
+///
+/// **Lazy check note:** pending accessibility is a read-time derivation from
+/// `(session_race_participations, session_races, runs)`. The only writer of
+/// `dropped_at` is the session-close transaction (ADR-0037); no periodic
+/// task ages a row out on its own clock. Resolved rows (`skipped`, `raced`,
+/// `dropped`) remain in the DB indefinitely as historical state.
 ///
 /// **`submissions` is intentionally empty.** Pending races report only the
 /// race shell here; per-race submissions belong to the current/history views,
@@ -81,8 +84,6 @@ pub async fn get_pending_races(
     session_id: &SessionId,
     user_id: &UserId,
 ) -> Result<Vec<SessionRaceInfo>, Error> {
-    let window_start = (Utc::now() - chrono::Duration::hours(RACE_WINDOW_HOURS)).naive_utc();
-
     let rows = db_query(
         PendingRaceRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
             db.get_database_backend(),
@@ -92,21 +93,19 @@ pub async fn get_pending_races(
                t.image_path, sr.created_at
         FROM session_race_participations srp
         JOIN session_races sr ON srp.session_race_id = sr.id
-        JOIN sessions s ON s.id = sr.session_id
         JOIN tracks t ON sr.track_id = t.id
         JOIN cups c ON t.cup_id = c.id
         WHERE sr.session_id = $1
           AND srp.user_id = $2
-          AND s.status = 'active'
           AND srp.skipped_at IS NULL
-          AND sr.created_at >= $3
+          AND srp.dropped_at IS NULL
           AND NOT EXISTS (
               SELECT 1 FROM runs r
               WHERE r.session_race_id = sr.id AND r.user_id = srp.user_id
           )
         ORDER BY sr.race_number ASC
         "#,
-            [session_id.into(), user_id.into(), window_start.into()],
+            [session_id.into(), user_id.into()],
         ))
         .all(db),
     )
@@ -739,6 +738,7 @@ mod tests {
             user_id: Set("ghost".to_string()),
             created_at: NotSet,
             skipped_at: Set(None),
+            dropped_at: Set(None),
         }
         .insert(&txn)
         .await;
@@ -909,7 +909,7 @@ mod tests {
         assert_eq!(pending.len(), 5, "API returns all; UI applies the cap");
     }
 
-    // ── Per-race expiry + session-status filter (ADR-0035) ───────────────
+    // ── Session-is-the-deadline pending derivation (ADR-0037) ────────────
 
     #[tokio::test]
     async fn test_pending_accessible_when_currently_in_session() {
@@ -924,8 +924,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pending_includes_race_within_window() {
-        // A race created well inside the 1-hour window is still pending.
+    async fn test_pending_includes_old_race_in_active_session() {
+        // The session is the deadline (ADR-0037): a race created four hours
+        // ago is still pending as long as the session is active and the
+        // participation row has not been dropped. There is no per-race timer.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
@@ -936,38 +938,47 @@ mod tests {
             &session_id,
             1,
             1,
-            (Utc::now() - chrono::Duration::minutes(30)).naive_utc(),
+            (Utc::now() - chrono::Duration::hours(4)).naive_utc(),
         )
         .await;
         insert_race_participation(&db, &race_id, &host_id, None).await;
 
         let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
-        assert_eq!(pending.len(), 1, "race within the window stays pending");
+        assert_eq!(
+            pending.len(),
+            1,
+            "a 4-hour-old race in an active session is still pending"
+        );
     }
 
     #[tokio::test]
-    async fn test_pending_excludes_expired_race() {
-        // A race created over an hour ago has expired — it drops out of the
-        // pending list even though the participation row is unresolved.
+    async fn test_pending_excludes_dropped_race() {
+        // A race whose participation row has `dropped_at` set (the session
+        // closed around it, ADR-0037) drops out of the pending list even
+        // though it was never skipped or submitted.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
         let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
-        let race_id = insert_session_race(
-            &db,
-            &session_id,
-            1,
-            1,
-            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
-        )
-        .await;
+        let race_id = insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
         insert_race_participation(&db, &race_id, &host_id, None).await;
 
-        let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
-        assert!(pending.is_empty(), "expired race drops from pending");
+        // Stamp `dropped_at` directly to isolate the query's clause 4.
+        let row = session_race_participations::Entity::find()
+            .filter(session_race_participations::Column::SessionRaceId.eq(race_id))
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut active: session_race_participations::ActiveModel = row.into();
+        active.dropped_at = Set(Some(Utc::now().naive_utc()));
+        active.update(&db).await.unwrap();
 
-        // The participation row itself stays for history (lazy check).
+        let pending = get_pending_races(&db, &session_id, &host_id).await.unwrap();
+        assert!(pending.is_empty(), "dropped race drops from pending");
+
+        // The participation row itself stays for history.
         let count = session_race_participations::Entity::find()
             .filter(session_race_participations::Column::UserId.eq(host_id))
             .count(&db)
@@ -1000,11 +1011,13 @@ mod tests {
         );
     }
 
-    /// Documents intent: no background timer or sweeper task touches
-    /// `session_race_participations`. Pending accessibility is a pure read-time
-    /// derivation from `(session_race_participations, session_races, runs)`
-    /// plus the per-race expiry clock — see `get_pending_races`. Resolved /
-    /// expired rows remain in the DB indefinitely as historical state.
+    /// Documents intent: pending accessibility is a read-time derivation from
+    /// `(session_race_participations, session_races, runs)` — see
+    /// `get_pending_races`. No periodic timer ages a row out on its own
+    /// clock. The one writer of `dropped_at` is the session-close transaction
+    /// (`close_session_and_drop_pending`, ADR-0037), which runs inline on the
+    /// last leave or via the stale-session sweeper. Resolved rows (`skipped`,
+    /// `raced`, `dropped`) remain in the DB indefinitely as historical state.
     #[tokio::test]
     async fn test_lazy_check_assertion() {
         // No-op test by design — this comment IS the assertion.
@@ -1012,9 +1025,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_pending_excludes_closed_session() {
-        // A closed session can no longer accept submissions or skips, so any
-        // "pending" entries on it are phantom. `get_pending_races` must
-        // filter them out via `sessions.status = 'active'`.
+        // When a session closes, the close transaction stamps `dropped_at` on
+        // every unresolved pending row (ADR-0037). `get_pending_races` filters
+        // those out via its `dropped_at IS NULL` clause — no `sessions.status`
+        // check is needed, the drop already happened.
         let db = setup_db().await;
         seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;

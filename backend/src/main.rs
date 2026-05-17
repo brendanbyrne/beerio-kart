@@ -195,6 +195,19 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/users/{id}",
             get(routes::users::get_user).put(routes::users::update_user),
         )
+        // Notifications (per-user inbox, ADR-0038)
+        .route(
+            "/api/v1/me/notifications",
+            get(routes::notifications::list_notifications),
+        )
+        .route(
+            "/api/v1/me/notifications/unread-count",
+            get(routes::notifications::unread_count),
+        )
+        .route(
+            "/api/v1/me/notifications/read-all",
+            post(routes::notifications::mark_all_read),
+        )
         // Drink types
         .route(
             "/api/v1/drink-types",

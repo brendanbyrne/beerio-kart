@@ -23,7 +23,7 @@ use crate::{
     },
     entities::{session_participants, sessions},
     error::Error,
-    services::helpers,
+    services::{helpers, notifications},
     timeout::{db_query, db_txn},
 };
 
@@ -308,8 +308,8 @@ pub async fn list_active_sessions(db: &impl ConnectionTrait) -> Result<Vec<Sessi
 /// (ADR-0035). `joined_at` is therefore monotonic — set once on first join,
 /// it genuinely means "when this user first joined this session." Pending-race
 /// access no longer depends on it: a flaked-out user's pending races stay
-/// pending until each race expires on its own 1-hour clock, regardless of how
-/// long they were gone.
+/// pending for as long as the session is alive (ADR-0037), regardless of how
+/// long they were gone — they rejoin to act on them.
 ///
 /// # Errors
 ///
@@ -462,6 +462,111 @@ async fn transfer_host_or_close(
     }
 }
 
+/// Row shape for the per-user pending-drop count query.
+#[derive(Debug, FromQueryResult)]
+struct PendingDropRow {
+    user_id: String,
+    dropped_count: i64,
+}
+
+/// Drop every unresolved pending race in a closing session and notify the
+/// affected users (ADR-0037).
+///
+/// A pending race is *unresolved* for `(race, user)` when a
+/// `session_race_participations` row exists with `skipped_at IS NULL`,
+/// `dropped_at IS NULL`, and no `runs` row for that pair. Each such row gets
+/// `dropped_at` stamped; each affected user gets one `PendingRacesDropped`
+/// notification (ADR-0038) carrying their drop count.
+///
+/// `skipped` and `raced` rows are deliberately untouched — skip and submit
+/// both beat drop, so the four-state status enum stays mutually exclusive.
+///
+/// **Caller contract:** must run inside the session-close transaction, before
+/// `sessions.status` is flipped. If the drop UPDATE or any notification INSERT
+/// fails, the whole close rolls back — drops are atomic with the close
+/// (ADR-0037 / ADR-0038 § Atomicity).
+///
+/// # Errors
+///
+/// Returns `Internal` for unexpected DB failures on the count query, the drop
+/// UPDATE, or any notification INSERT.
+#[tracing::instrument(skip(txn), fields(session_id = %session_id))]
+async fn close_session_and_drop_pending(
+    txn: &impl ConnectionTrait,
+    session_id: &SessionId,
+) -> Result<(), Error> {
+    let now = Utc::now().naive_utc();
+
+    // Per-user count of rows about to be dropped — captured before the UPDATE
+    // so each notification payload carries an accurate `dropped_count`. The
+    // `NOT EXISTS` correlation is clumsy in the builder API, so this is
+    // hand-rolled SQL (`seaorm.md` § 1).
+    let drops: Vec<PendingDropRow> = db_query(
+        PendingDropRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            txn.get_database_backend(),
+            r#"
+            SELECT srp.user_id AS user_id, COUNT(*) AS dropped_count
+            FROM session_race_participations srp
+            JOIN session_races sr ON srp.session_race_id = sr.id
+            WHERE sr.session_id = $1
+              AND srp.skipped_at IS NULL
+              AND srp.dropped_at IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM runs r
+                  WHERE r.session_race_id = srp.session_race_id
+                    AND r.user_id = srp.user_id
+              )
+            GROUP BY srp.user_id
+            "#,
+            [session_id.into()],
+        ))
+        .all(txn),
+    )
+    .await?;
+
+    if drops.is_empty() {
+        // Nothing unresolved — a session can close with every race already
+        // raced or skipped. No drops, no notifications.
+        return Ok(());
+    }
+
+    // Stamp `dropped_at` on every unresolved pending row in this session, in
+    // one set-based UPDATE. The predicate matches the count query above.
+    db_query(txn.execute(sea_orm::Statement::from_sql_and_values(
+        txn.get_database_backend(),
+        r#"
+        UPDATE session_race_participations
+        SET dropped_at = $2
+        WHERE session_race_id IN (
+                  SELECT id FROM session_races WHERE session_id = $1
+              )
+          AND skipped_at IS NULL
+          AND dropped_at IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM runs r
+              WHERE r.session_race_id = session_race_participations.session_race_id
+                AND r.user_id = session_race_participations.user_id
+          )
+        "#,
+        [session_id.into(), now.into()],
+    )))
+    .await?;
+
+    // One notification per affected user (ADR-0038 consumer trigger).
+    for drop in drops {
+        let user_id = UserId::from_db(&drop.user_id)?;
+        let dropped_count = u32::try_from(drop.dropped_count).map_err(|_| {
+            Error::Internal(anyhow::anyhow!(
+                "dropped_count {} does not fit in u32",
+                drop.dropped_count
+            ))
+        })?;
+        notifications::record_pending_drops(txn, &user_id, session_id, dropped_count).await?;
+    }
+
+    Ok(())
+}
+
 /// Leave a session. Sets `left_at` and handles host transfer.
 ///
 /// # Errors
@@ -510,6 +615,9 @@ pub async fn leave_session(
             db_query(active_session.update(&txn)).await?;
         }
         HostDisposition::SessionClosed => {
+            // Drop unresolved pending races + notify affected users before
+            // flipping status — same transaction (ADR-0037).
+            close_session_and_drop_pending(&txn, session_id).await?;
             let mut active_session: sessions::ActiveModel = session.into();
             active_session.status = Set(SessionStatus::Closed);
             db_query(active_session.update(&txn)).await?;
@@ -528,29 +636,34 @@ struct StaleSessionRow {
     id: String,
 }
 
-/// Close sessions whose race window has fully elapsed (ADR-0035).
+/// Close sessions whose activity window has fully elapsed (ADR-0035, ADR-0037).
 ///
 /// A session is *stale* when it is `status = 'active'`, was created more than
-/// [`RACE_WINDOW_HOURS`] ago, **and** has no `session_races` row created
-/// within that same window. The `created_at` clause handles the bootstrap
-/// case: a brand-new session with no race chosen yet keeps its first hour
-/// from its own creation timestamp before it can go stale.
+/// [`RACE_WINDOW_HOURS`] ago, **and** has had no meaningful activity within
+/// that same window — no new race, no submitted run, no join or leave, no
+/// skipped pending race (the five-signal predicate from ADR-0037). The
+/// `created_at` clause handles the bootstrap case: a brand-new session with
+/// no race chosen yet keeps its first hour from its own creation timestamp
+/// before it can go stale.
 ///
-/// This is purely DB hygiene. Clean exits already close their session inline
-/// via `leave_session`; every user-facing read path derives liveness from
-/// race timestamps directly (see [`get_active_session_id`] and
-/// `get_pending_races`), so no read depends on this sweep having run recently.
-/// The sweep only keeps `sessions.status` eventually consistent with that
-/// derived truth.
+/// Since ADR-0037 removed the per-race timer from `get_pending_races`, this
+/// sweep is the sole gatekeeper for closing dormant sessions — a pending race
+/// stays submittable for as long as the session is alive, and the session is
+/// alive until this predicate says otherwise. Clean exits still close their
+/// session inline via `leave_session`; this handles the abandoned case
+/// (phones died, tabs closed without a Leave tap).
 ///
-/// Also marks all remaining active participants of the closed sessions as
-/// left. Returns the number of sessions closed.
+/// For each closing session it drops every unresolved pending race
+/// (`dropped_at` stamped) and records a `PendingRacesDropped` notification per
+/// affected user — see [`close_session_and_drop_pending`]. It also marks all
+/// remaining active participants as left. Returns the number of sessions
+/// closed.
 ///
-/// The cleanup runs as two set-based `UPDATE`s in one transaction
-/// (`seaorm.md` § 1) — one to flip the matching session rows to
-/// `Closed`, one to settle their still-active participants. The list
-/// of stale ids is fetched once up front so both `UPDATE`s can scope
-/// to the same set without re-querying.
+/// The cleanup runs in one transaction (`seaorm.md` § 1): a per-session drop
+/// step (see [`close_session_and_drop_pending`]), then two set-based `UPDATE`s
+/// — one to settle still-active participants, one to flip the session rows to
+/// `Closed`. The list of stale ids is fetched once up front so every step
+/// scopes to the same set without re-querying.
 ///
 /// # Errors
 ///
@@ -563,11 +676,19 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
 
     let txn = db_txn(db.begin()).await?;
 
-    // Capture the stale ids once. The `NOT EXISTS` subquery against
-    // `session_races` is awkward in the builder API, so this read is
-    // hand-rolled SQL (`seaorm.md` § 1 — raw SQL for clumsy multi-table
-    // shapes). Both `UPDATE`s below scope to the captured set, and the
-    // empty-set case short-circuits cleanly (the common case).
+    // Capture the stale ids once. The `NOT EXISTS` subqueries are awkward in
+    // the builder API, so this read is hand-rolled SQL (`seaorm.md` § 1 — raw
+    // SQL for clumsy multi-table shapes). Both `UPDATE`s below scope to the
+    // captured set, and the empty-set case short-circuits cleanly (the common
+    // case).
+    //
+    // The predicate enumerates every meaningful activity signal a session can
+    // produce (ADR-0037): a new race, a submitted run, a join or leave, or a
+    // skipped pending race within the window all keep the session alive. With
+    // the per-race timer gone from `get_pending_races`, the sweeper is the
+    // sole gatekeeper for closing dormant sessions, so it honors all of them.
+    // Kept in lockstep with the ETag formula in `api-contract.md` § 4 — the
+    // two share a maintenance contract.
     let stale_ids: Vec<String> = db_query(
         StaleSessionRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
             txn.get_database_backend(),
@@ -580,6 +701,23 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
                   SELECT 1 FROM session_races sr
                   WHERE sr.session_id = s.id
                     AND sr.created_at >= $1
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM runs r
+                  JOIN session_races sr ON r.session_race_id = sr.id
+                  WHERE sr.session_id = s.id
+                    AND r.created_at >= $1
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM session_participants sp
+                  WHERE sp.session_id = s.id
+                    AND (sp.joined_at >= $1 OR sp.left_at >= $1)
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM session_race_participations srp
+                  JOIN session_races sr ON srp.session_race_id = sr.id
+                  WHERE sr.session_id = s.id
+                    AND srp.skipped_at >= $1
               )
             "#,
             [window_start.into()],
@@ -594,6 +732,13 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
     if stale_ids.is_empty() {
         db_txn(txn.commit()).await?;
         return Ok(0);
+    }
+
+    // Drop each closing session's unresolved pending races and notify the
+    // affected users, before the batch status flip (ADR-0037 / ADR-0038).
+    for id in &stale_ids {
+        let session_id = SessionId::from_db(id)?;
+        close_session_and_drop_pending(&txn, &session_id).await?;
     }
 
     // Mark all still-active participants of the stale sessions as left.
@@ -627,9 +772,15 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{
-        backdate_session, create_user, insert_participant, insert_session, insert_session_race,
-        setup_db,
+    use crate::{
+        domain::SessionRaceId,
+        entities::{notifications as notifications_entity, session_race_participations},
+        services::sessions::{next_track, skip_pending_race},
+        test_helpers::{
+            backdate_participant, backdate_session, create_user, insert_participant,
+            insert_race_participation, insert_run, insert_session, insert_session_race,
+            seed_game_data, seed_tracks_for_test, setup_db,
+        },
     };
 
     // ── transfer_host_or_close ───────────────────────────────────────
@@ -963,16 +1114,17 @@ mod tests {
         let host_id = create_user(&db, "host").await;
         let user_id = create_user(&db, "user").await;
 
-        // A session created over an hour ago with no races is stale.
+        // A session created over an hour ago with no races and no recent
+        // join/leave/run/skip is stale.
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
         let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
         insert_participant(&db, &session_id, &user_id, None).await;
-        backdate_session(
-            &db,
-            &session_id,
-            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
-        )
-        .await;
+        backdate_session(&db, &session_id, two_hours_ago).await;
+        // Backdate the joins too — a join within the window would itself keep
+        // the session alive under the ADR-0037 activity predicate.
+        backdate_participant(&db, &session_id, &host_id, Some(two_hours_ago), None).await;
+        backdate_participant(&db, &session_id, &user_id, Some(two_hours_ago), None).await;
 
         let closed = close_stale_sessions(&db).await.unwrap();
         assert_eq!(closed, 1, "the stale session is closed");
@@ -1019,14 +1171,11 @@ mod tests {
         // stale — the bootstrap window has elapsed.
         let db = setup_db().await;
         let host_id = create_user(&db, "host").await;
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
         let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
-        backdate_session(
-            &db,
-            &session_id,
-            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
-        )
-        .await;
+        backdate_session(&db, &session_id, two_hours_ago).await;
+        backdate_participant(&db, &session_id, &host_id, Some(two_hours_ago), None).await;
 
         let closed = close_stale_sessions(&db).await.unwrap();
         assert_eq!(closed, 1);
@@ -1043,14 +1192,13 @@ mod tests {
         let db = setup_db().await;
         crate::test_helpers::seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
         let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
-        backdate_session(
-            &db,
-            &session_id,
-            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
-        )
-        .await;
+        backdate_session(&db, &session_id, two_hours_ago).await;
+        // Backdate the join so the recent race is the *only* live signal —
+        // isolates the race clause of the activity predicate.
+        backdate_participant(&db, &session_id, &host_id, Some(two_hours_ago), None).await;
         // A race created just now — well inside the window.
         insert_session_race(&db, &session_id, 1, 1, Utc::now().naive_utc()).await;
 
@@ -1069,14 +1217,11 @@ mod tests {
         let db = setup_db().await;
         crate::test_helpers::seed_tracks_for_test(&db).await;
         let host_id = create_user(&db, "host").await;
+        let three_hours_ago = (Utc::now() - chrono::Duration::hours(3)).naive_utc();
         let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
         insert_participant(&db, &session_id, &host_id, None).await;
-        backdate_session(
-            &db,
-            &session_id,
-            (Utc::now() - chrono::Duration::hours(3)).naive_utc(),
-        )
-        .await;
+        backdate_session(&db, &session_id, three_hours_ago).await;
+        backdate_participant(&db, &session_id, &host_id, Some(three_hours_ago), None).await;
         insert_session_race(
             &db,
             &session_id,
@@ -1181,5 +1326,292 @@ mod tests {
                 .is_some(),
             "the dangling row in the stale session is settled"
         );
+    }
+
+    // ── Extended sweeper predicate: per-signal liveness (ADR-0037) ───────
+    //
+    // Each test backdates the session past the window and isolates one
+    // activity signal within the window, asserting the session stays alive.
+    // The all-signals-stale case is `test_stale_cleanup_marks_participants_as_left`.
+
+    #[tokio::test]
+    async fn test_close_stale_keeps_session_with_recent_run() {
+        // A run submitted within the window keeps the session alive even
+        // though the session and its race are both older than the window.
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        backdate_session(&db, &session_id, two_hours_ago).await;
+        backdate_participant(&db, &session_id, &host_id, Some(two_hours_ago), None).await;
+        let race_id = insert_session_race(&db, &session_id, 1, 1, two_hours_ago).await;
+        // Run created just now — well inside the window.
+        insert_run(&db, &race_id, &host_id, 1).await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 0, "a recent run keeps the session alive");
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Active
+        );
+    }
+
+    #[tokio::test]
+    async fn test_close_stale_keeps_session_with_recent_join() {
+        // A participant who joined within the window keeps the session alive.
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        backdate_session(
+            &db,
+            &session_id,
+            (Utc::now() - chrono::Duration::hours(2)).naive_utc(),
+        )
+        .await;
+        // `insert_participant` stamps `joined_at = now` — a recent join.
+        insert_participant(&db, &session_id, &host_id, None).await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 0, "a recent join keeps the session alive");
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Active
+        );
+    }
+
+    #[tokio::test]
+    async fn test_close_stale_keeps_session_with_recent_leave() {
+        // A participant who left within the window keeps the session alive —
+        // a recent leave is still recent activity.
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        backdate_session(&db, &session_id, two_hours_ago).await;
+        // Joined long ago, left just now.
+        backdate_participant(
+            &db,
+            &session_id,
+            &host_id,
+            Some(two_hours_ago),
+            Some(Utc::now().naive_utc()),
+        )
+        .await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 0, "a recent leave keeps the session alive");
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Active
+        );
+    }
+
+    #[tokio::test]
+    async fn test_close_stale_keeps_session_with_recent_skip() {
+        // A pending race skipped within the window keeps the session alive.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        backdate_session(&db, &session_id, two_hours_ago).await;
+        backdate_participant(&db, &session_id, &host_id, Some(two_hours_ago), None).await;
+        let race_id = insert_session_race(&db, &session_id, 1, 1, two_hours_ago).await;
+        // Participation skipped just now — the skip is the only live signal.
+        insert_race_participation(&db, &race_id, &host_id, Some(Utc::now().naive_utc())).await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 0, "a recent skip keeps the session alive");
+        assert_eq!(
+            session_status(&db, &session_id).await,
+            SessionStatus::Active
+        );
+    }
+
+    // ── Drop-on-close + notification trigger (ADR-0037 / ADR-0038) ───────
+
+    /// Fetch a (race, user) participation row.
+    async fn participation_row(
+        db: &DatabaseConnection,
+        session_race_id: &SessionRaceId,
+        user_id: &UserId,
+    ) -> session_race_participations::Model {
+        session_race_participations::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(session_race_participations::Column::SessionRaceId.eq(session_race_id))
+                    .add(session_race_participations::Column::UserId.eq(user_id)),
+            )
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    /// Fetch all of a user's notification rows.
+    async fn notification_rows(
+        db: &DatabaseConnection,
+        user_id: &UserId,
+    ) -> Vec<notifications_entity::Model> {
+        notifications_entity::Entity::find()
+            .filter(notifications_entity::Column::UserId.eq(user_id))
+            .all(db)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_leave_close_drops_unresolved_pending() {
+        // The solo host leaves with an unresolved pending race — the inline
+        // close stamps `dropped_at` on the participation row.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        let row = participation_row(&db, &race.id, &host_id).await;
+        assert!(
+            row.dropped_at.is_some(),
+            "unresolved pending row is dropped"
+        );
+        assert!(row.skipped_at.is_none(), "drop does not touch skipped_at");
+    }
+
+    #[tokio::test]
+    async fn test_close_does_not_drop_skipped_rows() {
+        // A row already resolved by an explicit skip is not re-stamped as
+        // dropped — skip beats drop, the states stay mutually exclusive.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+        skip_pending_race(&db, &session.id, &race.id, &host_id)
+            .await
+            .unwrap();
+
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        let row = participation_row(&db, &race.id, &host_id).await;
+        assert!(row.skipped_at.is_some(), "skipped_at preserved");
+        assert!(
+            row.dropped_at.is_none(),
+            "an already-skipped row is not dropped"
+        );
+        assert!(
+            notification_rows(&db, &host_id).await.is_empty(),
+            "a skipped-only close drops nothing, so notifies nobody"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_close_does_not_drop_submitted_rows() {
+        // A row resolved by a submitted run is not dropped.
+        let db = setup_db().await;
+        seed_game_data(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        let race = next_track(&db, &session.id, &host_id).await.unwrap();
+        insert_run(&db, &race.id, &host_id, race.track_id).await;
+
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        let row = participation_row(&db, &race.id, &host_id).await;
+        assert!(
+            row.dropped_at.is_none(),
+            "a submitted (raced) row is not dropped"
+        );
+        assert!(
+            notification_rows(&db, &host_id).await.is_empty(),
+            "nothing unresolved, so no drop notification"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_close_records_one_notification_per_affected_user() {
+        // A two-user session with two unresolved races for each user. When
+        // the last participant leaves, each user gets exactly one
+        // notification carrying their own drop count.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let user2_id = create_user(&db, "user2").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+        join_session(&db, &session.id, &user2_id).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+        next_track(&db, &session.id, &host_id).await.unwrap();
+
+        // user2 leaves first (session stays open), then host leaves (closes).
+        leave_session(&db, &session.id, &user2_id).await.unwrap();
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        for user in [&host_id, &user2_id] {
+            let rows = notification_rows(&db, user).await;
+            assert_eq!(rows.len(), 1, "exactly one notification per affected user");
+            assert_eq!(rows[0].kind, "pending_races_dropped");
+            let payload: crate::services::notifications::NotificationPayload =
+                serde_json::from_str(&rows[0].payload).unwrap();
+            assert_eq!(
+                payload,
+                crate::services::notifications::NotificationPayload::PendingRacesDropped {
+                    session_id: session.id,
+                    dropped_count: 2,
+                },
+                "payload carries the session and the per-user drop count"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_close_empty_session_records_no_notifications() {
+        // A session with no unresolved pending races (here: no races at all)
+        // closes without recording any notification.
+        let db = setup_db().await;
+        let host_id = create_user(&db, "host").await;
+        let session = create_session(&db, &host_id, "random").await.unwrap();
+
+        leave_session(&db, &session.id, &host_id).await.unwrap();
+
+        assert_eq!(
+            session_status(&db, &session.id).await,
+            SessionStatus::Closed
+        );
+        assert!(
+            notification_rows(&db, &host_id).await.is_empty(),
+            "closing an empty session notifies nobody"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sweeper_drops_pending_and_notifies() {
+        // The abandoned-session path: the stale-session sweeper closes the
+        // session, drops the unresolved pending row, and notifies the user.
+        let db = setup_db().await;
+        seed_tracks_for_test(&db).await;
+        let host_id = create_user(&db, "host").await;
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2)).naive_utc();
+        let session_id = insert_session(&db, &host_id, SessionStatus::Active).await;
+        insert_participant(&db, &session_id, &host_id, None).await;
+        backdate_session(&db, &session_id, two_hours_ago).await;
+        backdate_participant(&db, &session_id, &host_id, Some(two_hours_ago), None).await;
+        let race_id = insert_session_race(&db, &session_id, 1, 1, two_hours_ago).await;
+        insert_race_participation(&db, &race_id, &host_id, None).await;
+
+        let closed = close_stale_sessions(&db).await.unwrap();
+        assert_eq!(closed, 1, "the abandoned session is swept closed");
+
+        let row = participation_row(&db, &race_id, &host_id).await;
+        assert!(row.dropped_at.is_some(), "sweeper drops the pending row");
+
+        let rows = notification_rows(&db, &host_id).await;
+        assert_eq!(rows.len(), 1, "sweeper records the drop notification");
+        assert_eq!(rows[0].kind, "pending_races_dropped");
     }
 }
