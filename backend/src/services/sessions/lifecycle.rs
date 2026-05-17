@@ -469,88 +469,104 @@ struct PendingDropRow {
     dropped_count: i64,
 }
 
-/// Drop every unresolved pending race in a closing session and notify the
-/// affected users (ADR-0037).
+/// The "unresolved pending race" predicate, shared verbatim by the count
+/// query and the drop `UPDATE` inside [`close_session`].
 ///
-/// A pending race is *unresolved* for `(race, user)` when a
-/// `session_race_participations` row exists with `skipped_at IS NULL`,
-/// `dropped_at IS NULL`, and no `runs` row for that pair. Each such row gets
-/// `dropped_at` stamped; each affected user gets one `PendingRacesDropped`
-/// notification (ADR-0038) carrying their drop count.
+/// A `(race, user)` participation row is *unresolved pending* when it has no
+/// `skipped_at`, no `dropped_at`, and no `runs` row. The count query (which
+/// sizes each notification's `dropped_count`) and the UPDATE (which actually
+/// stamps `dropped_at`) must agree on this *exactly* — if they drift, a
+/// notification's count silently mismatches the rows stamped. Lifting it to a
+/// single `const` makes drift impossible. Written with the
+/// `session_race_participations` table named in full (no alias) so it is
+/// valid both inside the aliased SELECT and inside the UPDATE, whose target
+/// table cannot be aliased.
+const UNRESOLVED_PENDING_PREDICATE: &str = "
+        session_race_participations.skipped_at IS NULL
+    AND session_race_participations.dropped_at IS NULL
+    AND NOT EXISTS (
+        SELECT 1 FROM runs r
+        WHERE r.session_race_id = session_race_participations.session_race_id
+          AND r.user_id = session_race_participations.user_id
+    )";
+
+/// Close a session: drop its unresolved pending races, notify the affected
+/// users, then flip `status` to `Closed` — in that order, on `txn`.
 ///
-/// `skipped` and `raced` rows are deliberately untouched — skip and submit
-/// both beat drop, so the four-state status enum stays mutually exclusive.
+/// **This is the single choke-point for closing a session.** Every path that
+/// closes a session — `leave_session`'s last-leave branch and
+/// `close_stale_sessions` — goes through here, so the ADR-0037 invariant —
+/// *every unresolved pending row is stamped `dropped_at` before the session's
+/// status flips* — is structural, not convention. `get_pending_races` depends
+/// on it: it carries no `sessions.status` filter, so a session flipped to
+/// `closed` without its pending rows dropped would resurface phantom pending
+/// races. Any future close path must call this rather than flipping `status`
+/// itself.
 ///
-/// **Caller contract:** must run inside the session-close transaction, before
-/// `sessions.status` is flipped. If the drop UPDATE or any notification INSERT
-/// fails, the whole close rolls back — drops are atomic with the close
-/// (ADR-0037 / ADR-0038 § Atomicity).
+/// An *unresolved pending* `(race, user)` row (see
+/// [`UNRESOLVED_PENDING_PREDICATE`]) gets `dropped_at` stamped; each affected
+/// user gets one `PendingRacesDropped` notification (ADR-0038) carrying their
+/// drop count. `skipped` and `raced` rows are deliberately untouched — skip
+/// and submit both beat drop, so the four-state status enum stays mutually
+/// exclusive.
+///
+/// **Caller contract:** must run inside a transaction. The drop UPDATE, the
+/// notification INSERTs, and the status flip are atomic with each other and
+/// with the caller's other writes — if any step fails, the whole close rolls
+/// back (ADR-0037 / ADR-0038 § Atomicity).
 ///
 /// # Errors
 ///
 /// Returns `Internal` for unexpected DB failures on the count query, the drop
-/// UPDATE, or any notification INSERT.
+/// UPDATE, any notification INSERT, or the status UPDATE.
 #[tracing::instrument(skip(txn), fields(session_id = %session_id))]
-async fn close_session_and_drop_pending(
-    txn: &impl ConnectionTrait,
-    session_id: &SessionId,
-) -> Result<(), Error> {
+async fn close_session(txn: &impl ConnectionTrait, session_id: &SessionId) -> Result<(), Error> {
     let now = Utc::now().naive_utc();
 
     // Per-user count of rows about to be dropped — captured before the UPDATE
     // so each notification payload carries an accurate `dropped_count`. The
     // `NOT EXISTS` correlation is clumsy in the builder API, so this is
     // hand-rolled SQL (`seaorm.md` § 1).
+    let count_sql = format!(
+        "SELECT session_race_participations.user_id AS user_id,
+                COUNT(*) AS dropped_count
+         FROM session_race_participations
+         JOIN session_races sr
+           ON session_race_participations.session_race_id = sr.id
+         WHERE sr.session_id = $1
+           AND {UNRESOLVED_PENDING_PREDICATE}
+         GROUP BY session_race_participations.user_id"
+    );
     let drops: Vec<PendingDropRow> = db_query(
         PendingDropRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
             txn.get_database_backend(),
-            r#"
-            SELECT srp.user_id AS user_id, COUNT(*) AS dropped_count
-            FROM session_race_participations srp
-            JOIN session_races sr ON srp.session_race_id = sr.id
-            WHERE sr.session_id = $1
-              AND srp.skipped_at IS NULL
-              AND srp.dropped_at IS NULL
-              AND NOT EXISTS (
-                  SELECT 1 FROM runs r
-                  WHERE r.session_race_id = srp.session_race_id
-                    AND r.user_id = srp.user_id
-              )
-            GROUP BY srp.user_id
-            "#,
+            &count_sql,
             [session_id.into()],
         ))
         .all(txn),
     )
     .await?;
 
-    if drops.is_empty() {
-        // Nothing unresolved — a session can close with every race already
-        // raced or skipped. No drops, no notifications.
-        return Ok(());
-    }
-
     // Stamp `dropped_at` on every unresolved pending row in this session, in
-    // one set-based UPDATE. The predicate matches the count query above.
-    db_query(txn.execute(sea_orm::Statement::from_sql_and_values(
-        txn.get_database_backend(),
-        r#"
-        UPDATE session_race_participations
-        SET dropped_at = $2
-        WHERE session_race_id IN (
-                  SELECT id FROM session_races WHERE session_id = $1
-              )
-          AND skipped_at IS NULL
-          AND dropped_at IS NULL
-          AND NOT EXISTS (
-              SELECT 1 FROM runs r
-              WHERE r.session_race_id = session_race_participations.session_race_id
-                AND r.user_id = session_race_participations.user_id
-          )
-        "#,
-        [session_id.into(), now.into()],
-    )))
-    .await?;
+    // one set-based UPDATE. The predicate is the same `const` the count query
+    // used, so the two cannot drift. Skipped when there's nothing to drop —
+    // a session can close with every race already raced or skipped.
+    if !drops.is_empty() {
+        let drop_sql = format!(
+            "UPDATE session_race_participations
+             SET dropped_at = $2
+             WHERE session_race_id IN (
+                       SELECT id FROM session_races WHERE session_id = $1
+                   )
+               AND {UNRESOLVED_PENDING_PREDICATE}"
+        );
+        db_query(txn.execute(sea_orm::Statement::from_sql_and_values(
+            txn.get_database_backend(),
+            &drop_sql,
+            [session_id.into(), now.into()],
+        )))
+        .await?;
+    }
 
     // One notification per affected user (ADR-0038 consumer trigger).
     for drop in drops {
@@ -563,6 +579,15 @@ async fn close_session_and_drop_pending(
         })?;
         notifications::record_pending_drops(txn, &user_id, session_id, dropped_count).await?;
     }
+
+    // Flip status last — the drops above are guaranteed to have landed.
+    db_query(
+        sessions::Entity::update_many()
+            .col_expr(sessions::Column::Status, Expr::value(SessionStatus::Closed))
+            .filter(sessions::Column::Id.eq(session_id))
+            .exec(txn),
+    )
+    .await?;
 
     Ok(())
 }
@@ -615,12 +640,9 @@ pub async fn leave_session(
             db_query(active_session.update(&txn)).await?;
         }
         HostDisposition::SessionClosed => {
-            // Drop unresolved pending races + notify affected users before
-            // flipping status — same transaction (ADR-0037).
-            close_session_and_drop_pending(&txn, session_id).await?;
-            let mut active_session: sessions::ActiveModel = session.into();
-            active_session.status = Set(SessionStatus::Closed);
-            db_query(active_session.update(&txn)).await?;
+            // Single choke-point: drop unresolved pending races, notify the
+            // affected users, then flip status — all on this transaction.
+            close_session(&txn, session_id).await?;
         }
         HostDisposition::NoChange => {}
     }
@@ -653,17 +675,16 @@ struct StaleSessionRow {
 /// session inline via `leave_session`; this handles the abandoned case
 /// (phones died, tabs closed without a Leave tap).
 ///
-/// For each closing session it drops every unresolved pending race
-/// (`dropped_at` stamped) and records a `PendingRacesDropped` notification per
-/// affected user — see [`close_session_and_drop_pending`]. It also marks all
-/// remaining active participants as left. Returns the number of sessions
-/// closed.
+/// It marks all remaining active participants as left, then closes each stale
+/// session through the [`close_session`] choke-point — dropping its unresolved
+/// pending races and recording a `PendingRacesDropped` notification per
+/// affected user. Returns the number of sessions closed.
 ///
-/// The cleanup runs in one transaction (`seaorm.md` § 1): a per-session drop
-/// step (see [`close_session_and_drop_pending`]), then two set-based `UPDATE`s
-/// — one to settle still-active participants, one to flip the session rows to
-/// `Closed`. The list of stale ids is fetched once up front so every step
-/// scopes to the same set without re-querying.
+/// The cleanup runs in one transaction (`seaorm.md` § 1): one set-based
+/// `UPDATE` to settle still-active participants, then a per-session
+/// [`close_session`] call (drop → notify → status flip) for each stale id.
+/// The list of stale ids is fetched once up front so every step scopes to the
+/// same set without re-querying.
 ///
 /// # Errors
 ///
@@ -678,9 +699,9 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
 
     // Capture the stale ids once. The `NOT EXISTS` subqueries are awkward in
     // the builder API, so this read is hand-rolled SQL (`seaorm.md` § 1 — raw
-    // SQL for clumsy multi-table shapes). Both `UPDATE`s below scope to the
-    // captured set, and the empty-set case short-circuits cleanly (the common
-    // case).
+    // SQL for clumsy multi-table shapes). The participant `UPDATE` and the
+    // per-session `close_session` calls below all scope to the captured set,
+    // and the empty-set case short-circuits cleanly (the common case).
     //
     // The predicate enumerates every meaningful activity signal a session can
     // produce (ADR-0037): a new race, a submitted run, a join or leave, or a
@@ -734,14 +755,8 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
         return Ok(0);
     }
 
-    // Drop each closing session's unresolved pending races and notify the
-    // affected users, before the batch status flip (ADR-0037 / ADR-0038).
-    for id in &stale_ids {
-        let session_id = SessionId::from_db(id)?;
-        close_session_and_drop_pending(&txn, &session_id).await?;
-    }
-
-    // Mark all still-active participants of the stale sessions as left.
+    // Mark all still-active participants of the stale sessions as left, in
+    // one set-based UPDATE (seaorm.md § 1).
     db_query(
         session_participants::Entity::update_many()
             .col_expr(session_participants::Column::LeftAt, Expr::value(now))
@@ -754,19 +769,16 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
     )
     .await?;
 
-    // Close the stale sessions in one statement (seaorm.md § 1 — the
-    // exemplar for the set-based-update rule names this exact cleanup).
-    let result = db_query(
-        sessions::Entity::update_many()
-            .col_expr(sessions::Column::Status, Expr::value(SessionStatus::Closed))
-            .filter(sessions::Column::Id.is_in(stale_ids))
-            .exec(&txn),
-    )
-    .await?;
+    // Close each stale session through the single choke-point — drop pending
+    // races, notify the affected users, flip status. Per-session (not a batch
+    // status UPDATE) so the drop-before-flip invariant holds for every one.
+    for id in &stale_ids {
+        close_session(&txn, &SessionId::from_db(id)?).await?;
+    }
 
     db_txn(txn.commit()).await?;
 
-    Ok(result.rows_affected)
+    Ok(stale_ids.len() as u64)
 }
 
 #[cfg(test)]
