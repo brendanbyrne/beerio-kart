@@ -152,8 +152,10 @@ Notes:
 - `host_id` is set to the creating user when the session is created. If the host leaves, host role transfers to the earliest-joined remaining participant.
 - `least_played_drink_category` stores values as `"alcoholic"` or `"non_alcoholic"` (snake_case, per database convention). The frontend maps these to display text with hyphens ("non-alcoholic").
 - Ruleset-specific config uses explicit nullable columns rather than a JSON blob. With four well-defined rulesets, explicit columns are safer (database can enforce CHECK constraints) and queryable. New config options require a migration, but that's the right tradeoff for known rulesets.
-- Session liveness is **race-derived** per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md). A session is alive iff `status = 'active'` AND (a race exists within the last hour OR `created_at` is within the last hour). The same predicate is applied at every user-facing read path (`get_pending_races`, `check_not_in_any_session`, `get_active_session_id`) and by the stale-session sweeper. There is no maintained `last_activity_at` column — each meaningful user action lands its own row (`session_races`, `runs`, `session_participants`) and liveness reads from those.
-- A periodic Tokio task (`close_stale_sessions`, every 15 minutes) flips `status` to `'closed'` for sessions failing the liveness predicate. Pure DB hygiene — no user-facing read depends on the sweeper having run recently. Clean exits (last participant leaves) close the session inline via `leave_session`'s `transfer_host_or_close` path; the sweeper handles only the abandoned case (tab closed, phone died).
+- Session liveness is **activity-derived** per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md) and [ADR-0037](./decisions/0037-pending-races-dropped-on-session-close.md). There is no maintained `last_activity_at` column — each meaningful user action lands its own row (`session_races`, `runs`, `session_participants`, `session_race_participations`) and liveness reads from those. Two related predicates:
+  - **Read-path lockout** (`check_not_in_any_session`, `get_active_session_id`): a user is held in a session iff `status = 'active'` AND (a race exists within the last hour OR `created_at` is within the last hour). This decouples user lockout from sweep timing.
+  - **Stale-session sweeper** (`close_stale_sessions`, ADR-0037): a session is *stale* iff `status = 'active'`, `created_at` is over an hour old, AND no activity of any kind happened within the last hour — no new race, no submitted run, no join or leave, no skipped pending race (five signals). With the per-race timer gone from pending derivation (see Pending Race Tracking), the sweeper is the sole gatekeeper for closing dormant sessions.
+- A periodic Tokio task (`close_stale_sessions`, every 15 minutes) flips `status` to `'closed'` for stale sessions. Clean exits (last participant leaves) close the session inline via `leave_session`'s `transfer_host_or_close` path; the sweeper handles only the abandoned case (tab closed, phone died). **Closing a session — by either path — drops every unresolved pending race in it** (`dropped_at` stamped on the `session_race_participations` row) and records a `notifications` row per affected user (ADR-0037 / ADR-0038). The drop and the notifications are atomic with the close.
 - Future consideration: `password_hash` column for session passwords. Deferred — the `POST /sessions/:id/join` endpoint is designed as a dedicated action so password checking can be added later without restructuring the join flow.
 - A user can only be active in one session at a time (enforced by a partial unique index on `session_participants(user_id) WHERE left_at IS NULL`).
 - **Session UI icons:** The host is indicated by a 🏠 (house) icon, not a crown. The 👑 (crown) is reserved for the player with the most fastest track times in the session — an earned distinction, not a role.
@@ -177,7 +179,7 @@ Constraints:
 Notes:
 - "Currently in session" = `left_at` is null.
 - `joined_at` is **monotonic** — set when the row is first inserted, never reset on rejoin. Genuinely means "when did this user first join this session."
-- On rejoin (any duration): clear `left_at` (set to NULL). `joined_at` is untouched. Pending races remain accessible iff their own per-race 1-hour window hasn't expired (per ADR-0035). No 5-minute grace concept — race-anchored expiry replaces it.
+- On rejoin (any duration): clear `left_at` (set to NULL). `joined_at` is untouched. Pending races remain accessible for as long as the session is alive (per [ADR-0037](./decisions/0037-pending-races-dropped-on-session-close.md)) — a user who leaves with pending races can rejoin and act on them as long as someone else kept the session alive. If everyone leaves, the session closes and the pending races are dropped. No 5-minute grace concept, and no per-race timer — the session is the deadline.
 - **Settle-on-new-join.** The schema's partial unique index `UNIQUE(user_id) WHERE left_at IS NULL` allows at most one active participation per user. When a user starts or joins a *new* session (`create_session` / `join_session`), the same transaction also sets `left_at = NOW()` on any pre-existing `left_at IS NULL` row for that user in a *different* session. Semantically: starting or joining a new session is an implicit leave of any abandoned one. Without this, the application-level race-derived liveness predicate would let the check pass while the INSERT collided with the partial unique index — so lockout would still be sweep-bound. The stale session's `status` and other participants' rows are left to the sweeper (eventual consistency).
 - Per-race presence (which races the user was actually present for at creation time) is NOT derived from this table — see `session_race_participations`.
 
@@ -212,7 +214,8 @@ session_race_participations
 ├── session_race_id: UUID (foreign key -> session_races, not null)
 ├── user_id: UUID (foreign key -> users, not null)
 ├── created_at: TIMESTAMP (not null)
-└── skipped_at: TIMESTAMP (nullable — set when the user explicitly skips this race)
+├── skipped_at: TIMESTAMP (nullable — set when the user explicitly skips this race)
+└── dropped_at: TIMESTAMP (nullable — set when the session closes around an unresolved pending row)
 ```
 
 Constraints:
@@ -222,10 +225,19 @@ Constraints:
 Notes:
 - Inserted at race-creation time, in the same transaction as the `session_races` INSERT, for every user with `session_participants.left_at IS NULL` in this session.
 - Existence of a row = "this user was present when this race was created" (the primary fact this table proves).
-- `skipped_at IS NULL` AND no corresponding `runs` row = pending state.
-- `skipped_at IS NOT NULL` = user explicitly forfeited this race.
 - A `runs` row for `(session_race_id, user_id)` = user submitted; pending state cleared by row presence in `runs`.
-- Rows are never deleted. After a race ages out of its 1-hour window or after a session closes, rows remain in the DB for history; they just become inaccessible via normal API paths. Both filters are required — the per-race expiry check **and** the `session.status = 'active'` check — because a session can close (via `close_stale_sessions` or the host-leaves-last cascade) while individual races within it are still inside their 1-hour window. See the Pending Race Tracking derivation below.
+- `skipped_at IS NOT NULL` = user explicitly forfeited this race.
+- `dropped_at IS NOT NULL` = the session closed (clean last-leave or sweeper) while this row was still an unresolved pending race ([ADR-0037](./decisions/0037-pending-races-dropped-on-session-close.md)). Distinct from `skipped` — `skipped` is "the user chose to forfeit," `dropped` is "the session ended around them." `skipped` and `raced` both beat `dropped`: a row that already has `skipped_at` set, or a `runs` row, is never stamped `dropped_at`.
+- Rows are never deleted. After a session closes, rows remain in the DB for history; they just become inaccessible via normal API paths (the close stamps `dropped_at`, which the Pending Race Tracking derivation below filters on).
+
+**Per-(race, user) status enum** (derived, not stored as such). These four mutually-exclusive states apply only to `(race, user)` pairs where a `session_race_participations` row exists — i.e. where the user was present at race creation. A user who joined the session *after* a race was created has no row for it and none of the states apply.
+
+| Status | Derivation |
+|---|---|
+| `unraced` | row exists, no `runs` row, `skipped_at IS NULL`, `dropped_at IS NULL` (this is "pending") |
+| `raced` | a `runs` row exists for `(race, user)` |
+| `skipped` | `skipped_at IS NOT NULL` |
+| `dropped` | `dropped_at IS NOT NULL` |
 
 ### Runs
 
@@ -312,6 +324,31 @@ Notes:
 - The `flagged_for_review` column on the `runs` table is removed — flag status is determined by the presence of an unresolved `run_flags` row.
 - `run_id` is NOT unique — a run can have multiple flags, both resolved and unresolved. Different issues (e.g., wrong time and wrong race setup) are tracked as separate flags and resolved independently. Resolved flags are kept as audit history. Application code prevents duplicate flags (same run + same reason while unresolved).
 
+### Notifications
+
+A per-user inbox of asynchronous events, per [ADR-0038](./decisions/0038-notifications-system.md). Each event materializes one row; dismissal flips `read_at`. The first (MVP) consumer is the pending-races-dropped event from ADR-0037.
+
+```
+notifications
+├── id: UUID (primary key)
+├── user_id: UUID (foreign key -> users, not null — recipient)
+├── kind: TEXT (not null — discriminator, snake_case)
+├── payload: TEXT (not null — kind-specific structured data, JSON)
+├── created_at: TIMESTAMP (not null)
+└── read_at: TIMESTAMP (nullable — set when the user dismisses)
+```
+
+Constraints:
+- Foreign key on `user_id` with **ON DELETE CASCADE** — when a user is deleted their inbox goes with them (notifications carry no cross-user audit value, unlike `session_race_participations`).
+- Index `idx_notifications_user_unread` on `(user_id, created_at DESC) WHERE read_at IS NULL` — the "list my unread, newest first" hot path.
+- Index `idx_notifications_user_created` on `(user_id, created_at DESC)` — paginated "show me everything, including read."
+
+Notes:
+- **Append-only.** Each event is its own row; there is no supersession. "Three drops" yields three rows.
+- **Keep forever.** No retention task for MVP — bounded well below "concern" at friend-group scale. A future Issue adds retention if it ever matters.
+- `kind` is a snake_case discriminator (`pending_races_dropped`, …) lifted out of the JSON `payload` for indexing. `payload` stores the kind-specific structured body — the serde-tagged `NotificationPayload` enum on the Rust side. JSON-as-TEXT follows [ADR-0028](./decisions/0028-timestamp-storage-as-iso8601-text.md)'s same-shape rule; the DB never queries inside it.
+- Every notification INSERT runs in the same transaction as the triggering write (ADR-0038 § Atomicity) — no worker, no queue. The pending-drops consumer writes one row per affected user inside the session-close transaction.
+
 ### Head-to-Head Derivation
 
 Head-to-head records are derived from session data, not stored separately. A "win" is when two players both submitted non-DQ'd runs for the same `session_race_id` and one had a faster `track_time`. Ties (identical times) count as 0-0 — neither a win nor a loss.
@@ -324,15 +361,16 @@ This approach supports an unbounded number of rivals — no tracking table neede
 
 ### Pending Race Tracking
 
-Within a session, a participant may have "pending" races — session races they were present for but haven't yet submitted a time. The UI caps pending races at 3 (oldest expire first), but the schema places no limit, allowing this cap to be adjusted later.
+Within a session, a participant may have "pending" races — session races they were present for but haven't yet submitted a time. The UI caps pending races at 3, but the schema places no limit, allowing this cap to be adjusted later.
 
-**Derivation** (per [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md)). A `session_race_participations` row represents pending state for user `U` and race `SR` iff **all** of the following hold:
+**Derivation** (per [ADR-0037](./decisions/0037-pending-races-dropped-on-session-close.md)). A `session_race_participations` row represents pending state for user `U` and race `SR` iff **all** of the following hold:
 
 1. The row exists (i.e. `U` was present when `SR` was created).
 2. `skipped_at IS NULL` on the row.
 3. No `runs` row exists for `(SR.id, U.id)`.
-4. `SR.created_at >= NOW() - INTERVAL 1 HOUR` — the per-race submission window.
-5. `sessions.status = 'active'` for `SR.session_id`. Closed sessions accept no further submissions or skips, so any pending entries on them would be phantom (no API path to resolve them).
+4. `dropped_at IS NULL` on the row.
+
+Four clauses, no per-race timer and no `sessions.status` filter. **The session is the deadline** (ADR-0037): a pending race stays submittable for as long as the session is alive. When a session closes — clean last-leave or sweeper — the close transaction stamps `dropped_at` on every unresolved row, so clause 4 alone captures "the session is over." A race created four hours ago in a still-active session is still pending. This is the narrowing of [ADR-0035](./decisions/0035-race-anchored-session-lifetime.md)'s per-race 1-hour window, which is gone.
 
 Pending races are returned ordered by `session_races.race_number ASC`. The API returns all; the UI applies the 3-cap.
 
@@ -340,7 +378,7 @@ Pending races are returned ordered by `session_races.race_number ASC`. The API r
 
 **Session advancement.** If the session advances while a participant hasn't submitted, they see their pending list (oldest first) when they go to submit, and must resolve them in order before submitting for the current race. This ensures no one person holds up the group, consistent with "never feel rushed."
 
-**Forfeiture vs. deletion.** Forfeited pending records (those filtered out by race expiry or session close) are **not deleted** from `session_race_participations`. They remain as historical state and become inaccessible via the derivation above. This preserves the audit trail of "what was pending at any moment" for debugging and future analytics.
+**Forfeiture vs. deletion.** Resolved pending records — `skipped`, `raced`, or `dropped` — are **not deleted** from `session_race_participations`. They remain as historical state and become inaccessible via the derivation above. This preserves the audit trail of "what was pending at any moment" for debugging and future analytics.
 
 ### Session Rulesets
 
@@ -365,3 +403,4 @@ Each session uses one ruleset that determines how tracks are selected. The rules
 - 2026-05-05 — Extracted from `docs/design.md` as part of PR 1 (docs restructure foundation). See `docs/designs/archive/2026-05-04-design-doc-restructure.md` §5.1.
 - 2026-05-13 — § `run_flags` now enumerates the canonical snake_case storage values for `reason` alongside the display text, mirroring the storage-vs-display split already documented for `sessions.{ruleset,status,least_played_drink_category}`. The values are load-bearing as of PR-D3 ([#120](https://github.com/brendanbyrne/beerio-kart/issues/120) / PR [#148](https://github.com/brendanbyrne/beerio-kart/pull/148)), which committed them via `RunFlagReason::string_value` annotations on the `DeriveActiveEnum` backing the column. Review feedback from PR #148.
 - 2026-05-15 — Updated the 2026-05-05 history entry's path reference for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
+- 2026-05-16 — ADR-0037 + ADR-0038. `session_race_participations` gains a nullable `dropped_at` column and the four-state per-(race, user) status enum (`unraced` / `raced` / `skipped` / `dropped`). Pending Race Tracking derivation simplified to four clauses — the per-race 1-hour timer and the `sessions.status` filter are gone; the session is the deadline. Session liveness note rewritten: the stale-session sweeper now uses a five-signal activity predicate, and closing a session drops its unresolved pending races + records notifications. Session Participants rejoin rule updated to "rejoin while the session is alive." New `notifications` table section added (ADR-0038 inbox). Issues [#51](https://github.com/brendanbyrne/beerio-kart/issues/51), [#58](https://github.com/brendanbyrne/beerio-kart/issues/58), [#164](https://github.com/brendanbyrne/beerio-kart/issues/164).

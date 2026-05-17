@@ -128,6 +128,7 @@ pub async fn insert_race_participations<C: ConnectionTrait>(
             user_id: Set(p.user_id),
             created_at: Set(now),
             skipped_at: Set(None),
+            dropped_at: Set(None),
         });
 
     db_query(session_race_participations::Entity::insert_many(rows).exec(txn)).await?;

@@ -2,6 +2,8 @@
 pub mod auth;
 /// Cross-service helpers (lookup-or-404, etc.) that don't fit one resource.
 pub mod helpers;
+/// Per-user notifications inbox: record, list, unread-count, mark-all-read.
+pub mod notifications;
 /// Run-recording service: submission + read-side queries.
 pub mod runs;
 /// Shared session-context type passed through nested service calls.

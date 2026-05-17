@@ -16,7 +16,10 @@ use beerio_kart::{
     config::Config,
     db,
     drink_type_id::drink_type_uuid,
-    entities::{bodies, characters, cups, drink_types, gliders, sessions, tracks, wheels},
+    entities::{
+        bodies, characters, cups, drink_types, gliders, session_participants, sessions, tracks,
+        wheels,
+    },
     routes,
 };
 use chrono::Utc;
@@ -85,6 +88,19 @@ async fn setup_test_app() -> (TestServer, sea_orm::DatabaseConnection) {
         .route(
             "/api/v1/sessions/{id}/races/{race_id}/skip",
             post(routes::sessions::skip_pending_race),
+        )
+        // Notifications (ADR-0038)
+        .route(
+            "/api/v1/me/notifications",
+            get(routes::notifications::list_notifications),
+        )
+        .route(
+            "/api/v1/me/notifications/unread-count",
+            get(routes::notifications::unread_count),
+        )
+        .route(
+            "/api/v1/me/notifications/read-all",
+            post(routes::notifications::mark_all_read),
         )
         // Runs
         .route("/api/v1/runs", post(routes::runs::create_run))
@@ -484,8 +500,9 @@ async fn test_stale_session_cleanup() {
     let session: Value = res.json();
     let session_id = session["id"].as_str().unwrap().to_string();
 
-    // Backdate created_at to 2 hours ago — a session with no races that was
-    // created over an hour ago is stale (ADR-0035 race-derived sweeper).
+    // Backdate created_at to 2 hours ago — a session with no races, no runs,
+    // and no recent join/leave/skip that was created over an hour ago is
+    // stale (ADR-0035 / ADR-0037 activity-derived sweeper).
     let two_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(2)).naive_utc();
     let session_model = sessions::Entity::find_by_id(&session_id)
         .one(&db)
@@ -495,6 +512,17 @@ async fn test_stale_session_cleanup() {
     let mut active: sessions::ActiveModel = session_model.into();
     active.created_at = Set(two_hours_ago);
     active.update(&db).await.unwrap();
+
+    // Backdate the host's join too — a join within the window is itself an
+    // activity signal that keeps the session alive (ADR-0037 sweeper).
+    let participant = session_participants::Entity::find()
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active_participant: session_participants::ActiveModel = participant.into();
+    active_participant.joined_at = Set(two_hours_ago);
+    active_participant.update(&db).await.unwrap();
 
     // Run cleanup
     let closed = beerio_kart::services::sessions::close_stale_sessions(&db)
@@ -832,4 +860,127 @@ async fn test_skip_after_leaving_returns_403() {
         .add_header(AUTH_HEADER, auth_value(&token_user2))
         .await;
     res.assert_status(axum::http::StatusCode::FORBIDDEN);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Notifications: pending-drop inbox (ADR-0037 + ADR-0038)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn test_pending_drop_notification_full_flow() {
+    let (server, db) = setup_test_app().await;
+    seed_minimal_game_data(&db).await;
+    let (token, _host_id) = register_and_get_token(&server, "host").await;
+
+    // Create a session and pick a track — the host now has one pending race.
+    let res = server
+        .post("/api/v1/sessions")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&json!({ "ruleset": "random" }))
+        .await;
+    res.assert_status(axum::http::StatusCode::CREATED);
+    let session: Value = res.json();
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let res = server
+        .post(&format!("/api/v1/sessions/{session_id}/next-track"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::CREATED);
+
+    // Nothing has closed yet — the inbox is empty.
+    let res = server
+        .get("/api/v1/me/notifications")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::OK);
+    let list: Value = res.json();
+    assert_eq!(list.as_array().unwrap().len(), 0, "inbox starts empty");
+
+    // The solo host leaves — the session closes and the pending race drops.
+    let res = server
+        .post(&format!("/api/v1/sessions/{session_id}/leave"))
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // The badge poll sees one unread notification.
+    let res = server
+        .get("/api/v1/me/notifications/unread-count")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::OK);
+    let count: Value = res.json();
+    assert_eq!(count["count"], 1);
+
+    // The list endpoint surfaces the drop, kind-tagged with its payload.
+    let res = server
+        .get("/api/v1/me/notifications")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::OK);
+    let list: Value = res.json();
+    let items = list.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    let payload = &items[0]["payload"];
+    assert_eq!(payload["kind"], "pending_races_dropped");
+    assert_eq!(payload["session_id"], session_id);
+    assert_eq!(payload["dropped_count"], 1);
+    assert!(
+        items[0]["read_at"].is_null(),
+        "fresh notification is unread"
+    );
+
+    // Mark everything read.
+    let res = server
+        .post("/api/v1/me/notifications/read-all")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    res.assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // Unread count drops to zero; the default list is now empty.
+    let res = server
+        .get("/api/v1/me/notifications/unread-count")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    let count: Value = res.json();
+    assert_eq!(count["count"], 0);
+
+    let res = server
+        .get("/api/v1/me/notifications")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    let list: Value = res.json();
+    assert_eq!(
+        list.as_array().unwrap().len(),
+        0,
+        "read notifications are excluded by default"
+    );
+
+    // include_read=true still returns it, now with read_at set.
+    let res = server
+        .get("/api/v1/me/notifications?include_read=true")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    let list: Value = res.json();
+    let items = list.as_array().unwrap();
+    assert_eq!(items.len(), 1, "include_read returns the read notification");
+    assert!(
+        !items[0]["read_at"].is_null(),
+        "read notification carries a read_at timestamp"
+    );
+}
+
+#[tokio::test]
+async fn test_notification_endpoints_require_auth() {
+    let (server, _db) = setup_test_app().await;
+
+    let res = server.get("/api/v1/me/notifications").await;
+    res.assert_status(axum::http::StatusCode::UNAUTHORIZED);
+
+    let res = server.get("/api/v1/me/notifications/unread-count").await;
+    res.assert_status(axum::http::StatusCode::UNAUTHORIZED);
+
+    let res = server.post("/api/v1/me/notifications/read-all").await;
+    res.assert_status(axum::http::StatusCode::UNAUTHORIZED);
 }

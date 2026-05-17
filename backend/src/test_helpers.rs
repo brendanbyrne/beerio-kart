@@ -21,12 +21,12 @@ use uuid::Uuid;
 use crate::{
     db,
     domain::{
-        SessionId, SessionRaceId, UserId,
+        RunId, SessionId, SessionRaceId, UserId,
         enums::{SessionRuleset, SessionStatus},
     },
     drink_type_id::drink_type_uuid,
     entities::{
-        bodies, characters, cups, drink_types, gliders, session_participants,
+        bodies, characters, cups, drink_types, gliders, runs, session_participants,
         session_race_participations, session_races, sessions, tracks, users, wheels,
     },
 };
@@ -223,10 +223,50 @@ pub async fn insert_race_participation(
         user_id: Set(user_id.into()),
         created_at: NotSet,
         skipped_at: Set(skipped_at),
+        dropped_at: Set(None),
     }
     .insert(db)
     .await
     .expect("insert race participation");
+}
+
+/// Insert a `runs` row directly with placeholder vehicle/time fields.
+///
+/// For tests that need a submitted run without going through `create_run`'s
+/// full validation surface. Requires [`seed_game_data`] (character/body/
+/// wheel/glider id 1, the `Test Beer` drink type). `created_at` is stamped
+/// `now` by `before_save`. Returns the new run ID.
+pub async fn insert_run(
+    db: &DatabaseConnection,
+    session_race_id: &SessionRaceId,
+    user_id: &UserId,
+    track_id: i32,
+) -> RunId {
+    let id = RunId::new_v4();
+    let drink_id = drink_type_uuid("Test Beer");
+    runs::ActiveModel {
+        id: Set((&id).into()),
+        user_id: Set(user_id.into()),
+        session_race_id: Set(session_race_id.into()),
+        track_id: Set(track_id),
+        character_id: Set(1),
+        body_id: Set(1),
+        wheel_id: Set(1),
+        glider_id: Set(1),
+        track_time: Set(120_000),
+        lap1_time: Set(40_000),
+        lap2_time: Set(40_000),
+        lap3_time: Set(40_000),
+        drink_type_id: Set((&drink_id).into()),
+        disqualified: Set(false),
+        photo_path: Set(None),
+        created_at: NotSet,
+        notes: Set(None),
+    }
+    .insert(db)
+    .await
+    .expect("insert run");
+    id
 }
 
 /// Backdate a participant's `left_at` and optionally `joined_at`. Tests use

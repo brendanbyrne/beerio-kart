@@ -49,7 +49,7 @@ Future enhancement: prioritize sessions containing players you've competed with 
    - If time is a track record and no photo: prompt, then auto-flag if skipped.
 4. Session screen shows who has submitted, who's still pending.
 5. Next track selection happens when the chooser/host triggers it (depending on ruleset). The chooser can pick while others still have pending races — this doesn't block.
-6. If someone has pending races from earlier, they see those when they go to submit. Pending races shown in order, submit or skip each. Max 3 pending in UI (oldest expire first). Schema supports unlimited for future flexibility.
+6. If someone has pending races from earlier, they see those when they go to submit. Pending races shown in order, submit or skip each. Max 3 pending in UI (oldest shown first). Schema supports unlimited for future flexibility.
 7. Choosing and submitting are independent actions — the chooser can pick the next track even if they haven't submitted their own time yet.
 8. Repeat until the group decides to stop.
 
@@ -58,10 +58,10 @@ Earmarked: the track selection sub-workflow (how the chooser browses/searches fo
 ### 1.5 Leaving a session / session end
 
 1. Player taps "Leave Session."
-2. If they have pending races: warning that each race must be submitted within 1 hour of when it started; rejoining the session at any point within that hour preserves the pending race.
+2. Pending races stay submittable while the session is active. If you leave with pending races, you can rejoin as long as someone else is still in the session. If everyone leaves, the session ends and pending races are dropped — you'll see a notification next time you visit.
 3. If the leaving player is the host: host role transfers to the earliest-joined remaining participant.
 4. Session ends when all participants have left.
-5. Sessions whose races have all aged past their 1-hour window auto-close on the next sweeper pass — no further run submissions accepted.
+5. Sessions with no activity of any kind for an hour — no new race, run, join, leave, or skip — auto-close on the next sweeper pass. No further run submissions accepted, and any unresolved pending races are dropped.
 
 ### 1.6 Checking personal stats
 
@@ -180,3 +180,4 @@ Streamlined compared to standalone entry — the track is already known from the
 - 2026-05-06 — Initial creation. Sourced from `design.md` § "User Workflows" (workflows 1-9) and § "UI Screens" (screens 1-7 + shared components). Content copied with two minor editorial changes: the Workflow 1.4 "Phase 3 detailed design" reference updated to "Milestone Star detailed design" (cup-name convention is now canonical), and the screens preamble adds the Pixel 9 Pro reference-device sentence (factored out of `.claude/CLAUDE.md` § UI Reference Device for proximity to the screens themselves). Filename `user-workflows.md` diverges from the design record's proposed `workflows.md` due to grep collision with the operational `workflow.md` — see PR 4 discussion. PR 4 of the docs restructure.
 - 2026-05-08 — Updated the § 0 cross-reference: `workflow.md` → `project-workflow.md` (operational doc renamed for clarity — see that file's history). Dropped the "note the singular 'workflow'" caveat, no longer needed once the filename is unambiguous.
 - 2026-05-08 — Demoted the broken `[workflow.md](./workflow.md)` markdown link in the 2026-05-06 initial-creation history bullet to plain backticked text. The file no longer exists at that path (renamed to `project-workflow.md` on 2026-05-08); the rename history is documented in the bullet immediately above. PR 5 of the docs restructure (plan deviation — Cowork's PR 5 handoff did not anticipate this link, surfaced when lychee `fail: true` flip would otherwise turn it into a CI failure).
+- 2026-05-16 — Rewrote § 1.5 step 2 for ADR-0037: pending races stay submittable while the session is active and rejoining works as long as someone keeps the session alive; if everyone leaves, the session ends and pending races are dropped (with a notification). The per-race 1-hour window is gone. Step 5 (auto-close) updated for the five-signal sweeper predicate and the drop-on-close behavior. § 1.2 step 6 "(oldest expire first)" → "(oldest shown first)" — no per-race expiry remains. Issue [#51](https://github.com/brendanbyrne/beerio-kart/issues/51).

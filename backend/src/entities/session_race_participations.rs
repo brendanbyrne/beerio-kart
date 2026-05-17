@@ -2,7 +2,8 @@
 //!
 //! Composite primary key `(session_race_id, user_id)` — one row per (race, user)
 //! captured at race-creation time. Existence proves presence; `skipped_at`
-//! flips when the user explicitly forfeits the race.
+//! flips when the user explicitly forfeits the race; `dropped_at` (ADR-0037)
+//! flips when the session closes around an unresolved pending row.
 
 use sea_orm::entity::prelude::*;
 
@@ -15,6 +16,7 @@ pub struct Model {
     pub user_id: String,
     pub created_at: DateTime,
     pub skipped_at: Option<DateTime>,
+    pub dropped_at: Option<DateTime>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

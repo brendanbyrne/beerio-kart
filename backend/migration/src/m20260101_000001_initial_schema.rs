@@ -358,6 +358,12 @@ impl MigrationTrait for Migration {
         // when"). If a user-deletion path is ever added, it must explicitly
         // decide what to do with these rows rather than letting them silently
         // vanish.
+        //
+        // `skipped_at` flips when the user explicitly forfeits the race;
+        // `dropped_at` (ADR-0037) flips when the session closes around an
+        // unresolved pending row. The two are mutually exclusive in practice
+        // and together with a `runs` row form the four-state per-(race, user)
+        // status enum (`unraced` / `raced` / `skipped` / `dropped`).
 
         conn.execute_unprepared(
             "CREATE TABLE IF NOT EXISTS session_race_participations (
@@ -365,6 +371,7 @@ impl MigrationTrait for Migration {
                     user_id TEXT NOT NULL REFERENCES users(id),
                     created_at datetime_text NOT NULL,
                     skipped_at datetime_text,
+                    dropped_at datetime_text,
                     PRIMARY KEY (session_race_id, user_id)
                 )",
         )
@@ -430,6 +437,44 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // ---- Notifications (ADR-0038) ----
+        //
+        // Per-user inbox of asynchronous events. `kind` is the discriminator
+        // (snake_case, indexed); `payload` is the kind-specific structured
+        // body, stored as JSON TEXT (the serde-tagged `NotificationPayload`
+        // enum on the Rust side). `read_at` is NULL until the user dismisses.
+        //
+        // ON DELETE CASCADE on user_id: when a user is gone their inbox
+        // should be too — unlike `session_race_participations`, notifications
+        // carry no cross-user audit value.
+        conn.execute_unprepared(
+            "CREATE TABLE IF NOT EXISTS notifications (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at datetime_text NOT NULL,
+                    read_at datetime_text
+                )",
+        )
+        .await?;
+
+        // Partial index for the "list my unread, newest first" hot path
+        // (the home-screen badge poll). Raw SQL because SeaORM's builder
+        // doesn't support partial-index WHERE clauses.
+        conn.execute_unprepared(
+            "CREATE INDEX idx_notifications_user_unread
+                 ON notifications(user_id, created_at DESC) WHERE read_at IS NULL",
+        )
+        .await?;
+
+        // Full index for paginated "show me everything, including read".
+        conn.execute_unprepared(
+            "CREATE INDEX idx_notifications_user_created
+                 ON notifications(user_id, created_at DESC)",
+        )
+        .await?;
+
         Ok(())
     }
 
@@ -437,6 +482,8 @@ impl MigrationTrait for Migration {
         // Drop in reverse FK dependency order so FKs don't block drops.
         let conn = manager.get_connection();
 
+        conn.execute_unprepared("DROP TABLE IF EXISTS notifications")
+            .await?;
         conn.execute_unprepared("DROP TABLE IF EXISTS run_flags")
             .await?;
         conn.execute_unprepared("DROP TABLE IF EXISTS runs").await?;
