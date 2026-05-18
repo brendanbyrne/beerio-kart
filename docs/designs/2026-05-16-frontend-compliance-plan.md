@@ -1,7 +1,7 @@
 # Frontend Compliance Plan
 
 > **Purpose.** A sequenced list of PRs that brings the existing `beerio-kart` frontend into compliance with the coding standards in [`../coding-standards/typescript.md`](../coding-standards/typescript.md), [`react.md`](../coding-standards/react.md), and [`tailwind.md`](../coding-standards/tailwind.md). Each PR has a scope, a list of standards rules it satisfies, an effort estimate, dependencies, a risk note, and a sign-off checkbox.
-> **Status.** Initial draft. The audit that drives this plan is in this same record (§ Audit summary); detailed per-file findings live in the agent transcript from 2026-05-16.
+> **Status.** Initial draft. Driven by [`./2026-05-16-frontend-audit.md`](./2026-05-16-frontend-audit.md) — see that file for per-file findings, line-numbered citations, and migration-cost ratings.
 > **Sign-off.** Brendan signs off each PR once the change lands and is verified. Unfinished items roll into the next session.
 
 ## How this doc is used
@@ -14,15 +14,15 @@ PRs are grouped into streams by theme. Streams are loosely ordered by what unloc
 
 ## Audit summary
 
-Read full per-file findings in the 2026-05-16 audit transcript. Headline numbers:
+Headline gaps surfaced by [`./2026-05-16-frontend-audit.md`](./2026-05-16-frontend-audit.md). See the audit for per-file findings, line numbers, and migration-cost ratings.
 
-- **Default exports:** 11 `export default` declarations across pages and components, plus `main.tsx` which *imports* a default (`import App from './App'`). PR-D1 touches all 12 sites.
+- **Default exports:** 12 sites (11 declarations + `main.tsx`'s import).
 - **`interface` over `type`:** ~25 declarations across 6 files.
 - **No branded IDs:** All API DTOs cross every boundary as raw `string` / `number`.
 - **`useEffect` for data fetching/derivation:** 7 hooks/components.
 - **`any`-typed `await res.json()`:** 9 files.
 - **Non-null `!` assertions:** 3 files (5 sites in `Session.tsx` alone — `useParams<{id: string}>()` actually returns `Partial`).
-- **`as Foo` casts without runtime validation:** 2 files.
+- **`as Foo` casts and annotation-only validation:** 2 files.
 - **Controlled form inputs (no `useActionState`):** 5 files.
 - **Template-literal class concat:** 8 files.
 - **Touch targets under 44 px:** 4 files (cancel/confirm buttons, step pills, password change/cancel).
@@ -32,7 +32,7 @@ Read full per-file findings in the 2026-05-16 audit transcript. Headline numbers
 - **No `react-error-boundary`**, no app-level or route-level boundaries.
 - **`react-router-dom` 7 used in legacy `BrowserRouter` mode**, not `createBrowserRouter`.
 - **No `AbortController` plumbing**, no TanStack Query, no `clsx`/`cva`, no `zod`.
-- **No tests** (`vitest` not installed, no `*.test.ts(x)` files). Not in this plan's scope but flagged.
+- **No tests** (`vitest` not installed, no `*.test.ts(x)` files). Not in this plan's scope but flagged in the audit.
 
 The PRs below address every line item.
 
@@ -333,3 +333,4 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 ## Document history
 
 - 2026-05-16 — Initial creation. Driven by the audit conducted same day against the new coding standards (`typescript.md`, `react.md`, `tailwind.md`, all created 2026-05-16). 16 PRs across 8 streams. No work has shipped against this plan yet; all checkboxes are open. Companion to the standards rollup in `../coding-standards/README.md` § History (2026-05-16 entry).
+- 2026-05-16 — Pointed at the now-separate audit doc (`./2026-05-16-frontend-audit.md`) instead of carrying the audit findings inline. The audit was extracted into its own design record matching the backend pattern (`archive/2026-04-15-rust-audit.md` + `archive/compliance-plan.md`) so per-file context is durable when PRs are picked up individually.
