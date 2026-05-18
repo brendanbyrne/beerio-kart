@@ -35,7 +35,6 @@ export async function createSession(
     const err = await res.json();
     throw new Error(err.error || 'Failed to create session');
   }
-  // Mint: parsed body cast to the branded DTO (see file header).
   return res.json() as Promise<SessionDetail>;
 }
 
