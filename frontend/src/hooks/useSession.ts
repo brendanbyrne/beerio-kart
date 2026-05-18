@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSession } from '../api/sessions';
+import type { SessionId } from '../api/brand';
 import type { SessionDetail } from '../api/types';
 
 const POLL_INTERVAL_MS = 2500;
@@ -9,7 +10,7 @@ const POLL_INTERVAL_MS = 2500;
  * Pauses polling when the tab is backgrounded (Page Visibility API).
  * Stops polling once the session ends (closed or not found).
  */
-export function useSession(id: string) {
+export function useSession(id: SessionId) {
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [ended, setEnded] = useState(false);

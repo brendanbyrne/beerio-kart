@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getMySession, listSessions } from '../api/sessions';
+import type { SessionId } from '../api/brand';
 import type { SessionSummary } from '../api/types';
 
 const POLL_INTERVAL_MS = 5000;
@@ -10,7 +11,7 @@ const POLL_INTERVAL_MS = 5000;
  */
 export function useSessions() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [mySessionId, setMySessionId] = useState<string | null>(null);
+  const [mySessionId, setMySessionId] = useState<SessionId | null>(null);
   const [loading, setLoading] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

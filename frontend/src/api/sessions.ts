@@ -1,19 +1,31 @@
 import { apiFetch } from './client';
+import { SessionId } from './brand';
 import type {
-  SessionSummary,
+  RaceInfo,
   SessionDetail,
   SessionRaceInfo,
-  RaceInfo,
+  SessionRuleset,
+  SessionSummary,
 } from './types';
 
-export async function getMySession(): Promise<string | null> {
+// Brand mint point (PR-B1).
+//
+// The wire delivers raw JSON; the session DTOs carry branded IDs. Until
+// PR-B2 (Issue #191) adds Zod-parsed boundaries, each helper mints the
+// brands with a single `as` cast on the parsed body — the explicit,
+// centralized mint site. `getMySession` pulls one bare id out of its
+// payload, so it uses the `SessionId` constructor directly.
+
+export async function getMySession(): Promise<SessionId | null> {
   const res = await apiFetch('/api/v1/sessions/mine');
   if (!res.ok) return null;
-  const data = await res.json();
-  return data.session_id ?? null;
+  const data = (await res.json()) as { session_id?: string | null };
+  return data.session_id ? SessionId(data.session_id) : null;
 }
 
-export async function createSession(ruleset: string): Promise<SessionDetail> {
+export async function createSession(
+  ruleset: SessionRuleset,
+): Promise<SessionDetail> {
   const res = await apiFetch('/api/v1/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,23 +35,24 @@ export async function createSession(ruleset: string): Promise<SessionDetail> {
     const err = await res.json();
     throw new Error(err.error || 'Failed to create session');
   }
-  return res.json();
+  // Mint: parsed body cast to the branded DTO (see file header).
+  return res.json() as Promise<SessionDetail>;
 }
 
 export async function listSessions(): Promise<SessionSummary[]> {
   const res = await apiFetch('/api/v1/sessions');
   if (!res.ok) return [];
-  return res.json();
+  return res.json() as Promise<SessionSummary[]>;
 }
 
-export async function getSession(id: string): Promise<SessionDetail | null> {
+export async function getSession(id: SessionId): Promise<SessionDetail | null> {
   const res = await apiFetch(`/api/v1/sessions/${id}`);
   if (res.status === 404) return null;
   if (!res.ok) return null;
-  return res.json();
+  return res.json() as Promise<SessionDetail>;
 }
 
-export async function joinSession(id: string): Promise<void> {
+export async function joinSession(id: SessionId): Promise<void> {
   const res = await apiFetch(`/api/v1/sessions/${id}/join`, { method: 'POST' });
   if (!res.ok) {
     const err = await res.json();
@@ -47,7 +60,7 @@ export async function joinSession(id: string): Promise<void> {
   }
 }
 
-export async function leaveSession(id: string): Promise<void> {
+export async function leaveSession(id: SessionId): Promise<void> {
   const res = await apiFetch(`/api/v1/sessions/${id}/leave`, {
     method: 'POST',
   });
@@ -57,7 +70,9 @@ export async function leaveSession(id: string): Promise<void> {
   }
 }
 
-export async function nextTrack(sessionId: string): Promise<SessionRaceInfo> {
+export async function nextTrack(
+  sessionId: SessionId,
+): Promise<SessionRaceInfo> {
   const res = await apiFetch(`/api/v1/sessions/${sessionId}/next-track`, {
     method: 'POST',
   });
@@ -65,10 +80,10 @@ export async function nextTrack(sessionId: string): Promise<SessionRaceInfo> {
     const err = await res.json();
     throw new Error(err.error || 'Failed to pick track');
   }
-  return res.json();
+  return res.json() as Promise<SessionRaceInfo>;
 }
 
-export async function skipTurn(sessionId: string): Promise<SessionRaceInfo> {
+export async function skipTurn(sessionId: SessionId): Promise<SessionRaceInfo> {
   const res = await apiFetch(`/api/v1/sessions/${sessionId}/skip-turn`, {
     method: 'POST',
   });
@@ -76,11 +91,11 @@ export async function skipTurn(sessionId: string): Promise<SessionRaceInfo> {
     const err = await res.json();
     throw new Error(err.error || 'Failed to skip track');
   }
-  return res.json();
+  return res.json() as Promise<SessionRaceInfo>;
 }
 
-export async function listRaces(sessionId: string): Promise<RaceInfo[]> {
+export async function listRaces(sessionId: SessionId): Promise<RaceInfo[]> {
   const res = await apiFetch(`/api/v1/sessions/${sessionId}/races`);
   if (!res.ok) return [];
-  return res.json();
+  return res.json() as Promise<RaceInfo[]>;
 }
