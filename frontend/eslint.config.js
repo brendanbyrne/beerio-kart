@@ -73,6 +73,14 @@ export default defineConfig([
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn',
 
+      // consistent-type-specifier-style — named in typescript.md § 9 but
+      // omitted from the PR-A1 AC; added per PR review. `prefer-top-level`
+      // matches § 5's `import type { … }` example and consistent-type-
+      // imports' `separate-type-imports` fix style. Fires on 3 inline-type
+      // imports (useAuth.tsx, Login.tsx, Register.tsx); warn until later
+      // PRs touching those files convert them, then flips to error.
+      'import/consistent-type-specifier-style': ['warn', 'prefer-top-level'],
+
       // --- Warn-down: strictTypeChecked / stylisticTypeChecked rules that
       // fire on existing code. PR-B2 lands the Zod parses and AbortSignal
       // plumbing that clear the no-unsafe-*/floating-promise families; the
