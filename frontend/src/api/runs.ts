@@ -1,5 +1,13 @@
 import { apiFetch } from './client';
+import type { RaceId, RunId, TrackId, UserId } from './brand';
 import type { CreateRunRequest, RunDetail, RunDefaults } from './types';
+
+// Brand mint point (PR-B1).
+//
+// The run DTOs returned here carry branded IDs; each helper mints them with
+// an `as` cast on the parsed body. PR-B2 (Issue #191) replaces these casts
+// with Zod-parsed boundaries. `createRun`'s request body stays raw — see the
+// `CreateRunRequest` doc comment in types.ts.
 
 export async function createRun(body: CreateRunRequest): Promise<RunDetail> {
   const res = await apiFetch('/api/v1/runs', {
@@ -11,13 +19,13 @@ export async function createRun(body: CreateRunRequest): Promise<RunDetail> {
     const err = await res.json();
     throw new Error(err.error || 'Failed to submit run');
   }
-  return res.json();
+  return res.json() as Promise<RunDetail>;
 }
 
 export async function listRuns(params?: {
-  session_race_id?: string;
-  user_id?: string;
-  track_id?: number;
+  session_race_id?: RaceId;
+  user_id?: UserId;
+  track_id?: TrackId;
 }): Promise<RunDetail[]> {
   const query = new URLSearchParams();
   if (params?.session_race_id)
@@ -27,19 +35,19 @@ export async function listRuns(params?: {
   const qs = query.toString();
   const res = await apiFetch(`/api/v1/runs${qs ? `?${qs}` : ''}`);
   if (!res.ok) return [];
-  return res.json();
+  return res.json() as Promise<RunDetail[]>;
 }
 
-export async function getRun(id: string): Promise<RunDetail> {
+export async function getRun(id: RunId): Promise<RunDetail> {
   const res = await apiFetch(`/api/v1/runs/${id}`);
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || 'Run not found');
   }
-  return res.json();
+  return res.json() as Promise<RunDetail>;
 }
 
-export async function deleteRun(id: string): Promise<void> {
+export async function deleteRun(id: RunId): Promise<void> {
   const res = await apiFetch(`/api/v1/runs/${id}`, { method: 'DELETE' });
   if (!res.ok) {
     const err = await res.json();
@@ -59,5 +67,5 @@ export async function getRunDefaults(): Promise<RunDefaults> {
       source: 'none',
     };
   }
-  return res.json();
+  return res.json() as Promise<RunDefaults>;
 }
