@@ -1,4 +1,4 @@
-name: Coverage
+name: Backend
 
 # Backend coverage CI. Path-filtered to the backend subtree (PR-H2, Issue
 # #193) so a frontend- or docs-only PR skips this workflow — the frontend has
@@ -11,7 +11,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'codecov.yml'
-      - '.github/workflows/coverage.yml'
+      - '.github/workflows/backend.yml'
   push:
     branches: [main]
     paths:
@@ -19,10 +19,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'codecov.yml'
-      - '.github/workflows/coverage.yml'
+      - '.github/workflows/backend.yml'
 
 concurrency:
-  group: coverage-${{ github.event.pull_request.number || github.sha }}
+  group: backend-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 permissions:
@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   coverage:
-    name: Backend coverage
+    name: Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
