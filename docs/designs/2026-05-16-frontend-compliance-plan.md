@@ -42,7 +42,7 @@ The PRs below address every line item.
 
 ### PR-A1: ESLint plugins, Prettier integration, package additions
 
-**Issue:** [#187](https://github.com/brendanbyrne/beerio-kart/issues/187)
+**Issue:** [#187](https://github.com/brendanbyrne/beerio-kart/issues/187) · **Merged PR:** [#194](https://github.com/brendanbyrne/beerio-kart/pull/194)
 
 - **Scope:**
   - Add `eslint-plugin-jsx-a11y`, `eslint-plugin-import`, `eslint-config-prettier` to devDependencies.
@@ -53,7 +53,8 @@ The PRs below address every line item.
     - `jsx-a11y` flat-recommended.
     - `import` flat-recommended.
     - `eslint-config-prettier` last.
-    - Rules: `consistent-type-definitions: ["error", "type"]`, `consistent-type-imports: "error"`, `import/no-default-export: "error"`, `no-restricted-syntax` ban on `TSEnumDeclaration`, `ban-ts-comment` requiring `@ts-expect-error`. Start `no-explicit-any` and `no-non-null-assertion` at **warn** so existing files don't block CI; flip to error in PR-F1.
+    - Rules at `error` (no existing violations): `consistent-type-imports`, `no-restricted-syntax` ban on `TSEnumDeclaration`, `ban-ts-comment` requiring `@ts-expect-error`.
+    - Rules started at **warn** because they fire on existing code — the warn-down principle below applies to these named rules too: `consistent-type-definitions: ["warn", "type"]` (~25 `interface` declarations), `import/no-default-export` (flipped to error in PR-D1), `no-explicit-any` / `no-non-null-assertion` (flipped in PR-F1). Also enabled `import/consistent-type-specifier-style` (`prefer-top-level`, `warn`) — `typescript.md` § 9 names it; added during PR-A1 review since the original AC omitted it.
     - **Warn-down (don't fix) any other rule from `strictTypeChecked` that fires on existing code.** Expected culprits: the `@typescript-eslint/no-unsafe-*` family (every `await res.json()` until PR-B2 lands Zod parses — 9 files), `no-floating-promises` / `no-misused-promises` (fire-and-forget fetches), `no-unnecessary-condition` (over-defensive null checks). The principle: PR-A1 is purely additive infrastructure — it must produce zero new errors in CI or the pre-commit hook. Later PRs (B2 especially) fix the underlying code and flip the rules back to error.
   - Bump `ecmaVersion` to match the `target` in `tsconfig.app.json` (ES2023+).
   - Add `parserOptions.projectService: true`.
@@ -67,10 +68,11 @@ The PRs below address every line item.
 
 ### PR-A2: Strict tsconfig flags
 
-**Issue:** [#173](https://github.com/brendanbyrne/beerio-kart/issues/173)
+**Issue:** [#173](https://github.com/brendanbyrne/beerio-kart/issues/173) · **Merged PR:** [#196](https://github.com/brendanbyrne/beerio-kart/pull/196)
 
 - **Scope:**
-  - In `frontend/tsconfig.app.json` and `frontend/tsconfig.node.json`, add: `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `isolatedModules: true` (explicit).
+  - In `frontend/tsconfig.app.json` and `frontend/tsconfig.node.json`, add: `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `isolatedModules: true`, and `noImplicitOverride: true` — the fourth still-missing `typescript.md` § 1 flag (zero errors today; added so tsconfig is fully § 1-compliant, since PR-A2 is the only PR touching tsconfig).
+  - Fix the `typecheck` script: `tsc --noEmit` runs against the solution-style root `tsconfig.json` (no `files`/`include`) and checks nothing — change it to `tsc -b` so it actually typechecks the referenced projects.
   - Fix the type errors that surface. Expected hot spots: `RaceSetupPicker.tsx` (`STEPS[i+1]` and `STEPS[i-1]` access become `Step | undefined`), `RunEntrySheet.tsx` (`e.touches[0]` becomes `Touch | undefined`), a handful of optional-prop spreads that violate `exactOptionalPropertyTypes`.
   - Where the fix is a real bug (the array-access cases above), fix it properly with a narrowing check. Where the fix is just type-noise (e.g., spreads of well-typed objects), use a small helper.
 - **Standards refs:** `typescript.md` § 1.
@@ -316,6 +318,7 @@ The PRs below address every line item.
 
 - **Scope:**
   - Final pass converting any remaining `string` status fields to literal unions.
+  - **Flip remaining lint rules from `warn` to `error`.** PR-A1 started several rules at `warn` so existing code wouldn't block CI; later PRs remove the offenders. By PR-H1, audit `eslint.config.js`'s warn-level blocks and flip every rule whose offenders are gone — `consistent-type-definitions`, `import/consistent-type-specifier-style`, and the `strictTypeChecked` family (`no-unsafe-*`, `no-floating-promises`, `no-misused-promises`, `no-unnecessary-condition`, `no-confusing-void-expression`, etc.). `import/no-default-export` and `no-explicit-any` / `no-non-null-assertion` are flipped earlier (PR-D1, PR-F1). Any rule that still can't be flipped means an earlier PR missed its scope.
   - Confirm no TS `enum` usage (audit confirmed none today; the `no-restricted-syntax` rule keeps it that way).
   - Add a CI check (GitHub Actions) that fails the PR if `backend/src/dtos/` (or wherever DTOs live — verify path) changes without `frontend/src/api/types.ts` also changing. False positives are acceptable; one-line update.
   - Document the drift check in `typescript.md` § 11 and link from the type-sync research doc.
@@ -389,3 +392,4 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 - 2026-05-16 — Pointed at the now-separate audit doc (`./2026-05-16-frontend-audit.md`) instead of carrying the audit findings inline. The audit was extracted into its own design record matching the backend pattern (`archive/2026-04-15-rust-audit.md` + `archive/compliance-plan.md`) so per-file context is durable when PRs are picked up individually.
 - 2026-05-18 — Filed all 15 PRs as GitHub Issues under [Milestone 9 — Hardening: Frontend standards compliance](https://github.com/brendanbyrne/beerio-kart/milestone/9). All Issues set to Ready / Medium priority on the project board. PR-H2 (Vitest scaffolding) intentionally not filed — out of scope for standards compliance. Each PR section above now carries an `**Issue:** [#NN](...)` reference; sign-off summary table gained an Issue column. Issue numbers are non-contiguous (171, 173, 175, 176, 179, 180, 182, 183, 184, 185, 186, 187, 190, 191, 192) because the batched filing hit a few transient GitHub 500s that retried into new sequence positions.
 - 2026-05-18 — Added testing requirement to the standards (`typescript.md` § 12, `react.md` § 13, `frontend/CLAUDE.md` § Testing). Reversed the previous decision to leave PR-H2 unfiled: it's now required infrastructure and filed as [#193](https://github.com/brendanbyrne/beerio-kart/issues/193), Ready/Medium. Re-sequenced H2 to third position (between A2 and B1) so each subsequent runtime-behavior PR can land with tests. Sign-off summary table reshaped: added an Order column, listed rows in pickup order (not PR-identifier order), added H2 as a dependency of B1/B2/C1/C2/E1/F1.
+- 2026-05-18 — Reconciled the plan with PR-A1 ([#194](https://github.com/brendanbyrne/beerio-kart/pull/194)) and PR-A2 ([#196](https://github.com/brendanbyrne/beerio-kart/pull/196)), both merged. Corrected PR-A1's rule list: `consistent-type-definitions` and `import/no-default-export` ship at `warn`, not `error` — they fire on existing code, and the warn-down principle applies to named rules too. Recorded `import/consistent-type-specifier-style` (added during PR-A1 review) and, in PR-A2, `noImplicitOverride` plus the `typecheck`-script fix (`tsc --noEmit` → `tsc -b`). Added a PR-H1 scope bullet making it the explicit owner of flipping every remaining `warn`-level lint rule back to `error` — previously no PR owned the `consistent-type-definitions` flip. Per-PR **Merged PR** links added to the A1 and A2 sections. Sign-off checkboxes left for Brendan.
