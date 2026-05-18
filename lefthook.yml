@@ -17,3 +17,16 @@ pre-commit:
       root: frontend/
       glob: "*.{ts,tsx,css,json}"
       run: bunx prettier --check {staged_files}
+
+pre-push:
+  commands:
+    # Frontend tests run pre-push, not pre-commit — too slow to gate every
+    # commit (PR-H2, Issue #193). The `glob` skips this entirely when a push
+    # touches no frontend source. The full suite runs (not `vitest --changed`):
+    # lefthook can't hand vitest the push range reliably, and while the suite
+    # is small a full run is sub-second and strictly more thorough. Revisit
+    # `vitest related {push_files}` if the suite ever grows slow.
+    frontend-test:
+      root: frontend/
+      glob: "*.{ts,tsx}"
+      run: bun run test
