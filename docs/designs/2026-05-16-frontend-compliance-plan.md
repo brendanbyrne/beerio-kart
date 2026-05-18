@@ -64,7 +64,7 @@ The PRs below address every line item.
 - **Dependencies:** None.
 - **Risk:** Low. The warn-level start keeps CI green; existing violations are documented, not enforced yet.
 - **Verification:** `bun run lint` reports warnings (not errors) for the known violations from the audit; `bun run typecheck` passes; pre-commit hook succeeds on a no-op commit.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ### PR-A2: Strict tsconfig flags
 
@@ -80,7 +80,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-A1 (so lints can guide).
 - **Risk:** Medium. Surfaces latent bugs by design. Each fix should be small and reviewable, but the PR overall touches several files.
 - **Verification:** `bun run typecheck` and `bun run lint` both pass. Manual smoke test of `RaceSetupPicker` step navigation and `RunEntrySheet` time-input touch handling.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ---
 
