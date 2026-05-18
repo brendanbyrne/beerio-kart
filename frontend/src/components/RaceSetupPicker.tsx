@@ -92,15 +92,19 @@ export default function RaceSetupPicker({
 
   function handleSelect(id: number) {
     setterForStep[step](id);
-    // Auto-advance to next step after selection
-    if (currentStepIndex < STEPS.length - 1) {
-      setTimeout(() => setStep(STEPS[currentStepIndex + 1]), 150);
+    // Auto-advance to next step after selection. Indexing past the array
+    // end yields `undefined` under noUncheckedIndexedAccess; the truthy
+    // check both narrows the type and replaces the old bounds guard.
+    const nextStep = STEPS[currentStepIndex + 1];
+    if (nextStep) {
+      setTimeout(() => setStep(nextStep), 150);
     }
   }
 
   function handleBack() {
-    if (currentStepIndex > 0) {
-      setStep(STEPS[currentStepIndex - 1]);
+    const prevStep = STEPS[currentStepIndex - 1];
+    if (prevStep) {
+      setStep(prevStep);
     }
   }
 

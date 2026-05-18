@@ -644,7 +644,12 @@ function SlideToConfirm({
       onMouseMove={(e) => handleMove(e.clientX)}
       onMouseUp={handleEnd}
       onMouseLeave={handleEnd}
-      onTouchMove={(e) => handleMove(e.touches[0].clientX)}
+      onTouchMove={(e) => {
+        // touches[0] is Touch | undefined under noUncheckedIndexedAccess;
+        // a touchmove always carries at least one touch, but narrow anyway.
+        const touch = e.touches[0];
+        if (touch) handleMove(touch.clientX);
+      }}
       onTouchEnd={handleEnd}
     >
       <div

@@ -207,7 +207,7 @@ export default function Profile() {
             <div className="text-center text-gray-400 py-8">Saving...</div>
           ) : (
             <DrinkTypeSelector
-              selectedId={profile.preferred_drink_type?.id}
+              selectedId={profile.preferred_drink_type?.id ?? null}
               onSelect={handleSaveDrinkType}
             />
           )}
