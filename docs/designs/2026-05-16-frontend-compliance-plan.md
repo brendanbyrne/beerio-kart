@@ -102,7 +102,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-A2.
 - **Risk:** Medium-high. Mechanical but wide. Recommend doing in one PR rather than splitting — half-branded IDs are worse than fully-branded or fully-raw.
 - **Verification:** `bun run typecheck` passes. Manual test of one happy-path flow (login → create session → submit run) confirms no regressions.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ### PR-B2: Runtime-validated API responses (Zod)
 
