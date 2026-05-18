@@ -4,26 +4,57 @@
 coverage:
   status:
     project:
-      default:
-        # Project-wide target: track base branch coverage.
-        # Don't allow regression, but tolerate small noise.
+      backend:
+        flags: [backend]
+        # Track base-branch coverage; don't regress, tolerate small noise.
         target: auto
         threshold: 0.5%
         informational: false  # blocking status check
+      frontend:
+        flags: [frontend]
+        target: auto
+        threshold: 0.5%
+        # Informational (non-blocking) for now. PR-H2 (Issue #193) instrumented
+        # the frontend and un-ignored it below; most files have no tests yet,
+        # so a blocking project target would fail every PR. PR-H1 (Issue #185)
+        # flips this to `informational: false` once its test-coverage backfill
+        # lands. The frontend *patch* gate below blocks from PR-H2 on.
+        informational: true
     patch:
-      default:
+      backend:
+        flags: [backend]
         # New/changed code must be 80% covered.
         target: 80%
         threshold: 0%
         informational: false  # blocking status check
+      frontend:
+        flags: [frontend]
+        target: 80%
+        threshold: 0%
+        informational: false  # blocking status check
 
-# Exclude generated/wiring code from coverage calculation.
+# Per-flag scoping. carryforward keeps a flag's last-known coverage when its
+# CI workflow is skipped — each coverage workflow is path-filtered to its own
+# subtree, so a one-sided PR uploads only one flag.
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: backend
+      paths:
+        - backend/
+    - name: frontend
+      paths:
+        - frontend/
+
+# Exclude generated/wiring code from coverage calculation. Frontend exclusions
+# (test files, mocks, bootstrap) are applied at the Vitest layer
+# (frontend/vitest.config.ts → coverage.exclude), so they never reach the lcov.
 ignore:
   - "backend/src/entities/**"          # SeaORM-generated entities
   - "backend/migration/**"             # One-time startup migrations
   - "backend/src/main.rs"              # Server wiring
   - "backend/src/seed.rs"              # One-time seeding at startup
-  - "frontend/**"                       # Frontend not yet instrumented
 
 # Comment settings — what Codecov posts on PRs.
 comment:

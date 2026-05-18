@@ -121,4 +121,32 @@ export default defineConfig([
       'import/no-named-as-default-member': 'off',
     },
   },
+  {
+    // --- Test files and test infrastructure (added in PR-H2, Issue #193) ---
+    // typescript.md § 12 explicitly permits `vi.fn()` mocks and the `!` / `as`
+    // shortcuts in test code where production code can't use them: the
+    // audience for a test is its reader, and bending test code into the
+    // production-safety shape can bury the assertion being verified. MSW
+    // handler factories and mock return values are also inherently loosely
+    // typed. This block turns those rules off for tests; everything else
+    // (consistent-type-imports, ban-ts-comment, the enum ban, react-hooks,
+    // jsx-a11y) still applies. The four un-typed-value rules below are at
+    // `warn` today but flip to `error` in PR-F1 / PR-H1 — the override keeps
+    // these example-test patterns valid past those flips.
+    files: [
+      '**/*.test.{ts,tsx}',
+      'src/__tests__/**/*.{ts,tsx}',
+      'src/setupTests.ts',
+      'src/mocks/**/*.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
 ]);

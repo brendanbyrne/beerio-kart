@@ -1,9 +1,25 @@
 name: Coverage
 
+# Backend coverage CI. Path-filtered to the backend subtree (PR-H2, Issue
+# #193) so a frontend- or docs-only PR skips this workflow — the frontend has
+# its own coverage workflow (frontend.yml). Codecov's flag carryforward keeps
+# the `backend` flag stable on the PRs that skip it.
 on:
   pull_request:
+    paths:
+      - 'backend/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'codecov.yml'
+      - '.github/workflows/coverage.yml'
   push:
     branches: [main]
+    paths:
+      - 'backend/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'codecov.yml'
+      - '.github/workflows/coverage.yml'
 
 concurrency:
   group: coverage-${{ github.event.pull_request.number || github.sha }}
