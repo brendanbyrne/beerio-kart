@@ -26,7 +26,7 @@ beerio-kart/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/            # bug.md, feature.md
 │   ├── pull_request_template.md
-│   └── workflows/                 # link-check.yml (lychee), coverage.yml
+│   └── workflows/                 # backend.yml (coverage), frontend.yml (test+coverage), link-check.yml
 │
 ├── backend/                       # Rust + Axum API server
 │   ├── Cargo.toml                 # Backend package manifest (workspace member)

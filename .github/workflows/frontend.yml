@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   coverage:
-    name: Frontend coverage
+    name: Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
