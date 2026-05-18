@@ -1,118 +1,158 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import type { SessionRaceInfo, CreateRunRequest, RunDefaults, DrinkType } from '../api/types'
-import { createRun, getRunDefaults } from '../api/runs'
-import { parseTimeFields } from '../utils/time'
-import { useDrinkTypes } from '../hooks/useGameData'
-import { useCharacters, useBodies, useWheels, useGliders } from '../hooks/useGameData'
-import DrinkTypeSelector from './DrinkTypeSelector'
-import RaceSetupPicker from './RaceSetupPicker'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import type {
+  SessionRaceInfo,
+  CreateRunRequest,
+  RunDefaults,
+  DrinkType,
+} from '../api/types';
+import { createRun, getRunDefaults } from '../api/runs';
+import { parseTimeFields } from '../utils/time';
+import { useDrinkTypes } from '../hooks/useGameData';
+import {
+  useCharacters,
+  useBodies,
+  useWheels,
+  useGliders,
+} from '../hooks/useGameData';
+import DrinkTypeSelector from './DrinkTypeSelector';
+import RaceSetupPicker from './RaceSetupPicker';
 
 interface TimeFields {
-  m: string
-  ss: string
-  mmm: string
+  m: string;
+  ss: string;
+  mmm: string;
 }
 
-const emptyTime: TimeFields = { m: '', ss: '', mmm: '' }
+const emptyTime: TimeFields = { m: '', ss: '', mmm: '' };
 
 interface RunEntrySheetProps {
-  race: SessionRaceInfo
-  onClose: () => void
-  onSubmitted: () => void
+  race: SessionRaceInfo;
+  onClose: () => void;
+  onSubmitted: () => void;
 }
 
-export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySheetProps) {
-  const [totalTime, setTotalTime] = useState<TimeFields>(emptyTime)
-  const [lap1, setLap1] = useState<TimeFields>(emptyTime)
-  const [lap2, setLap2] = useState<TimeFields>(emptyTime)
-  const [lap3, setLap3] = useState<TimeFields>(emptyTime)
+export default function RunEntrySheet({
+  race,
+  onClose,
+  onSubmitted,
+}: RunEntrySheetProps) {
+  const [totalTime, setTotalTime] = useState<TimeFields>(emptyTime);
+  const [lap1, setLap1] = useState<TimeFields>(emptyTime);
+  const [lap2, setLap2] = useState<TimeFields>(emptyTime);
+  const [lap3, setLap3] = useState<TimeFields>(emptyTime);
 
-  const [drinkTypeId, setDrinkTypeId] = useState<string | null>(null)
-  const [drinkType, setDrinkType] = useState<DrinkType | null>(null)
-  const [characterId, setCharacterId] = useState<number | null>(null)
-  const [bodyId, setBodyId] = useState<number | null>(null)
-  const [wheelId, setWheelId] = useState<number | null>(null)
-  const [gliderId, setGliderId] = useState<number | null>(null)
-  const [defaultsSource, setDefaultsSource] = useState<string>('')
+  const [drinkTypeId, setDrinkTypeId] = useState<string | null>(null);
+  const [drinkType, setDrinkType] = useState<DrinkType | null>(null);
+  const [characterId, setCharacterId] = useState<number | null>(null);
+  const [bodyId, setBodyId] = useState<number | null>(null);
+  const [wheelId, setWheelId] = useState<number | null>(null);
+  const [gliderId, setGliderId] = useState<number | null>(null);
+  const [defaultsSource, setDefaultsSource] = useState<string>('');
 
-  const [dq, setDq] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [dq, setDq] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const totalMmmRef = useRef<HTMLInputElement>(null)
-  const lap1MRef = useRef<HTMLInputElement>(null)
-  const lap1MmmRef = useRef<HTMLInputElement>(null)
-  const lap2MRef = useRef<HTMLInputElement>(null)
-  const lap2MmmRef = useRef<HTMLInputElement>(null)
-  const lap3MRef = useRef<HTMLInputElement>(null)
+  const totalMmmRef = useRef<HTMLInputElement>(null);
+  const lap1MRef = useRef<HTMLInputElement>(null);
+  const lap1MmmRef = useRef<HTMLInputElement>(null);
+  const lap2MRef = useRef<HTMLInputElement>(null);
+  const lap2MmmRef = useRef<HTMLInputElement>(null);
+  const lap3MRef = useRef<HTMLInputElement>(null);
 
-  const [showDrinkPicker, setShowDrinkPicker] = useState(false)
-  const [showSetupPicker, setShowSetupPicker] = useState(false)
+  const [showDrinkPicker, setShowDrinkPicker] = useState(false);
+  const [showSetupPicker, setShowSetupPicker] = useState(false);
 
   // Load game data for resolving default names
-  const { items: drinkTypes } = useDrinkTypes()
-  const { items: characters } = useCharacters()
-  const { items: bodies } = useBodies()
-  const { items: wheels } = useWheels()
-  const { items: gliders } = useGliders()
+  const { items: drinkTypes } = useDrinkTypes();
+  const { items: characters } = useCharacters();
+  const { items: bodies } = useBodies();
+  const { items: wheels } = useWheels();
+  const { items: gliders } = useGliders();
 
   // Load defaults on mount
   useEffect(() => {
     getRunDefaults().then((d: RunDefaults) => {
-      setDrinkTypeId(d.drink_type_id)
-      setCharacterId(d.character_id)
-      setBodyId(d.body_id)
-      setWheelId(d.wheel_id)
-      setGliderId(d.glider_id)
+      setDrinkTypeId(d.drink_type_id);
+      setCharacterId(d.character_id);
+      setBodyId(d.body_id);
+      setWheelId(d.wheel_id);
+      setGliderId(d.glider_id);
       setDefaultsSource(
         d.source === 'previous_run'
           ? 'From your last run'
           : d.source === 'preferences'
             ? 'From your preferences'
             : '',
-      )
-    })
-  }, [])
+      );
+    });
+  }, []);
 
   // Derive drink type object from ID + loaded data (or explicit user pick)
   const resolvedDrinkType = useMemo(() => {
-    if (drinkType) return drinkType
+    if (drinkType) return drinkType;
     if (drinkTypeId && drinkTypes.length > 0) {
-      return drinkTypes.find((dt) => dt.id === drinkTypeId) ?? null
+      return drinkTypes.find((dt) => dt.id === drinkTypeId) ?? null;
     }
-    return null
-  }, [drinkType, drinkTypeId, drinkTypes])
+    return null;
+  }, [drinkType, drinkTypeId, drinkTypes]);
 
   // Derive setup summary from IDs + loaded game data
   const setupSummary = useMemo(() => {
-    if (!characterId || !characters.length || !bodies.length || !wheels.length || !gliders.length)
-      return ''
+    if (
+      !characterId ||
+      !characters.length ||
+      !bodies.length ||
+      !wheels.length ||
+      !gliders.length
+    )
+      return '';
     const parts = [
       characters.find((c) => c.id === characterId)?.name,
       bodies.find((b) => b.id === bodyId)?.name,
       wheels.find((w) => w.id === wheelId)?.name,
       gliders.find((g) => g.id === gliderId)?.name,
-    ].filter(Boolean)
-    return parts.length === 4 ? parts.join(' \u00B7 ') : ''
-  }, [characterId, bodyId, wheelId, gliderId, characters, bodies, wheels, gliders])
+    ].filter(Boolean);
+    return parts.length === 4 ? parts.join(' \u00B7 ') : '';
+  }, [
+    characterId,
+    bodyId,
+    wheelId,
+    gliderId,
+    characters,
+    bodies,
+    wheels,
+    gliders,
+  ]);
 
-  const parsedTotal = parseTimeFields(totalTime.m, totalTime.ss, totalTime.mmm)
-  const parsedLap1 = parseTimeFields(lap1.m, lap1.ss, lap1.mmm)
-  const parsedLap2 = parseTimeFields(lap2.m, lap2.ss, lap2.mmm)
-  const parsedLap3 = parseTimeFields(lap3.m, lap3.ss, lap3.mmm)
+  const parsedTotal = parseTimeFields(totalTime.m, totalTime.ss, totalTime.mmm);
+  const parsedLap1 = parseTimeFields(lap1.m, lap1.ss, lap1.mmm);
+  const parsedLap2 = parseTimeFields(lap2.m, lap2.ss, lap2.mmm);
+  const parsedLap3 = parseTimeFields(lap3.m, lap3.ss, lap3.mmm);
 
   const allTimesFilled =
-    parsedTotal !== null && parsedLap1 !== null && parsedLap2 !== null && parsedLap3 !== null
-  const hasSetup = characterId !== null && bodyId !== null && wheelId !== null && gliderId !== null
-  const canSubmit = allTimesFilled && drinkTypeId !== null && hasSetup && !submitting
+    parsedTotal !== null &&
+    parsedLap1 !== null &&
+    parsedLap2 !== null &&
+    parsedLap3 !== null;
+  const hasSetup =
+    characterId !== null &&
+    bodyId !== null &&
+    wheelId !== null &&
+    gliderId !== null;
+  const canSubmit =
+    allTimesFilled && drinkTypeId !== null && hasSetup && !submitting;
 
   // Lap sum warning
   const lapSum =
     parsedLap1 !== null && parsedLap2 !== null && parsedLap3 !== null
       ? parsedLap1 + parsedLap2 + parsedLap3
-      : null
-  const sumDiff = lapSum !== null && parsedTotal !== null ? Math.abs(lapSum - parsedTotal) : null
-  const showSumWarning = sumDiff !== null && sumDiff > 0
+      : null;
+  const sumDiff =
+    lapSum !== null && parsedTotal !== null
+      ? Math.abs(lapSum - parsedTotal)
+      : null;
+  const showSumWarning = sumDiff !== null && sumDiff > 0;
 
   const handleSubmit = async () => {
     if (
@@ -127,9 +167,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
       wheelId === null ||
       gliderId === null
     )
-      return
-    setSubmitting(true)
-    setError(null)
+      return;
+    setSubmitting(true);
+    setError(null);
     try {
       const body: CreateRunRequest = {
         session_race_id: race.id,
@@ -143,14 +183,14 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
         glider_id: gliderId,
         drink_type_id: drinkTypeId,
         disqualified: dq,
-      }
-      await createRun(body)
-      onSubmitted()
+      };
+      await createRun(body);
+      onSubmitted();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to submit run')
-      setSubmitting(false)
+      setError(e instanceof Error ? e.message : 'Failed to submit run');
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 z-30 flex flex-col justify-end">
@@ -173,11 +213,13 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               alt={race.track_name}
               className="w-10 h-10 rounded-lg object-contain bg-gray-100 flex-shrink-0"
               onError={(e) => {
-                ;(e.target as HTMLImageElement).style.display = 'none'
+                (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
             <div>
-              <div className="font-semibold text-gray-900 text-[14px]">{race.track_name}</div>
+              <div className="font-semibold text-gray-900 text-[14px]">
+                {race.track_name}
+              </div>
               <div className="text-[12px] text-gray-500">
                 {race.cup_name} &middot; Race {race.race_number}
               </div>
@@ -205,7 +247,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
             </label>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">L1</span>
+                <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">
+                  L1
+                </span>
                 <div className="flex-1">
                   <TimeInputGroup
                     fields={lap1}
@@ -218,7 +262,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">L2</span>
+                <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">
+                  L2
+                </span>
                 <div className="flex-1">
                   <TimeInputGroup
                     fields={lap2}
@@ -231,7 +277,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">L3</span>
+                <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">
+                  L3
+                </span>
                 <div className="flex-1">
                   <TimeInputGroup
                     fields={lap3}
@@ -244,7 +292,8 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
             </div>
             {showSumWarning && sumDiff !== null && (
               <p className="text-[10px] text-amber-600 mt-1.5 text-center">
-                Lap times don&apos;t add up to total (off by {(sumDiff / 1000).toFixed(3)}s)
+                Lap times don&apos;t add up to total (off by{' '}
+                {(sumDiff / 1000).toFixed(3)}s)
               </p>
             )}
             {!showSumWarning && allTimesFilled && (
@@ -266,7 +315,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               {resolvedDrinkType ? (
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">
-                    {resolvedDrinkType.alcoholic ? '\uD83C\uDF7A' : '\uD83E\uDDCA'}
+                    {resolvedDrinkType.alcoholic
+                      ? '\uD83C\uDF7A'
+                      : '\uD83E\uDDCA'}
                   </span>
                   <span className="text-[14px] font-medium text-gray-800">
                     {resolvedDrinkType.name}
@@ -280,7 +331,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               <span className="text-gray-400 text-[12px]">Change</span>
             </button>
             {defaultsSource && (
-              <p className="text-[10px] text-gray-400 mt-1 px-1">{defaultsSource}</p>
+              <p className="text-[10px] text-gray-400 mt-1 px-1">
+                {defaultsSource}
+              </p>
             )}
           </div>
 
@@ -298,12 +351,16 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
                   {setupSummary || 'Setup selected'}
                 </span>
               ) : (
-                <span className="text-[14px] text-gray-400">Select race setup</span>
+                <span className="text-[14px] text-gray-400">
+                  Select race setup
+                </span>
               )}
               <span className="text-gray-400 text-[12px]">Edit</span>
             </button>
             {defaultsSource && (
-              <p className="text-[10px] text-gray-400 mt-1 px-1">{defaultsSource}</p>
+              <p className="text-[10px] text-gray-400 mt-1 px-1">
+                {defaultsSource}
+              </p>
             )}
           </div>
 
@@ -320,7 +377,9 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
             />
           </div>
 
-          {error && <p className="text-xs text-red-500 text-center mb-3">{error}</p>}
+          {error && (
+            <p className="text-xs text-red-500 text-center mb-3">{error}</p>
+          )}
 
           <button
             onClick={handleSubmit}
@@ -335,19 +394,24 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
       {showDrinkPicker && (
         <div className="fixed inset-0 z-50 bg-white flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-            <button onClick={() => setShowDrinkPicker(false)} className="text-sm text-blue-500">
+            <button
+              onClick={() => setShowDrinkPicker(false)}
+              className="text-sm text-blue-500"
+            >
               Back
             </button>
-            <h2 className="text-sm font-semibold text-gray-900">Select Drink</h2>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Select Drink
+            </h2>
             <div className="w-10" />
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <DrinkTypeSelector
               selectedId={drinkTypeId}
               onSelect={(dt: DrinkType) => {
-                setDrinkTypeId(dt.id)
-                setDrinkType(dt)
-                setShowDrinkPicker(false)
+                setDrinkTypeId(dt.id);
+                setDrinkType(dt);
+                setShowDrinkPicker(false);
               }}
             />
           </div>
@@ -357,7 +421,10 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
       {showSetupPicker && (
         <div className="fixed inset-0 z-50 bg-white flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-            <button onClick={() => setShowSetupPicker(false)} className="text-sm text-blue-500">
+            <button
+              onClick={() => setShowSetupPicker(false)}
+              className="text-sm text-blue-500"
+            >
               Back
             </button>
             <h2 className="text-sm font-semibold text-gray-900">Race Setup</h2>
@@ -370,30 +437,30 @@ export default function RunEntrySheet({ race, onClose, onSubmitted }: RunEntrySh
               initialWheelId={wheelId}
               initialGliderId={gliderId}
               onComplete={(setup) => {
-                setCharacterId(setup.characterId)
-                setBodyId(setup.bodyId)
-                setWheelId(setup.wheelId)
-                setGliderId(setup.gliderId)
-                setShowSetupPicker(false)
+                setCharacterId(setup.characterId);
+                setBodyId(setup.bodyId);
+                setWheelId(setup.wheelId);
+                setGliderId(setup.gliderId);
+                setShowSetupPicker(false);
               }}
             />
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
 
 // ── Time Input Group (self-contained with auto-advance) ─────────────
 
 interface TimeInputGroupProps {
-  fields: TimeFields
-  setFields: React.Dispatch<React.SetStateAction<TimeFields>>
-  large?: boolean
-  mRef?: React.RefObject<HTMLInputElement | null>
-  mmmRef?: React.RefObject<HTMLInputElement | null>
-  onComplete?: () => void
-  onBackspace?: () => void
+  fields: TimeFields;
+  setFields: React.Dispatch<React.SetStateAction<TimeFields>>;
+  large?: boolean;
+  mRef?: React.RefObject<HTMLInputElement | null>;
+  mmmRef?: React.RefObject<HTMLInputElement | null>;
+  onComplete?: () => void;
+  onBackspace?: () => void;
 }
 
 function TimeInputGroup({
@@ -405,51 +472,54 @@ function TimeInputGroup({
   onComplete,
   onBackspace,
 }: TimeInputGroupProps) {
-  const fallbackMRef = useRef<HTMLInputElement>(null)
-  const ssRef = useRef<HTMLInputElement>(null)
-  const fallbackMmmRef = useRef<HTMLInputElement>(null)
-  const resolvedMRef = mRef ?? fallbackMRef
-  const resolvedMmmRef = extMmmRef ?? fallbackMmmRef
+  const fallbackMRef = useRef<HTMLInputElement>(null);
+  const ssRef = useRef<HTMLInputElement>(null);
+  const fallbackMmmRef = useRef<HTMLInputElement>(null);
+  const resolvedMRef = mRef ?? fallbackMRef;
+  const resolvedMmmRef = extMmmRef ?? fallbackMmmRef;
 
   const inputClass = large
     ? 'h-12 text-center text-xl font-mono bg-gray-100 rounded-xl border border-gray-300 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'
-    : 'h-10 text-center text-[15px] font-mono bg-gray-50 rounded-lg border border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'
+    : 'h-10 text-center text-[15px] font-mono bg-gray-50 rounded-lg border border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200';
   const sepClass = large
     ? 'text-xl font-mono text-gray-400 font-bold'
-    : 'text-[15px] font-mono text-gray-300 font-bold'
+    : 'text-[15px] font-mono text-gray-300 font-bold';
 
   const handleChange = (field: 'm' | 'ss' | 'mmm', maxLen: number) => {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.value.replace(/\D/g, '')
-      if (val.length > maxLen) return
-      setFields((prev) => ({ ...prev, [field]: val }))
+      const val = e.target.value.replace(/\D/g, '');
+      if (val.length > maxLen) return;
+      setFields((prev) => ({ ...prev, [field]: val }));
       if (val.length === maxLen) {
-        if (field === 'm') ssRef.current?.focus()
-        else if (field === 'ss') resolvedMmmRef.current?.focus()
-        else if (field === 'mmm') onComplete?.()
+        if (field === 'm') ssRef.current?.focus();
+        else if (field === 'ss') resolvedMmmRef.current?.focus();
+        else if (field === 'mmm') onComplete?.();
       }
-    }
-  }
+    };
+  };
 
   const advanceFrom = (field: 'm' | 'ss' | 'mmm') => {
-    if (field === 'm') ssRef.current?.focus()
-    else if (field === 'ss') resolvedMmmRef.current?.focus()
-    else if (field === 'mmm') onComplete?.()
-  }
+    if (field === 'm') ssRef.current?.focus();
+    else if (field === 'ss') resolvedMmmRef.current?.focus();
+    else if (field === 'mmm') onComplete?.();
+  };
 
   const handleKeyDown = (field: 'm' | 'ss' | 'mmm', maxLen: number) => {
     return (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Backspace' && e.currentTarget.value === '') {
-        e.preventDefault()
-        if (field === 'mmm') ssRef.current?.focus()
-        else if (field === 'ss') resolvedMRef.current?.focus()
-        else if (field === 'm') onBackspace?.()
-      } else if (/^[0-9]$/.test(e.key) && e.currentTarget.value.length >= maxLen) {
+        e.preventDefault();
+        if (field === 'mmm') ssRef.current?.focus();
+        else if (field === 'ss') resolvedMRef.current?.focus();
+        else if (field === 'm') onBackspace?.();
+      } else if (
+        /^[0-9]$/.test(e.key) &&
+        e.currentTarget.value.length >= maxLen
+      ) {
         // Field is full and user typed a digit — advance focus
-        advanceFrom(field)
+        advanceFrom(field);
       }
-    }
-  }
+    };
+  };
 
   return (
     <div className="flex items-center gap-1.5 justify-center">
@@ -489,55 +559,62 @@ function TimeInputGroup({
         maxLength={3}
       />
     </div>
-  )
+  );
 }
 
 // ── Slide to Confirm DQ ─────────────────────────────────────────────
 
 interface SlideToConfirmProps {
-  confirmed: boolean
-  onConfirm: () => void
-  onReset: () => void
+  confirmed: boolean;
+  onConfirm: () => void;
+  onReset: () => void;
 }
 
-function SlideToConfirm({ confirmed, onConfirm, onReset }: SlideToConfirmProps) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const [dragging, setDragging] = useState(false)
-  const [offsetX, setOffsetX] = useState(0)
-  const [trackWidth, setTrackWidth] = useState(280)
-  const thumbW = 44
+function SlideToConfirm({
+  confirmed,
+  onConfirm,
+  onReset,
+}: SlideToConfirmProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [offsetX, setOffsetX] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(280);
+  const thumbW = 44;
 
   // Measure track width after mount and on resize
   useEffect(() => {
     const measure = () => {
-      if (trackRef.current) setTrackWidth(trackRef.current.offsetWidth)
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
+      if (trackRef.current) setTrackWidth(trackRef.current.offsetWidth);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   const handleMove = useCallback(
     (clientX: number) => {
-      if (!dragging || confirmed || !trackRef.current) return
-      const rect = trackRef.current.getBoundingClientRect()
-      const x = Math.min(Math.max(0, clientX - rect.left - thumbW / 2), trackWidth - thumbW)
-      setOffsetX(x)
+      if (!dragging || confirmed || !trackRef.current) return;
+      const rect = trackRef.current.getBoundingClientRect();
+      const x = Math.min(
+        Math.max(0, clientX - rect.left - thumbW / 2),
+        trackWidth - thumbW,
+      );
+      setOffsetX(x);
     },
     [dragging, confirmed, trackWidth],
-  )
+  );
 
   const handleEnd = useCallback(() => {
-    if (!dragging) return
-    setDragging(false)
-    const threshold = trackWidth - thumbW - 4
+    if (!dragging) return;
+    setDragging(false);
+    const threshold = trackWidth - thumbW - 4;
     if (offsetX >= threshold) {
-      setOffsetX(trackWidth - thumbW)
-      onConfirm()
+      setOffsetX(trackWidth - thumbW);
+      onConfirm();
     } else {
-      setOffsetX(0)
+      setOffsetX(0);
     }
-  }, [dragging, offsetX, onConfirm, trackWidth])
+  }, [dragging, offsetX, onConfirm, trackWidth]);
 
   if (confirmed) {
     return (
@@ -546,17 +623,19 @@ function SlideToConfirm({ confirmed, onConfirm, onReset }: SlideToConfirmProps) 
         className="w-full flex items-center justify-between px-3.5 min-h-[48px] bg-red-50 border border-red-200 rounded-xl text-left"
       >
         <div>
-          <div className="text-[14px] font-semibold text-red-700">Disqualified</div>
+          <div className="text-[14px] font-semibold text-red-700">
+            Disqualified
+          </div>
           <div className="text-[11px] text-red-400 mt-0.5">
             Excluded from leaderboards &middot; Tap to undo
           </div>
         </div>
         <span className="text-red-400 text-[18px]">{'\u2715'}</span>
       </button>
-    )
+    );
   }
 
-  const progress = Math.min(offsetX / (trackWidth - thumbW || 1), 1)
+  const progress = Math.min(offsetX / (trackWidth - thumbW || 1), 1);
 
   return (
     <div
@@ -584,15 +663,15 @@ function SlideToConfirm({ confirmed, onConfirm, onReset }: SlideToConfirmProps) 
           transition: dragging ? 'none' : 'left 0.25s ease',
         }}
         onMouseDown={(e) => {
-          e.preventDefault()
-          if (!confirmed) setDragging(true)
+          e.preventDefault();
+          if (!confirmed) setDragging(true);
         }}
         onTouchStart={() => {
-          if (!confirmed) setDragging(true)
+          if (!confirmed) setDragging(true);
         }}
       >
         <span className="text-white text-[16px] font-bold">&raquo;</span>
       </div>
     </div>
-  )
+  );
 }

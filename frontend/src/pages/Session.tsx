@@ -1,95 +1,100 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
-import { useSession } from '../hooks/useSession'
-import { joinSession, leaveSession, nextTrack, skipTurn } from '../api/sessions'
-import { formatTime } from '../utils/time'
-import RunEntrySheet from '../components/RunEntrySheet'
-import BottomNav from '../components/BottomNav'
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { useSession } from '../hooks/useSession';
+import {
+  joinSession,
+  leaveSession,
+  nextTrack,
+  skipTurn,
+} from '../api/sessions';
+import { formatTime } from '../utils/time';
+import RunEntrySheet from '../components/RunEntrySheet';
+import BottomNav from '../components/BottomNav';
 
 export default function Session() {
-  const { id } = useParams<{ id: string }>()
-  const { user } = useAuth()
-  const { session, loading, ended } = useSession(id!)
-  const navigate = useNavigate()
-  const [leaving, setLeaving] = useState(false)
-  const [joiningSession, setJoiningSession] = useState(false)
-  const [joinError, setJoinError] = useState<string | null>(null)
-  const [headerExpanded, setHeaderExpanded] = useState(false)
-  const [pickingTrack, setPickingTrack] = useState(false)
-  const [skippingTrack, setSkippingTrack] = useState(false)
-  const [trackError, setTrackError] = useState<string | null>(null)
-  const [historyExpanded, setHistoryExpanded] = useState(true)
-  const [trackImageError, setTrackImageError] = useState(false)
-  const [showRunEntry, setShowRunEntry] = useState(false)
+  const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const { session, loading, ended } = useSession(id!);
+  const navigate = useNavigate();
+  const [leaving, setLeaving] = useState(false);
+  const [joiningSession, setJoiningSession] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [headerExpanded, setHeaderExpanded] = useState(false);
+  const [pickingTrack, setPickingTrack] = useState(false);
+  const [skippingTrack, setSkippingTrack] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
+  const [historyExpanded, setHistoryExpanded] = useState(true);
+  const [trackImageError, setTrackImageError] = useState(false);
+  const [showRunEntry, setShowRunEntry] = useState(false);
 
   const handleLeave = async () => {
-    setLeaving(true)
+    setLeaving(true);
     try {
-      await leaveSession(id!)
-      navigate('/')
+      await leaveSession(id!);
+      navigate('/');
     } catch {
-      setLeaving(false)
+      setLeaving(false);
     }
-  }
+  };
 
   const handleJoin = async () => {
-    setJoiningSession(true)
-    setJoinError(null)
+    setJoiningSession(true);
+    setJoinError(null);
     try {
-      await joinSession(id!)
+      await joinSession(id!);
     } catch (e) {
-      setJoinError(e instanceof Error ? e.message : 'Failed to join session')
-      setJoiningSession(false)
+      setJoinError(e instanceof Error ? e.message : 'Failed to join session');
+      setJoiningSession(false);
     }
-  }
+  };
 
   const handleNextTrack = async () => {
-    setPickingTrack(true)
-    setTrackError(null)
+    setPickingTrack(true);
+    setTrackError(null);
     try {
-      await nextTrack(id!)
+      await nextTrack(id!);
     } catch (e) {
-      setTrackError(e instanceof Error ? e.message : 'Failed to pick track')
+      setTrackError(e instanceof Error ? e.message : 'Failed to pick track');
     } finally {
-      setPickingTrack(false)
+      setPickingTrack(false);
     }
-  }
+  };
 
   const handleSkipTrack = async () => {
-    setSkippingTrack(true)
-    setTrackError(null)
+    setSkippingTrack(true);
+    setTrackError(null);
     try {
-      await skipTurn(id!)
+      await skipTurn(id!);
     } catch (e) {
-      setTrackError(e instanceof Error ? e.message : 'Failed to skip track')
+      setTrackError(e instanceof Error ? e.message : 'Failed to skip track');
     } finally {
-      setSkippingTrack(false)
+      setSkippingTrack(false);
     }
-  }
+  };
 
   // Reset image error state when the track changes
   useEffect(() => {
-    setTrackImageError(false)
-  }, [session?.current_race?.id])
+    setTrackImageError(false);
+  }, [session?.current_race?.id]);
 
   // Clear track error when a successful poll shows the state changed
   useEffect(() => {
-    if (trackError) setTrackError(null)
-  }, [session?.current_race?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (trackError) setTrackError(null);
+  }, [session?.current_race?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-collapse history when > 3 races
-  const hasMany = (session?.races.length ?? 0) > 3
+  const hasMany = (session?.races.length ?? 0) > 3;
   useEffect(() => {
-    if (hasMany) setHistoryExpanded(false)
-  }, [hasMany])
+    if (hasMany) setHistoryExpanded(false);
+  }, [hasMany]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <p className="text-gray-400">Loading session...</p>
       </div>
-    )
+    );
   }
 
   if (ended || !session) {
@@ -104,19 +109,21 @@ export default function Session() {
           Back to Home
         </button>
       </div>
-    )
+    );
   }
 
-  const activeParticipants = session.participants.filter((p) => !p.left_at)
-  const isParticipant = activeParticipants.some((p) => p.user_id === user?.id)
-  const isHost = user?.id === session.host_id
-  const currentRace = session.current_race
-  const pastRaces = [...session.races].reverse().filter((r) => r.id !== currentRace?.id)
+  const activeParticipants = session.participants.filter((p) => !p.left_at);
+  const isParticipant = activeParticipants.some((p) => p.user_id === user?.id);
+  const isHost = user?.id === session.host_id;
+  const currentRace = session.current_race;
+  const pastRaces = [...session.races]
+    .reverse()
+    .filter((r) => r.id !== currentRace?.id);
 
   // Submission status
-  const submissions = currentRace?.submissions ?? []
-  const mySubmission = submissions.find((s) => s.user_id === user?.id)
-  const hasSubmitted = !!mySubmission
+  const submissions = currentRace?.submissions ?? [];
+  const mySubmission = submissions.find((s) => s.user_id === user?.id);
+  const hasSubmitted = !!mySubmission;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -130,20 +137,28 @@ export default function Session() {
             <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
               {session.ruleset}
             </span>
-            <span className="text-sm font-semibold text-gray-900">Race {session.race_number}</span>
+            <span className="text-sm font-semibold text-gray-900">
+              Race {session.race_number}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">
-              {activeParticipants.length} player{activeParticipants.length !== 1 ? 's' : ''}
+              {activeParticipants.length} player
+              {activeParticipants.length !== 1 ? 's' : ''}
             </span>
-            <span className="text-gray-400 text-xs">{headerExpanded ? '\u25B2' : '\u25BC'}</span>
+            <span className="text-gray-400 text-xs">
+              {headerExpanded ? '\u25B2' : '\u25BC'}
+            </span>
           </div>
         </button>
 
         {headerExpanded && (
           <div className="px-4 pb-3 border-t border-gray-100 pt-2 space-y-1.5">
             {activeParticipants.map((p) => (
-              <div key={p.user_id} className="flex items-center justify-between py-1">
+              <div
+                key={p.user_id}
+                className="flex items-center justify-between py-1"
+              >
                 <div className="flex items-center gap-2">
                   {p.user_id === session.host_id && (
                     <span className="text-xs">{'\uD83C\uDFE0'}</span>
@@ -174,18 +189,24 @@ export default function Session() {
             )}
             <div className="px-4 py-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-900">{currentRace.track_name}</h2>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {currentRace.track_name}
+                </h2>
                 <span className="text-[10px] font-semibold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
                   Race {currentRace.race_number}
                 </span>
               </div>
-              <p className="text-sm text-gray-500 mt-0.5">{currentRace.cup_name}</p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {currentRace.cup_name}
+              </p>
             </div>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
             <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-lg flex items-center justify-center">
-              <span className="text-xl text-gray-300">{'\uD83C\uDFCE\uFE0F'}</span>
+              <span className="text-xl text-gray-300">
+                {'\uD83C\uDFCE\uFE0F'}
+              </span>
             </div>
             <p className="text-sm text-gray-500">
               {isHost
@@ -219,7 +240,9 @@ export default function Session() {
                 {skippingTrack ? 'Re-rolling...' : 'Skip Track'}
               </button>
             )}
-            {trackError && <p className="text-xs text-red-500 text-center">{trackError}</p>}
+            {trackError && (
+              <p className="text-xs text-red-500 text-center">{trackError}</p>
+            )}
           </div>
         )}
 
@@ -236,14 +259,18 @@ export default function Session() {
               >
                 <p
                   className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
-                    mySubmission.disqualified ? 'text-red-500' : 'text-green-600'
+                    mySubmission.disqualified
+                      ? 'text-red-500'
+                      : 'text-green-600'
                   }`}
                 >
                   {mySubmission.disqualified ? 'Your Time (DQ)' : 'Your Time'}
                 </p>
                 <p
                   className={`text-2xl font-mono font-bold ${
-                    mySubmission.disqualified ? 'text-red-600 line-through' : 'text-green-700'
+                    mySubmission.disqualified
+                      ? 'text-red-600 line-through'
+                      : 'text-green-700'
                   }`}
                 >
                   {formatTime(mySubmission.track_time)}
@@ -267,14 +294,19 @@ export default function Session() {
           </h3>
           <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
             {activeParticipants.map((p) => {
-              const sub = submissions.find((s) => s.user_id === p.user_id)
+              const sub = submissions.find((s) => s.user_id === p.user_id);
               return (
-                <div key={p.user_id} className="px-4 py-3 flex items-center justify-between">
+                <div
+                  key={p.user_id}
+                  className="px-4 py-3 flex items-center justify-between"
+                >
                   <div className="flex items-center gap-2">
                     {p.user_id === session.host_id && (
                       <span className="text-xs">{'\uD83C\uDFE0'}</span>
                     )}
-                    <span className="text-sm font-medium text-gray-900">{p.username}</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {p.username}
+                    </span>
                   </div>
                   {currentRace ? (
                     sub ? (
@@ -288,13 +320,17 @@ export default function Session() {
                         </span>
                       )
                     ) : (
-                      <span className="text-xs text-gray-400">{'\u23F3'} Racing...</span>
+                      <span className="text-xs text-gray-400">
+                        {'\u23F3'} Racing...
+                      </span>
                     )
                   ) : (
-                    <span className="text-xs text-gray-400">{'\u23F3'} waiting</span>
+                    <span className="text-xs text-gray-400">
+                      {'\u23F3'} waiting
+                    </span>
                   )}
                 </div>
-              )
+              );
             })}
           </div>
         </div>
@@ -314,18 +350,25 @@ export default function Session() {
                   {pastRaces.length}
                 </span>
               </div>
-              <span className="text-gray-400 text-xs">{historyExpanded ? '\u25B2' : '\u25BC'}</span>
+              <span className="text-gray-400 text-xs">
+                {historyExpanded ? '\u25B2' : '\u25BC'}
+              </span>
             </button>
             {historyExpanded && (
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
                 {pastRaces.map((race) => (
-                  <div key={race.id} className="px-4 py-3 flex items-center justify-between">
+                  <div
+                    key={race.id}
+                    className="px-4 py-3 flex items-center justify-between"
+                  >
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-semibold text-gray-400 w-5 text-center">
                         {race.race_number}
                       </span>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{race.track_name}</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {race.track_name}
+                        </p>
                         <p className="text-xs text-gray-400">{race.cup_name}</p>
                       </div>
                     </div>
@@ -361,7 +404,9 @@ export default function Session() {
             >
               {joiningSession ? 'Joining...' : 'Join Session'}
             </button>
-            {joinError && <p className="text-xs text-red-500 text-center">{joinError}</p>}
+            {joinError && (
+              <p className="text-xs text-red-500 text-center">{joinError}</p>
+            )}
           </div>
         )}
       </div>
@@ -377,5 +422,5 @@ export default function Session() {
         />
       )}
     </div>
-  )
+  );
 }

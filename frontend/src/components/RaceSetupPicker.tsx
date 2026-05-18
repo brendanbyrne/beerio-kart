@@ -1,30 +1,35 @@
-import { useState } from 'react'
-import { useCharacters, useBodies, useWheels, useGliders } from '../hooks/useGameData'
-import type { SimpleItem } from '../api/types'
+import { useState } from 'react';
+import {
+  useCharacters,
+  useBodies,
+  useWheels,
+  useGliders,
+} from '../hooks/useGameData';
+import type { SimpleItem } from '../api/types';
 
 interface RaceSetupPickerProps {
-  initialCharacterId?: number | null
-  initialBodyId?: number | null
-  initialWheelId?: number | null
-  initialGliderId?: number | null
+  initialCharacterId?: number | null;
+  initialBodyId?: number | null;
+  initialWheelId?: number | null;
+  initialGliderId?: number | null;
   onComplete: (setup: {
-    characterId: number
-    bodyId: number
-    wheelId: number
-    gliderId: number
-  }) => void
-  onSkip?: () => void
-  submitLabel?: string
+    characterId: number;
+    bodyId: number;
+    wheelId: number;
+    gliderId: number;
+  }) => void;
+  onSkip?: () => void;
+  submitLabel?: string;
 }
 
-type Step = 'character' | 'body' | 'wheel' | 'glider'
-const STEPS: Step[] = ['character', 'body', 'wheel', 'glider']
+type Step = 'character' | 'body' | 'wheel' | 'glider';
+const STEPS: Step[] = ['character', 'body', 'wheel', 'glider'];
 const STEP_LABELS: Record<Step, string> = {
   character: 'Character',
   body: 'Body',
   wheel: 'Wheels',
   glider: 'Glider',
-}
+};
 
 export default function RaceSetupPicker({
   initialCharacterId,
@@ -35,65 +40,75 @@ export default function RaceSetupPicker({
   onSkip,
   submitLabel = 'Confirm Setup',
 }: RaceSetupPickerProps) {
-  const { items: characters, loading: loadingChars } = useCharacters()
-  const { items: bodies, loading: loadingBodies } = useBodies()
-  const { items: wheels, loading: loadingWheels } = useWheels()
-  const { items: gliders, loading: loadingGliders } = useGliders()
+  const { items: characters, loading: loadingChars } = useCharacters();
+  const { items: bodies, loading: loadingBodies } = useBodies();
+  const { items: wheels, loading: loadingWheels } = useWheels();
+  const { items: gliders, loading: loadingGliders } = useGliders();
 
-  const [step, setStep] = useState<Step>('character')
-  const [characterId, setCharacterId] = useState<number | null>(initialCharacterId ?? null)
-  const [bodyId, setBodyId] = useState<number | null>(initialBodyId ?? null)
-  const [wheelId, setWheelId] = useState<number | null>(initialWheelId ?? null)
-  const [gliderId, setGliderId] = useState<number | null>(initialGliderId ?? null)
+  const [step, setStep] = useState<Step>('character');
+  const [characterId, setCharacterId] = useState<number | null>(
+    initialCharacterId ?? null,
+  );
+  const [bodyId, setBodyId] = useState<number | null>(initialBodyId ?? null);
+  const [wheelId, setWheelId] = useState<number | null>(initialWheelId ?? null);
+  const [gliderId, setGliderId] = useState<number | null>(
+    initialGliderId ?? null,
+  );
 
-  const loading = loadingChars || loadingBodies || loadingWheels || loadingGliders
+  const loading =
+    loadingChars || loadingBodies || loadingWheels || loadingGliders;
 
   if (loading) {
-    return <div className="text-center text-gray-400 py-8">Loading game data...</div>
+    return (
+      <div className="text-center text-gray-400 py-8">Loading game data...</div>
+    );
   }
 
-  const currentStepIndex = STEPS.indexOf(step)
+  const currentStepIndex = STEPS.indexOf(step);
 
   const itemsForStep: Record<Step, SimpleItem[]> = {
     character: characters,
     body: bodies,
     wheel: wheels,
     glider: gliders,
-  }
+  };
 
   const selectedForStep: Record<Step, number | null> = {
     character: characterId,
     body: bodyId,
     wheel: wheelId,
     glider: gliderId,
-  }
+  };
 
   const setterForStep: Record<Step, (id: number) => void> = {
     character: setCharacterId,
     body: setBodyId,
     wheel: setWheelId,
     glider: setGliderId,
-  }
+  };
 
-  const items = itemsForStep[step]
-  const selected = selectedForStep[step]
+  const items = itemsForStep[step];
+  const selected = selectedForStep[step];
 
   function handleSelect(id: number) {
-    setterForStep[step](id)
+    setterForStep[step](id);
     // Auto-advance to next step after selection
     if (currentStepIndex < STEPS.length - 1) {
-      setTimeout(() => setStep(STEPS[currentStepIndex + 1]), 150)
+      setTimeout(() => setStep(STEPS[currentStepIndex + 1]), 150);
     }
   }
 
   function handleBack() {
     if (currentStepIndex > 0) {
-      setStep(STEPS[currentStepIndex - 1])
+      setStep(STEPS[currentStepIndex - 1]);
     }
   }
 
   const allSelected =
-    characterId !== null && bodyId !== null && wheelId !== null && gliderId !== null
+    characterId !== null &&
+    bodyId !== null &&
+    wheelId !== null &&
+    gliderId !== null;
 
   return (
     <div className="flex flex-col h-full">
@@ -123,7 +138,10 @@ export default function RaceSetupPicker({
           Pick your {STEP_LABELS[step].toLowerCase()}
         </h3>
         {currentStepIndex > 0 && (
-          <button onClick={handleBack} className="text-xs text-blue-500 font-medium">
+          <button
+            onClick={handleBack}
+            className="text-xs text-blue-500 font-medium"
+          >
             &larr; Back
           </button>
         )}
@@ -174,7 +192,7 @@ export default function RaceSetupPicker({
                 bodyId: bodyId!,
                 wheelId: wheelId!,
                 gliderId: gliderId!,
-              })
+              });
             }
           }}
           disabled={!allSelected}
@@ -188,5 +206,5 @@ export default function RaceSetupPicker({
         </button>
       </div>
     </div>
-  )
+  );
 }
