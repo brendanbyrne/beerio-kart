@@ -149,4 +149,16 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
+  {
+    // --- Config files (added in PR-H2, Issue #193) ---
+    // vite.config.ts / vitest.config.ts must default-export their config
+    // object — it's the Vite/Vitest contract, so they can never satisfy
+    // `import/no-default-export` (typescript.md § 5). Disable it for config
+    // files only, so the warn list reflects real violations. Without this,
+    // PR-D1 flipping that rule to error would fail the build on config files.
+    files: ['**/*.config.{ts,js}'],
+    rules: {
+      'import/no-default-export': 'off',
+    },
+  },
 ]);

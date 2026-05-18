@@ -15,9 +15,12 @@ export default defineConfig({
     environment: 'jsdom',
     // setupTests.ts starts/stops MSW and extends `expect` with jest-dom.
     setupFiles: ['./src/setupTests.ts'],
-    // Co-located unit/component tests, plus the integration-test directory
-    // that react.md § 13 reserves for multi-screen flow tests.
-    include: ['src/**/*.test.{ts,tsx}', 'src/__tests__/**/*.{ts,tsx}'],
+    // Co-located unit/component tests and the integration tests react.md
+    // § 13 reserves for src/__tests__/ — a single `*.test.` glob covers both
+    // (integration tests use the `*.test.tsx` suffix too), so src/__tests__/
+    // can also hold un-run helpers/fixtures without Vitest trying to run them
+    // as suites.
+    include: ['src/**/*.test.{ts,tsx}'],
     coverage: {
       // istanbul, not v8: the v8 provider relies on Node's V8 coverage hooks,
       // which Bun's test workers don't feed (it reports a flat 0%). istanbul
