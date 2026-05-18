@@ -1,6 +1,7 @@
 # beerio-kart
 
-[![codecov](https://codecov.io/gh/brendanbyrne/beerio-kart/graph/badge.svg)](https://codecov.io/gh/brendanbyrne/beerio-kart)
+[![backend coverage](https://img.shields.io/codecov/c/github/brendanbyrne/beerio-kart?flag=backend&label=backend%20coverage)](https://app.codecov.io/gh/brendanbyrne/beerio-kart?flags%5B0%5D=backend)
+[![frontend coverage](https://img.shields.io/codecov/c/github/brendanbyrne/beerio-kart?flag=frontend&label=frontend%20coverage)](https://app.codecov.io/gh/brendanbyrne/beerio-kart?flags%5B0%5D=frontend)
 
 There are two goals with this project.
 * A mobile-first web app for tracking times and stats for the Mario Kart 8 Deluxe drinking game. Players race time trials, drink something bubbly, and the app tracks personal bests, leaderboards, and run history.
