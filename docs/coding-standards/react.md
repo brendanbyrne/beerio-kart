@@ -18,6 +18,7 @@
 10. [Accessibility floor](#10-accessibility-floor)
 11. [Routing (react-router 7)](#11-routing-react-router-7)
 12. [File organization](#12-file-organization)
+13. [Testing](#13-testing)
 
 ---
 
@@ -253,6 +254,62 @@ Sources: [React 19 release notes](https://react.dev/blog/2024/12/05/react-19) ·
 
 - **Rule:** `src/pages/` holds route entry points. Pages are thin — they compose hooks and components rather than implementing logic directly. If a page accumulates substantial logic, that's a sign sub-components or hooks want extraction.
 
+## 13. Testing
+
+This section covers React-specific testing. The umbrella policy ("tests are a deliverable, not optional; every requirement should be unit- or integration-testable, within reason") lives in [`typescript.md`](./typescript.md) § 12, which also covers Vitest setup, schema/parser tests, and the "within reason" carve-outs. Read that first.
+
+- **Rule:** Use [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) for component tests. Render with `render()`, query by semantic role/label/text (in priority order), interact with [`@testing-library/user-event`](https://testing-library.com/docs/user-event/intro) v14+.
+  - **Why:** RTL forces tests written from the user's perspective — what's on screen, what they click, what they read. Tests that introspect state or props break on refactor without catching real bugs.
+  - **Example:**
+    ```tsx
+    test('submitting the login form calls login with the entered credentials', async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(<LoginForm onSubmit={onSubmit} />);
+
+      await user.type(screen.getByLabelText('Username'), 'alice');
+      await user.type(screen.getByLabelText('Password'), 'secret');
+      await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+      expect(onSubmit).toHaveBeenCalledWith({ username: 'alice', password: 'secret' });
+    });
+    ```
+
+- **Rule:** Query priority is `getByRole` first, then `getByLabelText` (for form inputs), then `getByText`, then `getByDisplayValue`. Reserve `getByTestId` for the rare case where no semantic option works.
+  - **Why:** The query order mirrors how a screen reader navigates. Tests that pass for screen-reader users also satisfy the a11y rules in § 10. `getByTestId` selectors couple tests to implementation details and rot fastest.
+  - **Source:** <https://testing-library.com/docs/queries/about#priority>
+
+- **Rule:** Mock the network at the fetch boundary using [MSW (Mock Service Worker)](https://mswjs.io/), not by stubbing `fetch` or individual API helpers.
+  - **Why:** MSW intercepts at the network layer, so the API client + Zod parsing + hooks all exercise real logic. Stubbing `fetch` forces each test to re-implement your wire format; stubbing API helpers bypasses the parsers that PR-B2 made loud-on-failure.
+  - **Source:** <https://mswjs.io/docs/>
+
+- **Rule:** Hook tests use `renderHook` from React Testing Library. Wrap with `QueryClientProvider` (for TanStack Query hooks), `AuthContext.Provider` (for auth-dependent hooks), and any other Provider the hook depends on.
+  - **Example:**
+    ```tsx
+    function wrapper({ children }: { children: React.ReactNode }) {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+
+    test('useSession returns data once the request resolves', async () => {
+      const { result } = renderHook(() => useSession(sessionId), { wrapper });
+      await waitFor(() => expect(result.current.data).toBeDefined());
+    });
+    ```
+  - **Source:** <https://testing-library.com/docs/react-testing-library/api/#renderhook>
+
+- **Rule:** Don't test internal state, refs, or hook return-value shape directly — test the rendered output or the side effects (function calls, navigation, network requests). If you find yourself reaching for `act` to poke at internals, the test is fragile to refactor.
+  - **Why:** RTL's whole pitch is "the more your tests resemble the way your software is used, the more confidence they can give you" (Kent C. Dodds). Internal-state tests fail the resemble-real-use test.
+
+- **Rule:** Integration tests for major user flows live in `frontend/src/__tests__/` and exercise multi-screen sequences (login → create session → submit run) end-to-end against MSW. Cover the happy path plus the most common failure (auth expired, network down, validation rejection).
+  - **Why:** Unit tests verify pieces in isolation; integration tests verify the pieces are wired together. The cost-benefit on integration tests is highest for the user flows that actually break the app when they fail.
+
+- **Rule:** Tests for accessibility behavior (focus management, keyboard navigation, ARIA wiring) live next to the component they cover. Use `userEvent.tab()` to drive keyboard navigation; use `@axe-core/react` in a separate axe-only test pass rather than in every component test.
+  - **Why:** Per-component axe runs slow test suites down. A dedicated axe pass on the rendered app catches regressions cheaply.
+
 ## Document history
 
 - 2026-05-16 — Initial creation. Sourced from research conducted 2026-05-16 (React 19.2, React Compiler v1.0, TanStack Query v5, react-router 7 baselines). Recommendations on TanStack Query and React Compiler adoption are forward-looking — the project does not yet use either; the compliance plan (`../designs/2026-05-16-frontend-compliance-plan.md`) sequences the migration. Companion files: `typescript.md`, `tailwind.md`, both created same day.
+- 2026-05-18 — Added § 13 Testing covering React Testing Library, MSW, hook tests with provider wrappers, query priority, and the rule against testing internals. Umbrella policy (mandate + carve-outs) lives in `typescript.md` § 12; this section is the React-specific patterns. Companion: compliance plan re-sequences PR-H2 (Vitest scaffolding) ahead of the runtime-behavior PRs so each subsequent PR can include tests.

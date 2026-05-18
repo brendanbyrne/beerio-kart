@@ -1,7 +1,7 @@
 # Frontend Compliance Plan
 
 > **Purpose.** A sequenced list of PRs that brings the existing `beerio-kart` frontend into compliance with the coding standards in [`../coding-standards/typescript.md`](../coding-standards/typescript.md), [`react.md`](../coding-standards/react.md), and [`tailwind.md`](../coding-standards/tailwind.md). Each PR has a scope, a list of standards rules it satisfies, an effort estimate, dependencies, a risk note, and a sign-off checkbox.
-> **Status.** Initial draft. Driven by [`./2026-05-16-frontend-audit.md`](./2026-05-16-frontend-audit.md) — see that file for per-file findings, line-numbered citations, and migration-cost ratings.
+> **Status.** All 16 PRs filed as Issues under [Milestone 9 — `Hardening: Frontend standards compliance`](https://github.com/brendanbyrne/beerio-kart/milestone/9). All Ready / Medium priority. Driven by [`./2026-05-16-frontend-audit.md`](./2026-05-16-frontend-audit.md) — see that file for per-file findings, line-numbered citations, and migration-cost ratings.
 > **Sign-off.** Brendan signs off each PR once the change lands and is verified. Unfinished items roll into the next session.
 
 ## How this doc is used
@@ -42,15 +42,19 @@ The PRs below address every line item.
 
 ### PR-A1: ESLint plugins, Prettier integration, package additions
 
+**Issue:** [#187](https://github.com/brendanbyrne/beerio-kart/issues/187)
+
 - **Scope:**
   - Add `eslint-plugin-jsx-a11y`, `eslint-plugin-import`, `eslint-config-prettier` to devDependencies.
   - Add `@tanstack/react-query`, `@tanstack/react-query-devtools`, `clsx`, `react-error-boundary`, `zod` to dependencies.
+  - Add a `"format": "prettier --write ."` script to `frontend/package.json`. Verify lefthook's pre-commit hook already runs Prettier (per `frontend/CLAUDE.md` it should); add it if not.
   - Extend `eslint.config.js` with:
     - `tseslint.configs.strictTypeChecked` + `stylisticTypeChecked` (replaces bare `recommended`).
     - `jsx-a11y` flat-recommended.
     - `import` flat-recommended.
     - `eslint-config-prettier` last.
     - Rules: `consistent-type-definitions: ["error", "type"]`, `consistent-type-imports: "error"`, `import/no-default-export: "error"`, `no-restricted-syntax` ban on `TSEnumDeclaration`, `ban-ts-comment` requiring `@ts-expect-error`. Start `no-explicit-any` and `no-non-null-assertion` at **warn** so existing files don't block CI; flip to error in PR-F1.
+    - **Warn-down (don't fix) any other rule from `strictTypeChecked` that fires on existing code.** Expected culprits: the `@typescript-eslint/no-unsafe-*` family (every `await res.json()` until PR-B2 lands Zod parses — 9 files), `no-floating-promises` / `no-misused-promises` (fire-and-forget fetches), `no-unnecessary-condition` (over-defensive null checks). The principle: PR-A1 is purely additive infrastructure — it must produce zero new errors in CI or the pre-commit hook. Later PRs (B2 especially) fix the underlying code and flip the rules back to error.
   - Bump `ecmaVersion` to match the `target` in `tsconfig.app.json` (ES2023+).
   - Add `parserOptions.projectService: true`.
   - Add a `.prettierrc` if not present: `{ "singleQuote": true, "semi": true, "trailingComma": "all" }`.
@@ -58,10 +62,12 @@ The PRs below address every line item.
 - **Effort:** M.
 - **Dependencies:** None.
 - **Risk:** Low. The warn-level start keeps CI green; existing violations are documented, not enforced yet.
-- **Verification:** `bun run lint` reports warnings (not errors) for the known violations from the audit; `bun run typecheck` passes; pre-commit hook fires both.
+- **Verification:** `bun run lint` reports warnings (not errors) for the known violations from the audit; `bun run typecheck` passes; pre-commit hook succeeds on a no-op commit.
 - **Sign-off:** [ ]
 
 ### PR-A2: Strict tsconfig flags
+
+**Issue:** [#173](https://github.com/brendanbyrne/beerio-kart/issues/173)
 
 - **Scope:**
   - In `frontend/tsconfig.app.json` and `frontend/tsconfig.node.json`, add: `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `isolatedModules: true` (explicit).
@@ -80,6 +86,8 @@ The PRs below address every line item.
 
 ### PR-B1: Branded ID types + `type` over `interface` in `api/types.ts`
 
+**Issue:** [#171](https://github.com/brendanbyrne/beerio-kart/issues/171)
+
 - **Scope:**
   - Create `src/api/brand.ts` with the `Brand<T, B>` helper and exported brand types: `UserId`, `SessionId`, `RunId`, `RaceId`, `DrinkTypeId` (string brands); `CharacterId`, `BodyId`, `WheelId`, `GliderId`, `TrackId`, `CupId` (number brands).
   - Convert every `interface` in `api/types.ts` to `type`.
@@ -95,6 +103,8 @@ The PRs below address every line item.
 - **Sign-off:** [ ]
 
 ### PR-B2: Runtime-validated API responses (Zod)
+
+**Issue:** [#191](https://github.com/brendanbyrne/beerio-kart/issues/191)
 
 - **Scope:**
   - Add Zod schemas for every API response shape in `src/api/types.ts`. Infer the TS types from the schemas (delete the hand-written types in favor of `z.infer<typeof ...>`).
@@ -117,6 +127,8 @@ The PRs below address every line item.
 
 ### PR-C1: TanStack Query setup + migration of static-data hooks
 
+**Issue:** [#176](https://github.com/brendanbyrne/beerio-kart/issues/176)
+
 - **Scope:**
   - Wrap `App.tsx` in `QueryClientProvider`. Use the recommended default config (`refetchOnWindowFocus: true`, `retry: 1`, `staleTime: 30_000` for most queries).
   - Add React Query Devtools in dev only.
@@ -131,6 +143,8 @@ The PRs below address every line item.
 - **Sign-off:** [ ]
 
 ### PR-C2: TanStack Query migration of polling hooks
+
+**Issue:** [#186](https://github.com/brendanbyrne/beerio-kart/issues/186)
 
 - **Scope:**
   - Migrate `useSession.ts`: replace the polling/visibility-API/`endedRef` logic with `useQuery({ refetchInterval: (q) => (q.state.data?.ended_at ? false : 2500), refetchIntervalInBackground: false })`.
@@ -151,6 +165,8 @@ The PRs below address every line item.
 
 ### PR-D1: Named exports everywhere
 
+**Issue:** [#175](https://github.com/brendanbyrne/beerio-kart/issues/175)
+
 - **Scope:**
   - Convert all 12 default exports to named exports. Files: `main.tsx` (import), `App.tsx`, `BottomNav.tsx`, `DrinkTypeSelector.tsx`, `RaceSetupPicker.tsx`, `RunEntrySheet.tsx`, `Login.tsx`, `Register.tsx`, `Onboarding.tsx`, `Profile.tsx`, `Home.tsx`, `Session.tsx`.
   - Update every importer. Mechanical sweep.
@@ -164,6 +180,8 @@ The PRs below address every line item.
 
 ### PR-D2: Remove non-null `!` assertions
 
+**Issue:** [#192](https://github.com/brendanbyrne/beerio-kart/issues/192)
+
 - **Scope:**
   - `main.tsx:6` — replace `document.getElementById('root')!` with `if (!rootEl) throw new Error('Root element missing')`.
   - `Session.tsx:13, 29, 40, 51, 63` — the `useParams<{id: string}>()` calls. Add a single param-check at the top of the component: `if (!id) return <Navigate to="/" replace />` (or a 404 page). Downstream uses become unconditional `id: SessionId`.
@@ -176,6 +194,8 @@ The PRs below address every line item.
 - **Sign-off:** [ ]
 
 ### PR-D3: Remove `as Foo` casts and unsafe response annotations
+
+**Issue:** [#179](https://github.com/brendanbyrne/beerio-kart/issues/179)
 
 - **Scope:**
   - `RunEntrySheet.tsx:176` — replace `(e.target as HTMLImageElement)` with `e.currentTarget`. Safe here specifically because the handler is attached directly to the `<img>` and `Event.target` / `currentTarget` are the same element in a non-bubbling `onError`. Do not blindly apply this substitution in delegated handlers where `target` and `currentTarget` differ.
@@ -193,6 +213,8 @@ The PRs below address every line item.
 
 ### PR-E1: Form migration to `useActionState` + `useFormStatus`
 
+**Issue:** [#182](https://github.com/brendanbyrne/beerio-kart/issues/182)
+
 - **Scope:**
   - Convert `Login.tsx` from controlled inputs + manual `submitting` flag to uncontrolled inputs + `useActionState`. Add a shared `SubmitButton` component using `useFormStatus`.
   - Convert `Register.tsx` (twin of Login).
@@ -207,6 +229,8 @@ The PRs below address every line item.
 - **Sign-off:** [ ]
 
 ### PR-E2: Ref-as-prop, Document Metadata, React Compiler
+
+**Issue:** [#180](https://github.com/brendanbyrne/beerio-kart/issues/180)
 
 - **Scope:**
   - Audit any `forwardRef` usage (none expected in current code; the audit didn't surface any) and convert if found.
@@ -226,6 +250,8 @@ The PRs below address every line item.
 ## Stream F — Routing, error boundaries, lazy loading
 
 ### PR-F1: Router upgrade + error boundaries + lazy routes
+
+**Issue:** [#190](https://github.com/brendanbyrne/beerio-kart/issues/190)
 
 - **Scope:**
   - Migrate `App.tsx` from `BrowserRouter` + `<Routes>` to `createBrowserRouter` + `RouterProvider`.
@@ -247,6 +273,8 @@ The PRs below address every line item.
 
 ### PR-G1: Tailwind `@theme` tokens + `clsx` adoption
 
+**Issue:** [#183](https://github.com/brendanbyrne/beerio-kart/issues/183)
+
 - **Scope:**
   - Add a `@theme` block to `frontend/src/index.css` defining brand colors (currently scattered as `blue-600` etc.), `--spacing-touch: 2.75rem`, semantic colors (`--color-success`, `--color-danger`).
   - Introduce `clsx` (already added in PR-A1). Refactor template-literal class concat in `BottomNav.tsx`, `DrinkTypeSelector.tsx`, `RaceSetupPicker.tsx`, `RunEntrySheet.tsx`, `Profile.tsx`, `Home.tsx`, `Session.tsx`, `App.tsx`.
@@ -259,6 +287,8 @@ The PRs below address every line item.
 - **Sign-off:** [ ]
 
 ### PR-G2: Accessibility sweep — touch targets, focus, modals
+
+**Issue:** [#184](https://github.com/brendanbyrne/beerio-kart/issues/184)
 
 - **Scope:**
   - Bump every <44 px button to `min-h-touch` (or `min-h-[44px]` for one-offs). Hit list from audit: `DrinkTypeSelector.tsx` skip/cancel/add, `RaceSetupPicker.tsx` step pills, `Profile.tsx` password cancel/save, `Home.tsx` modal cancel, `Login.tsx` and `Register.tsx` submit buttons (borderline at `py-2.5`).
@@ -280,53 +310,76 @@ The PRs below address every line item.
 
 ## Stream H — Final consolidation
 
-### PR-H1: Lint cleanup, discriminated-union audit, drift-check CI
+### PR-H1: Lint cleanup, drift-check CI, test-coverage backfill
+
+**Issue:** [#185](https://github.com/brendanbyrne/beerio-kart/issues/185)
 
 - **Scope:**
   - Final pass converting any remaining `string` status fields to literal unions.
   - Confirm no TS `enum` usage (audit confirmed none today; the `no-restricted-syntax` rule keeps it that way).
   - Add a CI check (GitHub Actions) that fails the PR if `backend/src/dtos/` (or wherever DTOs live — verify path) changes without `frontend/src/api/types.ts` also changing. False positives are acceptable; one-line update.
   - Document the drift check in `typescript.md` § 11 and link from the type-sync research doc.
-- **Standards refs:** `typescript.md` § 4, § 11.
-- **Effort:** S.
+  - **Test-coverage backfill.** By the time this PR runs, the earlier PRs in this milestone should have added tests for every file they touched. Verify with `bun test:coverage` that no production code outside the standards' carve-outs (pure presentational components, app shell composition, generated types — see `typescript.md` § 12) is uncovered. Add tests for any straggler files. This should be a small final mop-up, not a major effort; if it turns into a multi-day task, the earlier PRs missed their AC.
+- **Standards refs:** `typescript.md` § 4, § 11, § 12.
+- **Effort:** S–M (depends on how well earlier PRs held to the standard).
 - **Dependencies:** Everything else.
+- **Verification:** All AC bullets pass. `bun test:coverage` shows ≥80% on production code (or a documented exemption per file).
 - **Sign-off:** [ ]
 
-### PR-H2: Vitest scaffolding (optional, out of standards scope but flagged)
+### PR-H2: Vitest scaffolding (required — sequenced before B1)
+
+> **Re-sequencing note (2026-05-18):** Originally optional and last. After `typescript.md` § 12 and `react.md` § 13 added a testing requirement to the standards, this PR is required infrastructure and moves to right after PR-A2 (before B1). Every subsequent PR in the plan now lands with tests for new/changed logic.
+
+**Issue:** [#193](https://github.com/brendanbyrne/beerio-kart/issues/193)
 
 - **Scope:**
-  - Add `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom` to devDependencies.
-  - Add `vitest.config.ts`.
-  - Add one example test per kind: a unit test for `utils/time.ts`, a hook test for one of the post-migration TanStack Query hooks, a component test for `Login.tsx`.
-  - Add a CI job to run tests.
-- **Standards refs:** Not currently covered by the standards; should be addressed in a follow-up update to `react.md` or a new `testing.md`.
+  - Add to devDependencies: `vitest`, `@vitest/coverage-v8`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `jsdom`, `msw`.
+  - Add `frontend/vitest.config.ts` with `environment: 'jsdom'`, coverage provider `v8`, and the test-file glob (`src/**/*.test.{ts,tsx}` plus `src/__tests__/**/*.{ts,tsx}`).
+  - Add a `test` script (`"test": "vitest run"`) and a `test:watch` script (`"test:watch": "vitest"`) to `frontend/package.json`. Also add `"test:coverage": "vitest run --coverage"`.
+  - Set up MSW: `frontend/src/mocks/handlers.ts` (initial empty handlers, populated as later PRs land), `frontend/src/mocks/server.ts` (Node setup), `frontend/src/setupTests.ts` (start/stop MSW + extend `expect` with `@testing-library/jest-dom`).
+  - Wire `setupTests.ts` into `vitest.config.ts` via `setupFiles`.
+  - Add a CI job to `.github/workflows/` that runs `bun test` and uploads `vitest run --coverage` output to Codecov, matching the backend's setup in `docs/design.md` § Coverage & CI.
+  - Add lefthook integration so `bun test --changed` (or equivalent affected-file run) fires pre-push (not pre-commit — too slow).
+  - Write one example test per kind to anchor the patterns:
+    - **Unit:** `src/utils/time.test.ts` — formatter and parser.
+    - **Schema:** placeholder for when PR-B2 lands the first Zod schema (leave a TODO comment; B2 fills in).
+    - **Hook:** placeholder for when PR-C1 lands TanStack Query (leave a TODO; C1 fills in).
+    - **Component:** `src/pages/Login.test.tsx` — RTL test against the current Login form (will be updated in PR-E1 when the form migrates to `useActionState`).
+- **Standards refs:** `typescript.md` § 12 (umbrella policy + Vitest patterns), `react.md` § 13 (RTL + MSW + hook tests).
 - **Effort:** M.
-- **Dependencies:** PRs C1, C2, E1 (so the example tests cover the post-migration shape).
-- **Risk:** Low. Out-of-scope for compliance per se; included here because the audit flagged it as a notable gap.
+- **Dependencies:** PR-A1 (lint config in place), PR-A2 (strict tsconfig so test files inherit the rules).
+- **Risk:** Low. New infrastructure only; no production code changes. The example tests are small enough to be self-documenting.
+- **Verification:** `bun test` runs and the example tests pass. `bun test:coverage` produces an HTML coverage report. CI job runs and uploads to Codecov. Pre-push lefthook hook fires on `git push`.
 - **Sign-off:** [ ]
 
 ---
 
 ## Sign-off summary
 
-| PR | Title | Stream | Dep | Status |
-|---|---|---|---|---|
-| A1 | Lints + Prettier + packages | A | — | [ ] |
-| A2 | Strict tsconfig flags | A | A1 | [ ] |
-| B1 | Branded IDs + type-over-interface | B | A2 | [ ] |
-| B2 | Zod runtime validation + Result | B | B1 | [ ] |
-| C1 | TanStack Query setup + static hooks | C | B2 | [ ] |
-| C2 | TanStack Query polling hooks | C | C1 | [ ] |
-| D1 | Named exports everywhere | D | (B1) | [ ] |
-| D2 | Remove `!` assertions | D | — | [ ] |
-| D3 | Remove `as` casts | D | B2 | [ ] |
-| E1 | Form migration to useActionState | E | B2 | [ ] |
-| E2 | Ref-as-prop, Doc Metadata, Compiler | E | A1, C2 | [ ] |
-| F1 | Router upgrade + boundaries + lazy | F | D1 | [ ] |
-| G1 | Tailwind `@theme` + `clsx` | G | — | [ ] |
-| G2 | Accessibility sweep | G | G1 | [ ] |
-| H1 | Lint cleanup + drift-check CI | H | All | [ ] |
-| H2 | Vitest scaffolding (optional) | H | C1, C2, E1 | [ ] |
+All Issues live under [Milestone 9 — Hardening: Frontend standards compliance](https://github.com/brendanbyrne/beerio-kart/milestone/9). Each is on the project board at Ready / Medium priority. Rows are listed in **suggested pickup order** (not in PR-identifier alphabetical order — see the Re-sequencing note on PR-H2).
+
+| Order | PR | Title | Dep | Issue | Status |
+|---|---|---|---|---|---|
+| 1 | A1 | Lints + Prettier + packages | — | [#187](https://github.com/brendanbyrne/beerio-kart/issues/187) | [ ] |
+| 2 | A2 | Strict tsconfig flags | A1 | [#173](https://github.com/brendanbyrne/beerio-kart/issues/173) | [ ] |
+| 3 | **H2** | **Vitest + RTL + MSW + coverage CI** (test infrastructure — re-sequenced 2026-05-18) | A1, A2 | [#193](https://github.com/brendanbyrne/beerio-kart/issues/193) | [ ] |
+| 4 | B1 | Branded IDs + type-over-interface | A2, H2 | [#171](https://github.com/brendanbyrne/beerio-kart/issues/171) | [ ] |
+| 5 | B2 | Zod runtime validation + Result | B1, H2 | [#191](https://github.com/brendanbyrne/beerio-kart/issues/191) | [ ] |
+| 6 | C1 | TanStack Query setup + static hooks | B2, H2 | [#176](https://github.com/brendanbyrne/beerio-kart/issues/176) | [ ] |
+| 7 | C2 | TanStack Query polling hooks | C1, H2 | [#186](https://github.com/brendanbyrne/beerio-kart/issues/186) | [ ] |
+| 8 | D1 | Named exports everywhere | (B1) | [#175](https://github.com/brendanbyrne/beerio-kart/issues/175) | [ ] |
+| 9 | D2 | Remove `!` assertions | — | [#192](https://github.com/brendanbyrne/beerio-kart/issues/192) | [ ] |
+| 10 | D3 | Remove `as` casts | B2 | [#179](https://github.com/brendanbyrne/beerio-kart/issues/179) | [ ] |
+| 11 | E1 | Form migration to useActionState | B2, H2 | [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) | [ ] |
+| 12 | E2 | Ref-as-prop, Doc Metadata, Compiler | A1, C2 | [#180](https://github.com/brendanbyrne/beerio-kart/issues/180) | [ ] |
+| 13 | F1 | Router upgrade + boundaries + lazy | D1, H2 | [#190](https://github.com/brendanbyrne/beerio-kart/issues/190) | [ ] |
+| 14 | G1 | Tailwind `@theme` + `clsx` | — | [#183](https://github.com/brendanbyrne/beerio-kart/issues/183) | [ ] |
+| 15 | G2 | Accessibility sweep | G1 | [#184](https://github.com/brendanbyrne/beerio-kart/issues/184) | [ ] |
+| 16 | H1 | Lint cleanup + drift-check CI + test-coverage backfill | All | [#185](https://github.com/brendanbyrne/beerio-kart/issues/185) | [ ] |
+
+PR-H2 keeps its identifier (handoffs and Issue body already use it) but is now sequenced third, between A2 and B1. The label "Stream H" no longer fits — H2 is functionally early infrastructure, not final consolidation — but renaming the identifier mid-stream would invalidate cross-references. The Order column above is the source of truth for pickup sequence; the PR identifier is just a stable label.
+
+The `Dep` column adds `H2` to every PR that introduces testable logic (B1's branded constructors, B2's schemas, C1/C2's hooks, E1's forms, F1's routes) — they all need the test infrastructure in place to satisfy the standards' "tests are a deliverable" rule.
 
 ADRs produced: TBD (none anticipated unless a decision lands during the rollout that warrants one — most rules trace to the standards docs, which are the authority).
 
@@ -334,3 +387,5 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 
 - 2026-05-16 — Initial creation. Driven by the audit conducted same day against the new coding standards (`typescript.md`, `react.md`, `tailwind.md`, all created 2026-05-16). 16 PRs across 8 streams. No work has shipped against this plan yet; all checkboxes are open. Companion to the standards rollup in `../coding-standards/README.md` § History (2026-05-16 entry).
 - 2026-05-16 — Pointed at the now-separate audit doc (`./2026-05-16-frontend-audit.md`) instead of carrying the audit findings inline. The audit was extracted into its own design record matching the backend pattern (`archive/2026-04-15-rust-audit.md` + `archive/compliance-plan.md`) so per-file context is durable when PRs are picked up individually.
+- 2026-05-18 — Filed all 15 PRs as GitHub Issues under [Milestone 9 — Hardening: Frontend standards compliance](https://github.com/brendanbyrne/beerio-kart/milestone/9). All Issues set to Ready / Medium priority on the project board. PR-H2 (Vitest scaffolding) intentionally not filed — out of scope for standards compliance. Each PR section above now carries an `**Issue:** [#NN](...)` reference; sign-off summary table gained an Issue column. Issue numbers are non-contiguous (171, 173, 175, 176, 179, 180, 182, 183, 184, 185, 186, 187, 190, 191, 192) because the batched filing hit a few transient GitHub 500s that retried into new sequence positions.
+- 2026-05-18 — Added testing requirement to the standards (`typescript.md` § 12, `react.md` § 13, `frontend/CLAUDE.md` § Testing). Reversed the previous decision to leave PR-H2 unfiled: it's now required infrastructure and filed as [#193](https://github.com/brendanbyrne/beerio-kart/issues/193), Ready/Medium. Re-sequenced H2 to third position (between A2 and B1) so each subsequent runtime-behavior PR can land with tests. Sign-off summary table reshaped: added an Order column, listed rows in pickup order (not PR-identifier order), added H2 as a dependency of B1/B2/C1/C2/E1/F1.

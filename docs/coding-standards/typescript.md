@@ -17,6 +17,7 @@
 9. [Lints, formatter, editor config](#9-lints-formatter-editor-config)
 10. [Anti-patterns](#10-anti-patterns)
 11. [Backend interop](#11-backend-interop)
+12. [Testing](#12-testing)
 
 ---
 
@@ -373,6 +374,52 @@ Each row in this table maps to an ESLint rule listed in § 9.
 - **Rule:** Type-sync between Rust DTOs and TS DTOs is currently hand-maintained, with `frontend/src/api/types.ts` as the mirror. CI does not yet enforce drift detection. See `../research/rust-to-ts-codegen.md` for the evaluation of automated options (typeshare, ts-rs, specta, schemars, utoipa) — the recommendation as of 2026-05-16 is to stay hand-rolled until DTO count crosses ~30 types, then adopt `schemars` + `json-schema-to-typescript` (which is the only path that natively understands our `nutype` newtypes).
   - **Why:** Every tool that parses Rust source directly (typeshare, ts-rs, specta) fails on `nutype`-generated structs because `nutype` rewrites the struct during macro expansion. `schemars` works because `nutype` has a first-class `schemars08` feature flag. Hand-rolling preserves optionality and keeps the contract legible to both Cowork and Claude Code in the meantime.
 
+## 12. Testing
+
+Tests are a deliverable, not optional. The frontend follows the same principle as the backend ([`../../backend/CLAUDE.md`](../../backend/CLAUDE.md) § Testing): **every requirement placed on the code should be unit- or integration-testable, within reason.** This section covers the language-level patterns (Vitest, pure code, schemas); React-specific patterns (RTL, MSW, hooks) live in [`react.md`](./react.md) § 13.
+
+- **Rule:** Tests trace to requirements, not to lines. Before writing a test, name the behavior or invariant it verifies. High coverage is a *byproduct* of thoroughly verifying requirements, not the goal.
+  - **Why:** A test that traverses a code path without asserting anything meaningful is worse than no test — it gives false confidence. Tests written for coverage rot fastest.
+  - **Source:** Mirrors `rust.md` § 7.
+
+- **Rule:** Use [Vitest](https://vitest.dev) for unit and component tests. Tests live in `*.test.ts` (or `*.test.tsx` for components) next to the file they test — not in a sibling `__tests__/` directory.
+  - **Why:** Vitest is the Vite-native runner — same ESM resolution, same TS handling, same path aliases. No second build pipeline. Co-located tests match the project's existing pattern (Rust uses `#[cfg(test)] mod tests` in the same file) and keep tests where the code is.
+  - **Source:** <https://vitest.dev/guide/>
+
+- **Rule:** Every branded-type constructor, Zod schema, parser, formatter, and pure utility has unit tests covering: the happy path, at least one rejection case for validators, and one round-trip case for anything that serializes.
+  - **Why:** These are the components where bugs are silent. A schema that accepts `null` where it shouldn't typechecks fine and breaks downstream. A branded-type constructor that mints the wrong brand passes all consumer typechecks until something blows up at the wire boundary.
+  - **Example:**
+    ```ts
+    describe('UsernameSchema', () => {
+      it('accepts a normal username', () => {
+        expect(UsernameSchema.parse('alice')).toBe('alice');
+      });
+      it('rejects an empty string', () => {
+        expect(() => UsernameSchema.parse('')).toThrow();
+      });
+      it('round-trips through JSON', () => {
+        const parsed = UsernameSchema.parse('bob');
+        expect(JSON.parse(JSON.stringify(parsed))).toBe('bob');
+      });
+    });
+    ```
+
+- **Rule:** Test names are sentences. `it('rejects an empty username', ...)`, not `it('test1', ...)`. The test list IS the behavioral spec — read the test list and the requirement coverage should be visible.
+  - **Source:** Mirrors `rust.md` § 7 and the project's existing convention.
+
+- **Rule:** Use Vitest's `describe.each` / `test.each` for table-driven cases when the same logic runs over half-a-dozen inputs. A plain `for` loop is fine for two or three.
+  - **Source:** <https://vitest.dev/api/#test-each>
+
+- **Rule:** "Within reason" — these do **not** earn tests: pure presentational components with no interactive behavior, thin layout/composition wrappers, generated types, app shell code that just renders children, one-time bootstrap code. **If the PR description can't name a user-visible behavior that would silently break, the test is theater.**
+  - **Why:** The point is requirement coverage, not coverage-percentage theater. Insisting on tests for trivial components dilutes the rule and makes contributors cynical about the practice.
+
+- **Rule:** CI runs `bun test` on every PR. Coverage via `vitest run --coverage` uploads to Codecov, mirroring the backend setup in `../design.md` § Coverage & CI. Patch coverage threshold: 80% on new/changed code; total coverage must not regress.
+  - **Source:** Mirrors `docs/design.md` § Coverage & CI.
+
+- **Rule:** `vi.fn()` mocks and `unwrap()`-equivalent shortcuts (`!`, `as`) are tolerated in test code where they aren't in production code — don't bend test code into the production shape if the verbosity hides the assertion.
+  - **Why:** The audience for test code is the test reader. Production-shape patterns sometimes obscure the behavior being verified.
+
 ## Document history
 
 - 2026-05-16 — Initial creation. Sourced from research conducted 2026-05-16 (TypeScript 5.9, ESLint 9, React 19.2 baselines). Companion files: `react.md`, `tailwind.md`, both created same day. Compliance plan: `../designs/2026-05-16-frontend-compliance-plan.md`. Type-sync research: `../research/rust-to-ts-codegen.md`.
+- 2026-05-18 — Added § 12 Testing. Mirrors the policy in `backend/CLAUDE.md` § Testing and the patterns in `rust.md` § 7. Surfaced during the compliance-Issue filing — the audit had flagged "no tests" as a notable gap outside standards scope; promoting it into the standards closes that gap. Companion update: `react.md` § 13 (React-specific testing); `frontend/CLAUDE.md` § Testing (policy block); compliance plan re-sequences PR-H2 (Vitest scaffolding) from optional to required and bumps it ahead of the runtime-behavior PRs.
