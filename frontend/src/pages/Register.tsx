@@ -1,27 +1,27 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 export default function Register() {
-  const { register } = useAuth()
-  const navigate = useNavigate()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const { register } = useAuth();
+  const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setSubmitting(true)
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
 
-    const err = await register(username, password)
-    setSubmitting(false)
+    const err = await register(username, password);
+    setSubmitting(false);
 
     if (err) {
-      setError(err)
+      setError(err);
     } else {
-      navigate('/onboarding')
+      navigate('/onboarding');
     }
   }
 
@@ -31,12 +31,17 @@ export default function Register() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm space-y-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
       >
-        <h1 className="text-2xl font-bold text-gray-900 text-center">Register</h1>
+        <h1 className="text-2xl font-bold text-gray-900 text-center">
+          Register
+        </h1>
 
         {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
         <div>
-          <label htmlFor="username" className="block text-sm text-gray-600 mb-1">
+          <label
+            htmlFor="username"
+            className="block text-sm text-gray-600 mb-1"
+          >
             Username
           </label>
           <input
@@ -51,7 +56,10 @@ export default function Register() {
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm text-gray-600 mb-1">
+          <label
+            htmlFor="password"
+            className="block text-sm text-gray-600 mb-1"
+          >
             Password
           </label>
           <input
@@ -64,7 +72,9 @@ export default function Register() {
             minLength={8}
             required
           />
-          <p className="text-xs text-gray-400 mt-1">Must be at least 8 characters</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Must be at least 8 characters
+          </p>
         </div>
 
         <button
@@ -77,11 +87,14 @@ export default function Register() {
 
         <p className="text-sm text-gray-400 text-center">
           Already have an account?{' '}
-          <Link to="/login" className="text-blue-500 hover:underline font-medium">
+          <Link
+            to="/login"
+            className="text-blue-500 hover:underline font-medium"
+          >
             Log In
           </Link>
         </p>
       </form>
     </div>
-  )
+  );
 }

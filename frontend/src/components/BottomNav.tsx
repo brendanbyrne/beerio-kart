@@ -1,23 +1,23 @@
-import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { getMySession } from '../api/sessions'
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { getMySession } from '../api/sessions';
 
 export default function BottomNav() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [mySessionId, setMySessionId] = useState<string | null>(null)
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [mySessionId, setMySessionId] = useState<string | null>(null);
 
   // Re-check active session on navigation so the tab stays in sync
   useEffect(() => {
-    getMySession().then(setMySessionId)
-  }, [location.pathname])
+    getMySession().then(setMySessionId);
+  }, [location.pathname]);
 
-  const sessionMatch = location.pathname.match(/^\/session\/(.+)$/)
+  const sessionMatch = location.pathname.match(/^\/session\/(.+)$/);
   const sessionPath = sessionMatch
     ? location.pathname
     : mySessionId
       ? `/session/${mySessionId}`
-      : null
+      : null;
 
   const tabs = [
     { path: '/', label: 'Home', icon: '\uD83C\uDFE0', disabled: false },
@@ -27,14 +27,22 @@ export default function BottomNav() {
       icon: '\uD83C\uDFAE',
       disabled: !sessionPath,
     },
-    { path: '/profile', label: 'Profile', icon: '\uD83D\uDC64', disabled: false },
-  ]
+    {
+      path: '/profile',
+      label: 'Profile',
+      icon: '\uD83D\uDC64',
+      disabled: false,
+    },
+  ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-area-pb">
       <div className="flex max-w-lg mx-auto">
         {tabs.map((tab) => {
-          const isActive = tab.label === 'Session' ? !!sessionMatch : location.pathname === tab.path
+          const isActive =
+            tab.label === 'Session'
+              ? !!sessionMatch
+              : location.pathname === tab.path;
 
           return (
             <button
@@ -50,11 +58,13 @@ export default function BottomNav() {
               }`}
             >
               <span className="text-xl leading-none">{tab.icon}</span>
-              <span className="text-[10px] font-medium mt-0.5">{tab.label}</span>
+              <span className="text-[10px] font-medium mt-0.5">
+                {tab.label}
+              </span>
             </button>
-          )
+          );
         })}
       </div>
     </nav>
-  )
+  );
 }

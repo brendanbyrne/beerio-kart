@@ -1,27 +1,27 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
-  const { login } = useAuth()
-  const navigate = useNavigate()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setSubmitting(true)
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
 
-    const err = await login(username, password)
-    setSubmitting(false)
+    const err = await login(username, password);
+    setSubmitting(false);
 
     if (err) {
-      setError(err)
+      setError(err);
     } else {
-      navigate('/')
+      navigate('/');
     }
   }
 
@@ -36,7 +36,10 @@ export default function Login() {
         {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
         <div>
-          <label htmlFor="username" className="block text-sm text-gray-600 mb-1">
+          <label
+            htmlFor="username"
+            className="block text-sm text-gray-600 mb-1"
+          >
             Username
           </label>
           <input
@@ -51,7 +54,10 @@ export default function Login() {
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm text-gray-600 mb-1">
+          <label
+            htmlFor="password"
+            className="block text-sm text-gray-600 mb-1"
+          >
             Password
           </label>
           <input
@@ -75,11 +81,14 @@ export default function Login() {
 
         <p className="text-sm text-gray-400 text-center">
           Don&apos;t have an account?{' '}
-          <Link to="/register" className="text-blue-500 hover:underline font-medium">
+          <Link
+            to="/register"
+            className="text-blue-500 hover:underline font-medium"
+          >
             Register
           </Link>
         </p>
       </form>
     </div>
-  )
+  );
 }

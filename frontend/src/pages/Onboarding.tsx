@@ -1,29 +1,29 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../api/client'
-import { useAuth } from '../hooks/useAuth'
-import RaceSetupPicker from '../components/RaceSetupPicker'
-import DrinkTypeSelector from '../components/DrinkTypeSelector'
-import type { DrinkType } from '../api/types'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
+import RaceSetupPicker from '../components/RaceSetupPicker';
+import DrinkTypeSelector from '../components/DrinkTypeSelector';
+import type { DrinkType } from '../api/types';
 
-type Phase = 'race-setup' | 'drink-type'
+type Phase = 'race-setup' | 'drink-type';
 
 export default function Onboarding() {
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const [phase, setPhase] = useState<Phase>('race-setup')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [phase, setPhase] = useState<Phase>('race-setup');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function saveRaceSetup(setup: {
-    characterId: number
-    bodyId: number
-    wheelId: number
-    gliderId: number
+    characterId: number;
+    bodyId: number;
+    wheelId: number;
+    gliderId: number;
   }) {
-    if (!user) return
-    setSaving(true)
-    setError(null)
+    if (!user) return;
+    setSaving(true);
+    setError(null);
     try {
       const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
@@ -34,40 +34,40 @@ export default function Onboarding() {
           preferred_wheel_id: setup.wheelId,
           preferred_glider_id: setup.gliderId,
         }),
-      })
+      });
       if (!res.ok) {
-        const data = await res.json()
-        setError(data.error || 'Failed to save race setup')
-        return
+        const data = await res.json();
+        setError(data.error || 'Failed to save race setup');
+        return;
       }
-      setPhase('drink-type')
+      setPhase('drink-type');
     } catch {
-      setError('Network error — please try again')
+      setError('Network error — please try again');
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function saveDrinkType(dt: DrinkType) {
-    if (!user) return
-    setSaving(true)
-    setError(null)
+    if (!user) return;
+    setSaving(true);
+    setError(null);
     try {
       const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preferred_drink_type_id: dt.id }),
-      })
+      });
       if (!res.ok) {
-        const data = await res.json()
-        setError(data.error || 'Failed to save drink preference')
-        return
+        const data = await res.json();
+        setError(data.error || 'Failed to save drink preference');
+        return;
       }
-      navigate('/')
+      navigate('/');
     } catch {
-      setError('Network error — please try again')
+      setError('Network error — please try again');
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
@@ -88,7 +88,9 @@ export default function Onboarding() {
 
       {/* Content */}
       <div className="flex-1 flex flex-col min-h-0">
-        {saving && <div className="text-center text-gray-400 py-8">Saving...</div>}
+        {saving && (
+          <div className="text-center text-gray-400 py-8">Saving...</div>
+        )}
 
         {!saving && phase === 'race-setup' && (
           <RaceSetupPicker
@@ -100,10 +102,13 @@ export default function Onboarding() {
 
         {!saving && phase === 'drink-type' && (
           <div className="px-4 flex-1">
-            <DrinkTypeSelector onSelect={saveDrinkType} onSkip={() => navigate('/')} />
+            <DrinkTypeSelector
+              onSelect={saveDrinkType}
+              onSkip={() => navigate('/')}
+            />
           </div>
         )}
       </div>
     </div>
-  )
+  );
 }
