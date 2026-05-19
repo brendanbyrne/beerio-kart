@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import { parseApiError } from '../api/result';
 import { useAuth } from '../hooks/useAuth';
 import RaceSetupPicker from '../components/RaceSetupPicker';
 import DrinkTypeSelector from '../components/DrinkTypeSelector';
@@ -36,8 +37,7 @@ export default function Onboarding() {
         }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || 'Failed to save race setup');
+        setError((await parseApiError(res)).message);
         return;
       }
       setPhase('drink-type');
@@ -59,8 +59,7 @@ export default function Onboarding() {
         body: JSON.stringify({ preferred_drink_type_id: dt.id }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || 'Failed to save drink preference');
+        setError((await parseApiError(res)).message);
         return;
       }
       navigate('/');

@@ -1,17 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
   BodyId,
+  BodyIdSchema,
   CharacterId,
+  CharacterIdSchema,
   CupId,
+  CupIdSchema,
   DrinkTypeId,
+  DrinkTypeIdSchema,
   GliderId,
+  GliderIdSchema,
   RaceId,
+  RaceIdSchema,
   RunId,
+  RunIdSchema,
   SessionId,
+  SessionIdSchema,
   TrackId,
+  TrackIdSchema,
   UserId,
+  UserIdSchema,
   WheelId,
+  WheelIdSchema,
 } from './brand';
+import type * as z from 'zod';
 
 // Branded-type constructors must be runtime *identity* functions: the brand
 // is a compile-time-only phantom, so the value coming out must be byte-for-
@@ -75,5 +87,53 @@ describe('brands are nominally distinct', () => {
     // the whole point of branding. If this line ever stops erroring, the
     // brands have collapsed back into structurally-identical strings.
     expect(takesSessionId(UserId('s1'))).toBe('s1');
+  });
+});
+
+// The Zod brand schemas (PR-B2) are the mint point used by api/types.ts.
+// Like the constructors, the transform must be runtime identity — the brand
+// is erased — so `.parse(x)` returns `x` unchanged; only the wire-primitive
+// validation (string vs. number) is enforced.
+
+const stringBrandSchemas: [string, z.ZodType][] = [
+  ['UserIdSchema', UserIdSchema],
+  ['SessionIdSchema', SessionIdSchema],
+  ['RunIdSchema', RunIdSchema],
+  ['RaceIdSchema', RaceIdSchema],
+  ['DrinkTypeIdSchema', DrinkTypeIdSchema],
+];
+
+const numberBrandSchemas: [string, z.ZodType][] = [
+  ['CharacterIdSchema', CharacterIdSchema],
+  ['BodyIdSchema', BodyIdSchema],
+  ['WheelIdSchema', WheelIdSchema],
+  ['GliderIdSchema', GliderIdSchema],
+  ['TrackIdSchema', TrackIdSchema],
+  ['CupIdSchema', CupIdSchema],
+];
+
+describe('string-brand schemas', () => {
+  it.each(stringBrandSchemas)(
+    '%s parses a string to the branded value unchanged',
+    (_name, schema) => {
+      expect(schema.parse('018f2a3b-uuid-value')).toBe('018f2a3b-uuid-value');
+    },
+  );
+
+  it.each(stringBrandSchemas)('%s rejects a number input', (_name, schema) => {
+    expect(() => schema.parse(42)).toThrow();
+  });
+});
+
+describe('number-brand schemas', () => {
+  it.each(numberBrandSchemas)(
+    '%s parses a number to the branded value unchanged',
+    (_name, schema) => {
+      expect(schema.parse(7)).toBe(7);
+    },
+  );
+
+  it.each(numberBrandSchemas)('%s rejects a string input', (_name, schema) => {
+    expect(() => schema.parse('not-a-number')).toThrow();
   });
 });

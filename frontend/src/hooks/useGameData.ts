@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import * as z from 'zod';
 import { apiFetch } from '../api/client';
+import { parseBody } from '../api/result';
+import { DrinkTypeSchema, SimpleItemSchema } from '../api/types';
 import type { DrinkType, SimpleItem } from '../api/types';
 
 /** Fetches and caches a list of simple game data items. */
@@ -11,7 +14,7 @@ function useSimpleList(endpoint: string) {
     async function load() {
       try {
         const res = await apiFetch(endpoint);
-        const data = await res.json();
+        const data = await parseBody(z.array(SimpleItemSchema), res);
         setItems(data);
       } catch {
         // Silently fail — items stay empty
@@ -54,7 +57,7 @@ export function useDrinkTypes() {
     async function load() {
       try {
         const res = await apiFetch('/api/v1/drink-types');
-        const data = await res.json();
+        const data = await parseBody(z.array(DrinkTypeSchema), res);
         setItems(data);
       } catch {
         // Silently fail

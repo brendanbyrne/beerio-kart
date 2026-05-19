@@ -11,6 +11,9 @@
  * is truly expired and the user needs to log in again.
  */
 
+import { parseBody } from './result';
+import { TokenRefreshSchema } from './types';
+
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null) {
@@ -41,7 +44,7 @@ async function tryRefresh(): Promise<boolean> {
       // which means the browser automatically sends the HttpOnly cookie.
     });
     if (!res.ok) return false;
-    const data = await res.json();
+    const data = await parseBody(TokenRefreshSchema, res);
     accessToken = data.access_token;
     return true;
   } catch {
@@ -50,26 +53,46 @@ async function tryRefresh(): Promise<boolean> {
 }
 
 /**
+ * Options accepted by `apiFetch`. Identical to `RequestInit` except `signal`
+ * is widened to explicitly include `undefined`: `exactOptionalPropertyTypes`
+ * otherwise rejects a caller that builds `{ signal }` from an optional
+ * `AbortSignal` parameter — the API-helper pattern in sessions.ts / runs.ts.
+ */
+export type ApiFetchOptions = Omit<RequestInit, 'signal'> & {
+  signal?: AbortSignal | undefined;
+};
+
+/**
  * Wrapper around fetch() that adds the access token and handles 401 refresh.
  */
 export async function apiFetch(
   url: string,
-  options: RequestInit = {},
+  options: ApiFetchOptions = {},
 ): Promise<Response> {
-  const headers = new Headers(options.headers);
+  const { signal, ...rest } = options;
+  const headers = new Headers(rest.headers);
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
 
-  let res = await fetch(url, { ...options, headers });
+  // Spread `signal` in only when present — `exactOptionalPropertyTypes`
+  // forbids handing `fetch` an explicit `signal: undefined`.
+  const init: RequestInit = {
+    ...rest,
+    headers,
+    ...(signal ? { signal } : {}),
+  };
+
+  let res = await fetch(url, init);
 
   // If we get a 401 and we had a token, try refreshing
   if (res.status === 401 && accessToken) {
     const refreshed = await tryRefresh();
     if (refreshed) {
-      // Retry the original request with the new token
+      // Retry with the new token. The shared `headers` object is mutated in
+      // place, so `init` already points at the updated Authorization header.
       headers.set('Authorization', `Bearer ${accessToken}`);
-      res = await fetch(url, { ...options, headers });
+      res = await fetch(url, init);
     } else {
       // Refresh failed — session is truly expired
       accessToken = null;
