@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useDrinkTypes } from '../hooks/useGameData';
 import { apiFetch } from '../api/client';
+import { parseApiError, parseBody } from '../api/result';
+import { DrinkTypeSchema } from '../api/types';
 import type { DrinkType } from '../api/types';
 
 interface DrinkTypeSelectorProps {
@@ -40,11 +42,11 @@ export default function DrinkTypeSelector({
         body: JSON.stringify({ name: newName.trim(), alcoholic: newAlcoholic }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || 'Failed to add drink type');
+        const err = await parseApiError(res);
+        setError(err.message);
         return;
       }
-      const created: DrinkType = await res.json();
+      const created = await parseBody(DrinkTypeSchema, res);
       refresh();
       onSelect(created);
       setShowAddForm(false);

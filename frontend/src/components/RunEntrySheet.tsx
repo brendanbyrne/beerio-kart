@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type {
   SessionRaceInfo,
   CreateRunRequest,
-  RunDefaults,
   DrinkType,
 } from '../api/types';
 import { createRun, getRunDefaults } from '../api/runs';
@@ -72,7 +71,11 @@ export default function RunEntrySheet({
 
   // Load defaults on mount
   useEffect(() => {
-    getRunDefaults().then((d: RunDefaults) => {
+    void getRunDefaults().then((result) => {
+      // No defaults endpoint / a failure — leave every field blank, same
+      // end state as the old hardcoded `source: 'none'` fallback.
+      if (!result.ok) return;
+      const d = result.value;
       setDrinkTypeId(d.drink_type_id);
       setCharacterId(d.character_id);
       setBodyId(d.body_id);

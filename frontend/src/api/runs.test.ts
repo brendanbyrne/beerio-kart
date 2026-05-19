@@ -6,8 +6,9 @@ import { createRun, deleteRun, getRun, getRunDefaults, listRuns } from './runs';
 import type { CreateRunRequest } from './types';
 
 // Verifies the run API helpers: each returns the parsed body on a 2xx and
-// its documented fallback (a thrown Error, [], or the hardcoded defaults)
-// on a failure. MSW intercepts at the fetch boundary.
+// its documented fallback (a thrown ApiErrorException, [], or — for
+// getRunDefaults — an error Result) on a failure. Each helper parses the 2xx
+// body through its Zod schema (PR-B2). MSW intercepts at the fetch boundary.
 
 const runDetail = {
   id: 'run1',
@@ -127,7 +128,7 @@ describe('deleteRun', () => {
 });
 
 describe('getRunDefaults', () => {
-  it('returns the parsed defaults on success', async () => {
+  it('returns an ok Result wrapping the parsed defaults on success', async () => {
     server.use(
       http.get('/api/v1/runs/defaults', () =>
         HttpResponse.json({
@@ -140,20 +141,27 @@ describe('getRunDefaults', () => {
         }),
       ),
     );
-    const defaults = await getRunDefaults();
-    expect(defaults.source).toBe('previous_run');
-    expect(defaults.character_id).toBe(1);
+    const result = await getRunDefaults();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.source).toBe('previous_run');
+      expect(result.value.character_id).toBe(1);
+    }
   });
 
-  it('falls back to empty defaults when the request fails', async () => {
+  it('returns an error Result carrying the typed code when the request fails', async () => {
     server.use(
-      http.get(
-        '/api/v1/runs/defaults',
-        () => new HttpResponse(null, { status: 500 }),
+      http.get('/api/v1/runs/defaults', () =>
+        HttpResponse.json(
+          { error: 'Defaults unavailable', code: 'internal' },
+          { status: 500 },
+        ),
       ),
     );
-    const defaults = await getRunDefaults();
-    expect(defaults.source).toBe('none');
-    expect(defaults.character_id).toBeNull();
+    const result = await getRunDefaults();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal');
+    }
   });
 });

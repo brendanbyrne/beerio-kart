@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../api/client';
+import { parseBody } from '../api/result';
+import { UserDetailProfileSchema } from '../api/types';
 import type { UserDetailProfile } from '../api/types';
 
 export function useUserProfile(userId: string | undefined) {
@@ -17,7 +19,7 @@ export function useUserProfile(userId: string | undefined) {
     async function load() {
       try {
         const res = await apiFetch(`/api/v1/users/${userId}`);
-        const data = await res.json();
+        const data = await parseBody(UserDetailProfileSchema, res);
         setProfile(data);
       } catch {
         // Silently fail

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import { parseApiError } from '../api/result';
 import { useAuth } from '../hooks/useAuth';
 import { useUserProfile } from '../hooks/useUserProfile';
 import {
@@ -61,8 +62,7 @@ export default function Profile() {
         }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        setSaveError(data.error || 'Failed to save race setup');
+        setSaveError((await parseApiError(res)).message);
         return;
       }
       refresh();
@@ -85,8 +85,7 @@ export default function Profile() {
         body: JSON.stringify({ preferred_drink_type_id: dt.id }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        setSaveError(data.error || 'Failed to save drink preference');
+        setSaveError((await parseApiError(res)).message);
         return;
       }
       refresh();
@@ -116,8 +115,7 @@ export default function Profile() {
         }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        setPasswordError(data.error || 'Failed to change password');
+        setPasswordError((await parseApiError(res)).message);
         return;
       }
       setPasswordSuccess(true);

@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { server } from '../mocks/server';
 import { SessionId } from './brand';
+import { ApiErrorException } from './result';
 import {
   createSession,
   getMySession,
@@ -15,10 +16,11 @@ import {
 } from './sessions';
 
 // Verifies the session API helpers: each returns the parsed body on a 2xx
-// and its documented fallback (null / [] / a thrown Error) on a failure.
-// The response bodies are minimal valid wire payloads; the helpers cast
-// them to the branded DTOs (the PR-B1 mint point). MSW intercepts at the
-// fetch boundary — no stubbing of `fetch` or the helpers themselves.
+// and its documented fallback (null / [] / a thrown ApiErrorException) on a
+// failure. The response bodies are minimal valid wire payloads; each helper
+// parses them through its Zod schema (PR-B2), which also mints the branded
+// IDs. MSW intercepts at the fetch boundary — no stubbing of `fetch` or the
+// helpers themselves.
 
 const sessionDetail = {
   id: 's1',
@@ -109,6 +111,17 @@ describe('createSession', () => {
       ),
     );
     await expect(createSession('random')).rejects.toThrow('Bad ruleset');
+  });
+
+  it('throws response_shape_mismatch when a 2xx body fails its schema', async () => {
+    server.use(
+      // A 200 whose body is missing every SessionDetail field but `id` —
+      // contract drift the Zod parse must catch loudly (typescript.md § 8).
+      http.post('/api/v1/sessions', () => HttpResponse.json({ id: 's1' })),
+    );
+    await expect(createSession('random')).rejects.toBeInstanceOf(
+      ApiErrorException,
+    );
   });
 });
 

@@ -1,15 +1,32 @@
-import type {
-  BodyId,
-  CharacterId,
-  CupId,
-  DrinkTypeId,
-  GliderId,
-  RaceId,
-  RunId,
-  SessionId,
-  TrackId,
-  UserId,
-  WheelId,
+/**
+ * API response shapes, as Zod schemas with their TypeScript types inferred
+ * from them (`z.infer`) — never declared separately.
+ *
+ * Why schemas, not hand-written types (typescript.md § 8): `await res.json()`
+ * is `any`. Assigning it to a hand-written `SessionDetail` is a lie the
+ * compiler can't catch — the next backend field rename surfaces as a bug at
+ * the first downstream read, far from the cause. A schema parses *and* infers,
+ * so the runtime check and the type stay in lockstep, and the branded IDs
+ * (brand.ts) are minted here, once, as the wire JSON is parsed.
+ *
+ * `CreateRunRequest` is the lone hand-written type: it is a *request* body the
+ * frontend serializes, not a response it parses, so it needs no schema.
+ *
+ * PR-B2 (Issue #191).
+ */
+import * as z from 'zod';
+import {
+  BodyIdSchema,
+  CharacterIdSchema,
+  CupIdSchema,
+  DrinkTypeIdSchema,
+  GliderIdSchema,
+  RaceIdSchema,
+  RunIdSchema,
+  SessionIdSchema,
+  TrackIdSchema,
+  UserIdSchema,
+  WheelIdSchema,
 } from './brand';
 
 // ── Session enums ───────────────────────────────────────────────────────
@@ -24,7 +41,8 @@ import type {
  * (serialized lowercase). A session accepts joins / leaves / submissions
  * while `active`; `closed` is terminal.
  */
-export type SessionStatus = 'active' | 'closed';
+export const SessionStatusSchema = z.enum(['active', 'closed']);
+export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
 /**
  * How a session selects each race's track — mirrors the backend
@@ -32,116 +50,131 @@ export type SessionStatus = 'active' | 'closed';
  * through session creation today; the other three are valid values of the
  * type but the backend service rejects them until their behavior lands.
  */
-export type SessionRuleset =
-  | 'random'
-  | 'default'
-  | 'least_played'
-  | 'round_robin';
+export const SessionRulesetSchema = z.enum([
+  'random',
+  'default',
+  'least_played',
+  'round_robin',
+]);
+export type SessionRuleset = z.infer<typeof SessionRulesetSchema>;
 
 // ── DTOs ────────────────────────────────────────────────────────────────
 
-export type SimpleItem = {
-  // A shared shape for the character / body / wheel / glider pick-lists.
-  // `id` is intentionally a raw `number`: the type is structurally
-  // polymorphic (it stands in for four distinct entities), so it has no one
-  // "corresponding" brand. The branded CharacterId / BodyId / WheelId /
-  // GliderId types appear on every *specific* field that references these
-  // entities by identity (see UserDetailProfile, RunDetail, RaceSetup).
-  id: number;
-  name: string;
-  image_path: string;
-};
+/**
+ * A shared shape for the character / body / wheel / glider pick-lists.
+ * `id` is intentionally a raw `number`: the type is structurally polymorphic
+ * (it stands in for four distinct entities), so it has no one "corresponding"
+ * brand. The branded CharacterId / BodyId / WheelId / GliderId types appear
+ * on every *specific* field that references these entities by identity.
+ */
+export const SimpleItemSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  image_path: z.string(),
+});
+export type SimpleItem = z.infer<typeof SimpleItemSchema>;
 
-export type TrackItem = {
-  id: TrackId;
-  name: string;
-  cup_id: CupId;
-  position: number;
-  image_path: string;
-};
+export const TrackItemSchema = z.object({
+  id: TrackIdSchema,
+  name: z.string(),
+  cup_id: CupIdSchema,
+  position: z.number(),
+  image_path: z.string(),
+});
+export type TrackItem = z.infer<typeof TrackItemSchema>;
 
-export type CupWithTracks = {
-  id: CupId;
-  name: string;
-  image_path: string;
-  tracks: TrackItem[];
-};
+export const CupWithTracksSchema = z.object({
+  id: CupIdSchema,
+  name: z.string(),
+  image_path: z.string(),
+  tracks: z.array(TrackItemSchema),
+});
+export type CupWithTracks = z.infer<typeof CupWithTracksSchema>;
 
-export type DrinkType = {
-  id: DrinkTypeId;
-  name: string;
-  alcoholic: boolean;
-  created_by: UserId | null;
-  created_at: string;
-};
+export const DrinkTypeSchema = z.object({
+  id: DrinkTypeIdSchema,
+  name: z.string(),
+  alcoholic: z.boolean(),
+  created_by: UserIdSchema.nullable(),
+  created_at: z.string(),
+});
+export type DrinkType = z.infer<typeof DrinkTypeSchema>;
 
-export type DrinkTypeInfo = {
-  id: DrinkTypeId;
-  name: string;
-  alcoholic: boolean;
-};
+export const DrinkTypeInfoSchema = z.object({
+  id: DrinkTypeIdSchema,
+  name: z.string(),
+  alcoholic: z.boolean(),
+});
+export type DrinkTypeInfo = z.infer<typeof DrinkTypeInfoSchema>;
 
-export type UserPublicProfile = {
-  id: UserId;
-  username: string;
-  preferred_character_id: CharacterId | null;
-  preferred_body_id: BodyId | null;
-  preferred_wheel_id: WheelId | null;
-  preferred_glider_id: GliderId | null;
-  preferred_drink_type_id: DrinkTypeId | null;
-  created_at: string;
-};
+export const UserPublicProfileSchema = z.object({
+  id: UserIdSchema,
+  username: z.string(),
+  preferred_character_id: CharacterIdSchema.nullable(),
+  preferred_body_id: BodyIdSchema.nullable(),
+  preferred_wheel_id: WheelIdSchema.nullable(),
+  preferred_glider_id: GliderIdSchema.nullable(),
+  preferred_drink_type_id: DrinkTypeIdSchema.nullable(),
+  created_at: z.string(),
+});
+export type UserPublicProfile = z.infer<typeof UserPublicProfileSchema>;
 
-export type UserDetailProfile = {
-  id: UserId;
-  username: string;
-  preferred_character_id: CharacterId | null;
-  preferred_body_id: BodyId | null;
-  preferred_wheel_id: WheelId | null;
-  preferred_glider_id: GliderId | null;
-  preferred_drink_type: DrinkTypeInfo | null;
-  created_at: string;
-};
+export const UserDetailProfileSchema = z.object({
+  id: UserIdSchema,
+  username: z.string(),
+  preferred_character_id: CharacterIdSchema.nullable(),
+  preferred_body_id: BodyIdSchema.nullable(),
+  preferred_wheel_id: WheelIdSchema.nullable(),
+  preferred_glider_id: GliderIdSchema.nullable(),
+  preferred_drink_type: DrinkTypeInfoSchema.nullable(),
+  created_at: z.string(),
+});
+export type UserDetailProfile = z.infer<typeof UserDetailProfileSchema>;
 
-export type RaceSetup = {
-  preferred_character_id: CharacterId;
-  preferred_body_id: BodyId;
-  preferred_wheel_id: WheelId;
-  preferred_glider_id: GliderId;
-};
+export const RaceSetupSchema = z.object({
+  preferred_character_id: CharacterIdSchema,
+  preferred_body_id: BodyIdSchema,
+  preferred_wheel_id: WheelIdSchema,
+  preferred_glider_id: GliderIdSchema,
+});
+export type RaceSetup = z.infer<typeof RaceSetupSchema>;
 
-export type SessionSummary = {
-  id: SessionId;
-  host_username: string;
-  participant_count: number;
-  race_number: number;
-  ruleset: SessionRuleset;
-};
+export const SessionSummarySchema = z.object({
+  id: SessionIdSchema,
+  host_username: z.string(),
+  participant_count: z.number(),
+  race_number: z.number(),
+  ruleset: SessionRulesetSchema,
+});
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 
-export type ParticipantInfo = {
-  user_id: UserId;
-  username: string;
-  joined_at: string;
-  left_at: string | null;
-};
+export const ParticipantInfoSchema = z.object({
+  user_id: UserIdSchema,
+  username: z.string(),
+  joined_at: z.string(),
+  left_at: z.string().nullable(),
+});
+export type ParticipantInfo = z.infer<typeof ParticipantInfoSchema>;
 
-export type RaceSubmission = {
-  user_id: UserId;
-  username: string;
-  track_time: number;
-  disqualified: boolean;
-};
+export const RaceSubmissionSchema = z.object({
+  user_id: UserIdSchema,
+  username: z.string(),
+  track_time: z.number(),
+  disqualified: z.boolean(),
+});
+export type RaceSubmission = z.infer<typeof RaceSubmissionSchema>;
 
-export type SessionRaceInfo = {
-  id: RaceId;
-  race_number: number;
-  track_id: TrackId;
-  track_name: string;
-  cup_name: string;
-  image_path: string;
-  created_at: string;
-  submissions: RaceSubmission[];
-};
+export const SessionRaceInfoSchema = z.object({
+  id: RaceIdSchema,
+  race_number: z.number(),
+  track_id: TrackIdSchema,
+  track_name: z.string(),
+  cup_name: z.string(),
+  image_path: z.string(),
+  created_at: z.string(),
+  submissions: z.array(RaceSubmissionSchema),
+});
+export type SessionRaceInfo = z.infer<typeof SessionRaceInfoSchema>;
 
 /**
  * Request body for `POST /runs`. Unlike the response DTOs, the ID fields are
@@ -149,9 +182,10 @@ export type SessionRaceInfo = {
  * run-entry form from raw component state (race-setup picks, a drink-type
  * pick) and serialized straight to JSON. Branding it would force every form
  * component to mint brands at the call site — exactly what typescript.md § 3
- * ("brand at the parse boundary, not at each call site") and the compliance
- * plan's "mint at the API-helper boundary" rule tell us not to do. Branded
- * IDs are for data crossing *into* the typed layer (the response DTOs).
+ * ("brand at the parse boundary, not at each call site") tells us not to do.
+ * Branded IDs are for data crossing *into* the typed layer (the responses);
+ * this is the one type that stays a hand-written `type` with no schema, since
+ * the frontend serializes it rather than parsing it.
  */
 export type CreateRunRequest = {
   session_race_id: string;
@@ -167,84 +201,123 @@ export type CreateRunRequest = {
   disqualified: boolean;
 };
 
-export type RunDetail = {
-  id: RunId;
-  user_id: UserId;
-  session_race_id: RaceId;
-  track_id: TrackId;
-  track_time: number;
-  lap1_time: number;
-  lap2_time: number;
-  lap3_time: number;
-  character_id: CharacterId;
-  body_id: BodyId;
-  wheel_id: WheelId;
-  glider_id: GliderId;
-  drink_type_id: DrinkTypeId;
-  drink_type_name: string;
-  disqualified: boolean;
-  created_at: string;
-};
+export const RunDetailSchema = z.object({
+  id: RunIdSchema,
+  user_id: UserIdSchema,
+  session_race_id: RaceIdSchema,
+  track_id: TrackIdSchema,
+  track_time: z.number(),
+  lap1_time: z.number(),
+  lap2_time: z.number(),
+  lap3_time: z.number(),
+  character_id: CharacterIdSchema,
+  body_id: BodyIdSchema,
+  wheel_id: WheelIdSchema,
+  glider_id: GliderIdSchema,
+  drink_type_id: DrinkTypeIdSchema,
+  drink_type_name: z.string(),
+  disqualified: z.boolean(),
+  created_at: z.string(),
+});
+export type RunDetail = z.infer<typeof RunDetailSchema>;
 
-export type RunDefaults = {
-  drink_type_id: DrinkTypeId | null;
-  character_id: CharacterId | null;
-  body_id: BodyId | null;
-  wheel_id: WheelId | null;
-  glider_id: GliderId | null;
-  source: 'previous_run' | 'preferences' | 'none';
-};
+export const RunDefaultsSchema = z.object({
+  drink_type_id: DrinkTypeIdSchema.nullable(),
+  character_id: CharacterIdSchema.nullable(),
+  body_id: BodyIdSchema.nullable(),
+  wheel_id: WheelIdSchema.nullable(),
+  glider_id: GliderIdSchema.nullable(),
+  source: z.enum(['previous_run', 'preferences', 'none']),
+});
+export type RunDefaults = z.infer<typeof RunDefaultsSchema>;
 
-export type RaceInfo = {
-  id: RaceId;
-  race_number: number;
-  track_id: TrackId;
-  track_name: string;
-  cup_name: string;
-  run_count: number;
-  created_at: string;
-};
+export const RaceInfoSchema = z.object({
+  id: RaceIdSchema,
+  race_number: z.number(),
+  track_id: TrackIdSchema,
+  track_name: z.string(),
+  cup_name: z.string(),
+  run_count: z.number(),
+  created_at: z.string(),
+});
+export type RaceInfo = z.infer<typeof RaceInfoSchema>;
 
-export type SessionDetail = {
-  id: SessionId;
-  host_id: UserId;
-  host_username: string;
-  ruleset: SessionRuleset;
-  status: SessionStatus;
-  created_at: string;
-  participants: ParticipantInfo[];
-  race_number: number;
-  current_race: SessionRaceInfo | null;
-  races: RaceInfo[];
-};
+export const SessionDetailSchema = z.object({
+  id: SessionIdSchema,
+  host_id: UserIdSchema,
+  host_username: z.string(),
+  ruleset: SessionRulesetSchema,
+  status: SessionStatusSchema,
+  created_at: z.string(),
+  participants: z.array(ParticipantInfoSchema),
+  race_number: z.number(),
+  current_race: SessionRaceInfoSchema.nullable(),
+  races: z.array(RaceInfoSchema),
+});
+export type SessionDetail = z.infer<typeof SessionDetailSchema>;
 
 // ── Notifications (ADR-0038) ──────────────────────────────────────────
 //
 // Hand-written counterpart of the Rust `NotificationPayload` enum
 // (backend/src/services/notifications.rs). Kept in sync via PR review —
-// no codegen for MVP. Add a new payload type + union member here
+// no codegen for MVP. Add a new payload schema + union member here
 // whenever a variant is added on the Rust side.
 
-export type PendingRacesDroppedPayload = {
-  kind: 'pending_races_dropped';
-  session_id: SessionId;
-  dropped_count: number;
-};
+export const PendingRacesDroppedPayloadSchema = z.object({
+  kind: z.literal('pending_races_dropped'),
+  session_id: SessionIdSchema,
+  dropped_count: z.number(),
+});
+export type PendingRacesDroppedPayload = z.infer<
+  typeof PendingRacesDroppedPayloadSchema
+>;
 
 // Discriminated union of notification payload kinds. MVP carries one
 // variant; future kinds (h2h_lead_changed, track_record_lost,
 // leaderboard_rank_changed) join this union as they land.
-export type NotificationPayload = PendingRacesDroppedPayload;
+export const NotificationPayloadSchema = z.discriminatedUnion('kind', [
+  PendingRacesDroppedPayloadSchema,
+]);
+export type NotificationPayload = z.infer<typeof NotificationPayloadSchema>;
 
-export type Notification = {
+export const NotificationSchema = z.object({
   // Notification IDs have no branded type yet — no `NotificationId` is in
   // the PR-B1 brand set, and nothing consumes this id by identity.
-  id: string;
-  created_at: string;
-  read_at: string | null;
-  payload: NotificationPayload;
-};
+  id: z.string(),
+  created_at: z.string(),
+  read_at: z.string().nullable(),
+  payload: NotificationPayloadSchema,
+});
+export type Notification = z.infer<typeof NotificationSchema>;
 
-export type UnreadCountResponse = {
-  count: number;
-};
+export const UnreadCountResponseSchema = z.object({
+  count: z.number(),
+});
+export type UnreadCountResponse = z.infer<typeof UnreadCountResponseSchema>;
+
+// ── Auth responses ──────────────────────────────────────────────────────
+//
+// Bodies returned by the `/auth/*` endpoints. `user.id` stays a raw string
+// rather than a branded `UserId`: it feeds the `User` shape the auth context
+// holds, which PR-B1 deliberately left unbranded (it is not an api/types.ts
+// DTO). The access token is an opaque JWT string.
+
+export const AuthUserSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+});
+export type AuthUser = z.infer<typeof AuthUserSchema>;
+
+/** `POST /auth/login` and `POST /auth/register` — token plus the user. */
+export const AuthSessionSchema = z.object({
+  access_token: z.string(),
+  user: AuthUserSchema,
+});
+export type AuthSession = z.infer<typeof AuthSessionSchema>;
+
+/** `POST /auth/refresh` — a fresh access token only (no user payload; the
+ *  caller decodes the JWT for identity). */
+export const TokenRefreshSchema = z.object({
+  access_token: z.string(),
+});
+export type TokenRefresh = z.infer<typeof TokenRefreshSchema>;

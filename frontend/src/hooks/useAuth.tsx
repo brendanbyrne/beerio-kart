@@ -11,6 +11,8 @@ import {
   setAccessToken,
   setOnAuthFailure,
 } from '../api/client';
+import { parseApiError, parseBody } from '../api/result';
+import { AuthSessionSchema, TokenRefreshSchema } from '../api/types';
 
 interface User {
   id: string;
@@ -45,18 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const res = await fetch('/api/v1/auth/refresh', { method: 'POST' });
         if (res.ok) {
-          const data = await res.json();
+          const data = await parseBody(TokenRefreshSchema, res);
           setAccessToken(data.access_token);
           // Decode the access token to get user info (the payload is the
           // middle segment, base64url-encoded). This avoids an extra API call.
           // JWT payloads use base64url encoding (- and _ instead of + and /),
           // but atob() only handles standard base64 — convert before decoding.
-          const base64 = data.access_token
-            .split('.')[1]
-            .replace(/-/g, '+')
-            .replace(/_/g, '/');
-          const payload = JSON.parse(atob(base64));
-          setUser({ id: payload.sub, username: payload.username });
+          const payloadSegment = data.access_token.split('.')[1];
+          if (payloadSegment) {
+            const base64 = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(atob(base64));
+            setUser({ id: payload.sub, username: payload.username });
+          }
         }
       } catch {
         // No valid refresh cookie — user needs to log in
@@ -76,9 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ username, password }),
     });
 
-    const data = await res.json();
-    if (!res.ok) return data.error || 'Login failed';
+    if (!res.ok) return (await parseApiError(res)).message;
 
+    const data = await parseBody(AuthSessionSchema, res);
     setAccessToken(data.access_token);
     setUser(data.user);
     return null;
@@ -92,9 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ username, password }),
     });
 
-    const data = await res.json();
-    if (!res.ok) return data.error || 'Registration failed';
+    if (!res.ok) return (await parseApiError(res)).message;
 
+    const data = await parseBody(AuthSessionSchema, res);
     setAccessToken(data.access_token);
     setUser(data.user);
     return null;
