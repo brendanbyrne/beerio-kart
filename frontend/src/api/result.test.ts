@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as z from 'zod';
 import { ZodError } from 'zod';
-import { ApiErrorException, parseApiError, parseBody } from './result';
+import {
+  ApiErrorException,
+  logIfResponseShapeMismatch,
+  parseApiError,
+  parseBody,
+} from './result';
 
 // Verifies the fetch-boundary helpers in result.ts. `Response` objects are
 // constructed directly — no MSW needed, since these functions operate on a
@@ -108,5 +113,37 @@ describe('ApiErrorException', () => {
       code: 'not_found',
       message: 'Resource is gone',
     });
+  });
+});
+
+describe('logIfResponseShapeMismatch', () => {
+  it('logs when the error is a response_shape_mismatch ApiErrorException', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    logIfResponseShapeMismatch(
+      new ApiErrorException({
+        code: 'response_shape_mismatch',
+        message: 'drift',
+      }),
+      'GET /thing',
+    );
+    expect(spy).toHaveBeenCalledOnce();
+    spy.mockRestore();
+  });
+
+  it('stays silent for a 4xx ApiErrorException', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    logIfResponseShapeMismatch(
+      new ApiErrorException({ code: 'not_found', message: 'gone' }),
+      'GET /thing',
+    );
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('stays silent for a network-style error', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    logIfResponseShapeMismatch(new TypeError('Failed to fetch'), 'GET /thing');
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

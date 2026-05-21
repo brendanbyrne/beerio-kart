@@ -1,8 +1,8 @@
 import * as z from 'zod';
 import { apiFetch } from './client';
-import { SessionIdSchema } from './brand';
 import { ApiErrorException, parseApiError, parseBody } from './result';
 import {
+  MySessionResponseSchema,
   RaceInfoSchema,
   SessionDetailSchema,
   SessionRaceInfoSchema,
@@ -26,17 +26,12 @@ import type {
 // (`null` / `[]`) keep returning it. Every helper accepts an optional
 // `AbortSignal` and threads it into `fetch` (typescript.md § 7).
 
-/** `GET /sessions/mine` returns just `{ session_id }` — a tiny local shape. */
-const mySessionSchema = z.object({
-  session_id: SessionIdSchema.nullable().optional(),
-});
-
 export async function getMySession(
   signal?: AbortSignal,
 ): Promise<SessionId | null> {
   const res = await apiFetch('/api/v1/sessions/mine', { signal });
   if (!res.ok) return null;
-  const data = await parseBody(mySessionSchema, res);
+  const data = await parseBody(MySessionResponseSchema, res);
   return data.session_id ?? null;
 }
 
