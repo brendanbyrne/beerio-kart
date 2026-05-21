@@ -12,7 +12,11 @@ import {
   setOnAuthFailure,
 } from '../api/client';
 import { parseApiError, parseBody } from '../api/result';
-import { AuthSessionSchema, TokenRefreshSchema } from '../api/types';
+import {
+  AccessTokenPayloadSchema,
+  AuthSessionSchema,
+  TokenRefreshSchema,
+} from '../api/types';
 
 interface User {
   id: string;
@@ -56,7 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const payloadSegment = data.access_token.split('.')[1];
           if (payloadSegment) {
             const base64 = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
-            const payload = JSON.parse(atob(base64));
+            const raw: unknown = JSON.parse(atob(base64));
+            const payload = AccessTokenPayloadSchema.parse(raw);
             setUser({ id: payload.sub, username: payload.username });
           }
         }

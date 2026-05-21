@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../api/client';
-import { parseBody } from '../api/result';
+import { logIfResponseShapeMismatch, parseBody } from '../api/result';
 import { UserDetailProfileSchema } from '../api/types';
 import type { UserDetailProfile } from '../api/types';
 
@@ -21,8 +21,8 @@ export function useUserProfile(userId: string | undefined) {
         const res = await apiFetch(`/api/v1/users/${userId}`);
         const data = await parseBody(UserDetailProfileSchema, res);
         setProfile(data);
-      } catch {
-        // Silently fail
+      } catch (e) {
+        logIfResponseShapeMismatch(e, 'GET /api/v1/users/:id');
       } finally {
         setLoading(false);
       }

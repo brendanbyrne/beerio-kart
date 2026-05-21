@@ -242,6 +242,12 @@ export const RaceInfoSchema = z.object({
 });
 export type RaceInfo = z.infer<typeof RaceInfoSchema>;
 
+/** `GET /sessions/mine` — the lone `{ session_id }` field. */
+export const MySessionResponseSchema = z.object({
+  session_id: SessionIdSchema.nullable().optional(),
+});
+export type MySessionResponse = z.infer<typeof MySessionResponseSchema>;
+
 export const SessionDetailSchema = z.object({
   id: SessionIdSchema,
   host_id: UserIdSchema,
@@ -321,3 +327,15 @@ export const TokenRefreshSchema = z.object({
   access_token: z.string(),
 });
 export type TokenRefresh = z.infer<typeof TokenRefreshSchema>;
+
+/**
+ * The decoded JWT access-token payload the frontend reads after a silent
+ * refresh (it does not verify the signature — api-contract.md § 5). `sub` is
+ * the user id, `username` the handle. Parsed through Zod like every other
+ * untyped boundary, since `JSON.parse(atob(...))` is `any`.
+ */
+export const AccessTokenPayloadSchema = z.object({
+  sub: z.string(),
+  username: z.string(),
+});
+export type AccessTokenPayload = z.infer<typeof AccessTokenPayloadSchema>;

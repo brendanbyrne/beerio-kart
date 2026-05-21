@@ -11,7 +11,7 @@
  * is truly expired and the user needs to log in again.
  */
 
-import { parseBody } from './result';
+import { logIfResponseShapeMismatch, parseBody } from './result';
 import { TokenRefreshSchema } from './types';
 
 let accessToken: string | null = null;
@@ -47,7 +47,11 @@ async function tryRefresh(): Promise<boolean> {
     const data = await parseBody(TokenRefreshSchema, res);
     accessToken = data.access_token;
     return true;
-  } catch {
+  } catch (e) {
+    // A malformed refresh response (valid 2xx, missing access_token) would
+    // otherwise look identical to "no refresh cookie" and silently log the
+    // user out, masking a backend bug — surface it (§ 8).
+    logIfResponseShapeMismatch(e, '/api/v1/auth/refresh');
     return false;
   }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as z from 'zod';
 import { apiFetch } from '../api/client';
-import { parseBody } from '../api/result';
+import { logIfResponseShapeMismatch, parseBody } from '../api/result';
 import { DrinkTypeSchema, SimpleItemSchema } from '../api/types';
 import type { DrinkType, SimpleItem } from '../api/types';
 
@@ -16,8 +16,9 @@ function useSimpleList(endpoint: string) {
         const res = await apiFetch(endpoint);
         const data = await parseBody(z.array(SimpleItemSchema), res);
         setItems(data);
-      } catch {
-        // Silently fail — items stay empty
+      } catch (e) {
+        // Network failures leave items empty; contract drift must stay visible.
+        logIfResponseShapeMismatch(e, endpoint);
       } finally {
         setLoading(false);
       }
@@ -59,8 +60,8 @@ export function useDrinkTypes() {
         const res = await apiFetch('/api/v1/drink-types');
         const data = await parseBody(z.array(DrinkTypeSchema), res);
         setItems(data);
-      } catch {
-        // Silently fail
+      } catch (e) {
+        logIfResponseShapeMismatch(e, '/api/v1/drink-types');
       } finally {
         setLoading(false);
       }

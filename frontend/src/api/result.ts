@@ -160,3 +160,24 @@ export async function parseBody<S extends z.ZodType>(
   }
   return parsed.data;
 }
+
+/**
+ * Log a swallowed error if — and only if — it's a `response_shape_mismatch`.
+ *
+ * The legacy `useEffect`-fetch hooks intentionally degrade to an empty result
+ * on a network failure, but § 8 says contract drift must stay visible. This
+ * lets those catch blocks keep their network-error behavior while surfacing a
+ * `parseBody` schema failure to the console. PR-C1 retires these call sites by
+ * moving the hooks to TanStack Query, which propagates errors to a boundary.
+ */
+export function logIfResponseShapeMismatch(
+  error: unknown,
+  context: string,
+): void {
+  if (
+    error instanceof ApiErrorException &&
+    error.apiError.code === 'response_shape_mismatch'
+  ) {
+    console.error(`Response shape mismatch: ${context}`, error);
+  }
+}
