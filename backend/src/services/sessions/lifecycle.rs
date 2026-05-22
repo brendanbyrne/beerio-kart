@@ -708,7 +708,7 @@ pub async fn close_stale_sessions(db: &DatabaseConnection) -> Result<u64, Error>
     // skipped pending race within the window all keep the session alive. With
     // the per-race timer gone from `get_pending_races`, the sweeper is the
     // sole gatekeeper for closing dormant sessions, so it honors all of them.
-    // Kept in lockstep with the ETag formula in `api-contract.md` § 4 — the
+    // Kept in lockstep with the ETag formula in `api-contract.md` § 3 — the
     // two share a maintenance contract.
     let stale_ids: Vec<String> = db_query(
         StaleSessionRow::find_by_statement(sea_orm::Statement::from_sql_and_values(
