@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { server } from '../mocks/server';
-import App from '../App';
+import { App } from '../App';
 
 // Smoke test for the app shell wired up in PR-C1 (Issue #176): the full
 // provider tree — QueryClientProvider → BrowserRouter → AuthProvider — must

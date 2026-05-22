@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { server } from '../mocks/server';
-import Home from './Home';
+import { Home } from './Home';
 
 // PR-C2 (Issue #186): creating a session must invalidate the membership and
 // session-list queries so the bottom-nav and Home list update without waiting

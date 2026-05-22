@@ -67,8 +67,8 @@ export default defineConfig([
       // consistent-type-definitions: ~25 `interface` declarations remain;
       //   api/types.ts is converted in PR-B1, prop types in later PRs.
       '@typescript-eslint/consistent-type-definitions': ['warn', 'type'],
-      // import/no-default-export: 11 default-export sites; flipped in PR-D1.
-      'import/no-default-export': 'warn',
+      // import/no-default-export: all default exports converted in PR-D1.
+      'import/no-default-export': 'error',
       // no-explicit-any / no-non-null-assertion: flipped to error in PR-F1.
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn',

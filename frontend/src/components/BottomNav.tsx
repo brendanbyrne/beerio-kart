@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getMySession } from '../api/sessions';
 
-export default function BottomNav() {
+export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 

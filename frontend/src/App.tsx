@@ -3,12 +3,12 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { createQueryClient } from './api/queryClient';
 import { AuthProvider, useAuth } from './hooks/useAuth';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Onboarding from './pages/Onboarding';
-import Home from './pages/Home';
-import Profile from './pages/Profile';
-import Session from './pages/Session';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
+import { Onboarding } from './pages/Onboarding';
+import { Home } from './pages/Home';
+import { Profile } from './pages/Profile';
+import { Session } from './pages/Session';
 
 // One QueryClient for the whole app, created at module scope so it survives
 // re-renders (a client recreated in render would drop the cache every time).
@@ -44,7 +44,7 @@ function GuestOnly({ children }: { children: React.ReactNode }) {
   return children;
 }
 
-function App() {
+export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -100,5 +100,3 @@ function App() {
     </QueryClientProvider>
   );
 }
-
-export default App;

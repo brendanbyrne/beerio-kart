@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import Login from './Login';
+import { Login } from './Login';
 
 // Login reads `login` from the auth context. Mock the hook so the test
 // exercises the form's behavior without a real AuthProvider or network.

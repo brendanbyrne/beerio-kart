@@ -11,7 +11,7 @@ interface DrinkTypeSelectorProps {
   onSkip?: () => void;
 }
 
-export default function DrinkTypeSelector({
+export function DrinkTypeSelector({
   selectedId,
   onSelect,
   onSkip,

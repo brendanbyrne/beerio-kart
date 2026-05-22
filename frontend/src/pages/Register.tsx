@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-export default function Register() {
+export function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');

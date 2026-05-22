@@ -14,8 +14,8 @@ import {
   useWheels,
   useGliders,
 } from '../hooks/useGameData';
-import DrinkTypeSelector from './DrinkTypeSelector';
-import RaceSetupPicker from './RaceSetupPicker';
+import { DrinkTypeSelector } from './DrinkTypeSelector';
+import { RaceSetupPicker } from './RaceSetupPicker';
 
 interface TimeFields {
   m: string;
@@ -31,7 +31,7 @@ interface RunEntrySheetProps {
   onSubmitted: () => void;
 }
 
-export default function RunEntrySheet({
+export function RunEntrySheet({
   race,
   onClose,
   onSubmitted,

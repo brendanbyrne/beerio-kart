@@ -31,7 +31,7 @@ const STEP_LABELS: Record<Step, string> = {
   glider: 'Glider',
 };
 
-export default function RaceSetupPicker({
+export function RaceSetupPicker({
   initialCharacterId,
   initialBodyId,
   initialWheelId,
