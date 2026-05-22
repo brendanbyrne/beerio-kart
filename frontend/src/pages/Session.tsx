@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { useSession } from '../hooks/useSession';
 import {
@@ -21,6 +22,19 @@ export default function Session() {
   const { user } = useAuth();
   const { session, loading, ended } = useSession(id!);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Invalidate the queries a membership/state change makes stale. Membership
+  // changes (join/leave) ripple into the bottom-nav and Home list as well as
+  // this session's detail; track changes only touch this session's detail.
+  const invalidateMembership = () => {
+    void queryClient.invalidateQueries({ queryKey: ['my-session'] });
+    void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    void queryClient.invalidateQueries({ queryKey: ['session', id!] });
+  };
+  const invalidateSession = () => {
+    void queryClient.invalidateQueries({ queryKey: ['session', id!] });
+  };
   const [leaving, setLeaving] = useState(false);
   const [joiningSession, setJoiningSession] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -36,6 +50,7 @@ export default function Session() {
     setLeaving(true);
     try {
       await leaveSession(id!);
+      invalidateMembership();
       navigate('/');
     } catch {
       setLeaving(false);
@@ -47,6 +62,7 @@ export default function Session() {
     setJoinError(null);
     try {
       await joinSession(id!);
+      invalidateMembership();
     } catch (e) {
       setJoinError(e instanceof Error ? e.message : 'Failed to join session');
       setJoiningSession(false);
@@ -58,6 +74,7 @@ export default function Session() {
     setTrackError(null);
     try {
       await nextTrack(id!);
+      invalidateSession();
     } catch (e) {
       setTrackError(e instanceof Error ? e.message : 'Failed to pick track');
     } finally {
@@ -70,6 +87,7 @@ export default function Session() {
     setTrackError(null);
     try {
       await skipTurn(id!);
+      invalidateSession();
     } catch (e) {
       setTrackError(e instanceof Error ? e.message : 'Failed to skip track');
     } finally {
@@ -422,7 +440,12 @@ export default function Session() {
         <RunEntrySheet
           race={currentRace}
           onClose={() => setShowRunEntry(false)}
-          onSubmitted={() => setShowRunEntry(false)}
+          onSubmitted={() => {
+            // The submitted run isn't in the cached session detail yet;
+            // invalidate so it shows up without waiting for the next poll.
+            invalidateSession();
+            setShowRunEntry(false);
+          }}
         />
       )}
     </div>

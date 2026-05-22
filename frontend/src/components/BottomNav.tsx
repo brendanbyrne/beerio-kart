@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getMySession } from '../api/sessions';
 
 export default function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [mySessionId, setMySessionId] = useState<string | null>(null);
 
-  // Re-check active session on navigation so the tab stays in sync
-  useEffect(() => {
-    getMySession().then(setMySessionId);
-  }, [location.pathname]);
+  // Shares the ['my-session'] key with useSessions, so the two dedupe to one
+  // fetch and the session mutations' invalidation keeps this tab in sync —
+  // replacing the old re-fetch-on-navigation useEffect (PR-C2).
+  const { data: mySessionId } = useQuery({
+    queryKey: ['my-session'],
+    queryFn: ({ signal }) => getMySession(signal),
+  });
 
   const sessionMatch = location.pathname.match(/^\/session\/(.+)$/);
   const sessionPath = sessionMatch

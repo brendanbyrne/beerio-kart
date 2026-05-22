@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type {
   SessionRaceInfo,
   CreateRunRequest,
@@ -40,13 +41,19 @@ export default function RunEntrySheet({
   const [lap2, setLap2] = useState<TimeFields>(emptyTime);
   const [lap3, setLap3] = useState<TimeFields>(emptyTime);
 
-  const [drinkTypeId, setDrinkTypeId] = useState<string | null>(null);
+  // Only the user's explicit picks live in state; the pre-fill defaults come
+  // from the query below and are layered in via `picked ?? default` so we never
+  // copy server data into state with a setState-in-effect (react.md § 6).
+  const [pickedDrinkTypeId, setPickedDrinkTypeId] = useState<string | null>(
+    null,
+  );
   const [drinkType, setDrinkType] = useState<DrinkType | null>(null);
-  const [characterId, setCharacterId] = useState<number | null>(null);
-  const [bodyId, setBodyId] = useState<number | null>(null);
-  const [wheelId, setWheelId] = useState<number | null>(null);
-  const [gliderId, setGliderId] = useState<number | null>(null);
-  const [defaultsSource, setDefaultsSource] = useState<string>('');
+  const [pickedCharacterId, setPickedCharacterId] = useState<number | null>(
+    null,
+  );
+  const [pickedBodyId, setPickedBodyId] = useState<number | null>(null);
+  const [pickedWheelId, setPickedWheelId] = useState<number | null>(null);
+  const [pickedGliderId, setPickedGliderId] = useState<number | null>(null);
 
   const [dq, setDq] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -69,27 +76,35 @@ export default function RunEntrySheet({
   const { items: wheels } = useWheels();
   const { items: gliders } = useGliders();
 
-  // Load defaults on mount
-  useEffect(() => {
-    void getRunDefaults().then((result) => {
-      // No defaults endpoint / a failure — leave every field blank, same
-      // end state as the old hardcoded `source: 'none'` fallback.
-      if (!result.ok) return;
-      const d = result.value;
-      setDrinkTypeId(d.drink_type_id);
-      setCharacterId(d.character_id);
-      setBodyId(d.body_id);
-      setWheelId(d.wheel_id);
-      setGliderId(d.glider_id);
-      setDefaultsSource(
-        d.source === 'previous_run'
-          ? 'From your last run'
-          : d.source === 'preferences'
-            ? 'From your preferences'
-            : '',
-      );
-    });
-  }, []);
+  // Fetch the pre-fill defaults via TanStack Query (PR-C2). `getRunDefaults`
+  // returns a `Result` rather than throwing, so the Result is the query's data
+  // and we keep the `result.ok` branch — degrade-to-blank on a failure, same
+  // end state as the old hardcoded `source: 'none'` fallback. `refetchOnMount:
+  // 'always'` makes each sheet open fetch fresh defaults (so the run you just
+  // submitted feeds the next one); `refetchOnWindowFocus: false` keeps a
+  // background refocus from changing the defaults mid-edit.
+  const { data: defaultsResult } = useQuery({
+    queryKey: ['run-defaults'],
+    queryFn: ({ signal }) => getRunDefaults(signal),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+  });
+
+  // The effective field values: the user's explicit pick wins, otherwise the
+  // server default, otherwise blank. No effect copies defaults into state.
+  const defaults = defaultsResult?.ok ? defaultsResult.value : null;
+  const drinkTypeId = pickedDrinkTypeId ?? defaults?.drink_type_id ?? null;
+  const characterId = pickedCharacterId ?? defaults?.character_id ?? null;
+  const bodyId = pickedBodyId ?? defaults?.body_id ?? null;
+  const wheelId = pickedWheelId ?? defaults?.wheel_id ?? null;
+  const gliderId = pickedGliderId ?? defaults?.glider_id ?? null;
+  const defaultsSource = !defaults
+    ? ''
+    : defaults.source === 'previous_run'
+      ? 'From your last run'
+      : defaults.source === 'preferences'
+        ? 'From your preferences'
+        : '';
 
   // Derive drink type object from ID + loaded data (or explicit user pick)
   const resolvedDrinkType = useMemo(() => {
@@ -412,7 +427,7 @@ export default function RunEntrySheet({
             <DrinkTypeSelector
               selectedId={drinkTypeId}
               onSelect={(dt: DrinkType) => {
-                setDrinkTypeId(dt.id);
+                setPickedDrinkTypeId(dt.id);
                 setDrinkType(dt);
                 setShowDrinkPicker(false);
               }}
@@ -440,10 +455,10 @@ export default function RunEntrySheet({
               initialWheelId={wheelId}
               initialGliderId={gliderId}
               onComplete={(setup) => {
-                setCharacterId(setup.characterId);
-                setBodyId(setup.bodyId);
-                setWheelId(setup.wheelId);
-                setGliderId(setup.gliderId);
+                setPickedCharacterId(setup.characterId);
+                setPickedBodyId(setup.bodyId);
+                setPickedWheelId(setup.wheelId);
+                setPickedGliderId(setup.gliderId);
                 setShowSetupPicker(false);
               }}
             />
