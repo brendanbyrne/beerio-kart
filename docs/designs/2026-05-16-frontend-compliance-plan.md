@@ -121,7 +121,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-B1 (brand types in place).
 - **Risk:** Medium. Parse failures are now loud — first run after merging may reveal previously-tolerated contract drift. That's the point. Fix it forward.
 - **Verification:** `bun run typecheck` passes. Every happy-path flow (login, session list, session detail, run submit, onboarding, profile edit) works. Forcing a backend response shape mismatch (e.g., temporarily rename a field) produces a clear Zod error, not a silent bug.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ---
 
