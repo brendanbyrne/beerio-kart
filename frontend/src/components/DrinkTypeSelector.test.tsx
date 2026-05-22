@@ -2,6 +2,8 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { server } from '../mocks/server';
 import DrinkTypeSelector from './DrinkTypeSelector';
 
@@ -9,6 +11,18 @@ import DrinkTypeSelector from './DrinkTypeSelector';
 // a submitted name either surfaces the backend's error message (failure) or
 // selects the freshly created type (success). MSW mocks the network at the
 // fetch boundary (react.md § 13).
+
+// useDrinkTypes is a TanStack Query hook (PR-C1), so the component needs a
+// QueryClientProvider. A fresh client per render isolates the cache; retry is
+// off so a failed POST settles immediately.
+function renderWithClient(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
 
 const water = {
   id: 'd1',
@@ -40,7 +54,7 @@ describe('DrinkTypeSelector add-drink flow', () => {
     );
     const onSelect = vi.fn();
     const user = userEvent.setup();
-    render(<DrinkTypeSelector onSelect={onSelect} />);
+    renderWithClient(<DrinkTypeSelector onSelect={onSelect} />);
 
     await openAddForm(user);
     await user.click(screen.getByRole('button', { name: /^add$/i }));
@@ -57,7 +71,7 @@ describe('DrinkTypeSelector add-drink flow', () => {
     );
     const onSelect = vi.fn();
     const user = userEvent.setup();
-    render(<DrinkTypeSelector onSelect={onSelect} />);
+    renderWithClient(<DrinkTypeSelector onSelect={onSelect} />);
 
     await openAddForm(user);
     await user.click(screen.getByRole('button', { name: /^add$/i }));
