@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 import { parseBody } from '../api/result';
 import { UserDetailProfileSchema } from '../api/types';
@@ -26,15 +26,16 @@ export function useUserProfile(userId: string | undefined): {
 
   const query = useQuery({
     queryKey: ['user-profile', userId],
-    queryFn: async ({ signal }) => {
-      // `enabled` guarantees this only runs with a defined id; the guard
-      // narrows the type and is defensive against a future caller that
-      // forgets the gate.
-      if (userId === undefined) throw new Error('userId is required');
-      const res = await apiFetch(`/api/v1/users/${userId}`, { signal });
-      return parseBody(UserDetailProfileSchema, res);
-    },
-    enabled: userId !== undefined,
+    // `skipToken` disables the query until an id is known (it stays pending,
+    // so `loading` is `true` and no request fires). In the populated branch
+    // TypeScript narrows `userId` to `string`, so the queryFn needs no guard.
+    queryFn:
+      userId === undefined
+        ? skipToken
+        : async ({ signal }) => {
+            const res = await apiFetch(`/api/v1/users/${userId}`, { signal });
+            return parseBody(UserDetailProfileSchema, res);
+          },
   });
 
   const refresh = useCallback(() => {

@@ -167,8 +167,11 @@ export async function parseBody<S extends z.ZodType>(
  * The legacy `useEffect`-fetch hooks intentionally degrade to an empty result
  * on a network failure, but § 8 says contract drift must stay visible. This
  * lets those catch blocks keep their network-error behavior while surfacing a
- * `parseBody` schema failure to the console. PR-C1 retires these call sites by
- * moving the hooks to TanStack Query, which propagates errors to a boundary.
+ * `parseBody` schema failure to the console. PR-C1 retired the per-hook call
+ * sites by moving the read hooks to TanStack Query; the cache's `onError`
+ * (see `api/queryClient.ts`) now routes every query error through this same
+ * helper, so drift stays loud while network errors stay quiet. Still called
+ * directly by `client.ts` for the silent auth-refresh path.
  */
 export function logIfResponseShapeMismatch(
   error: unknown,
