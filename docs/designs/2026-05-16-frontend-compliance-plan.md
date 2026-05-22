@@ -142,7 +142,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-B2 (typed responses).
 - **Risk:** Low. Drop-in for hooks whose external contract stays the same.
 - **Verification:** Every place that calls `useDrinkTypes`/`useUserProfile`/etc. still works. Devtools panel shows the queries.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ### PR-C2: TanStack Query migration of polling hooks
 
@@ -159,7 +159,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-C1.
 - **Risk:** Medium. Polling behavior change should be transparent if `refetchInterval` is tuned correctly; verify against a long-running session that you don't pile up requests in background tabs.
 - **Verification:** Open a session, switch tabs for 30 seconds, return — polling resumes without backfill spike. Submit a run on one device, confirm it appears on another within ~5 seconds. No `setState on unmounted component` warnings.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ---
 
