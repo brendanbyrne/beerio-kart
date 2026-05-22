@@ -16,6 +16,30 @@ import type { SessionRaceInfo } from '../api/types';
 // defaults populate the drink + setup, and a failed defaults request degrades
 // the fields to blank (same end state as the old `source: 'none'` fallback).
 
+// Stub RaceSetupPicker to a button that fires onComplete with a known setup —
+// its own multi-step flow is tested in its own file; here we only need the
+// completion signal to verify the user's pick overrides the default setup.
+vi.mock('./RaceSetupPicker', () => ({
+  default: ({
+    onComplete,
+  }: {
+    onComplete: (s: {
+      characterId: number;
+      bodyId: number;
+      wheelId: number;
+      gliderId: number;
+    }) => void;
+  }) => (
+    <button
+      onClick={() => {
+        onComplete({ characterId: 2, bodyId: 2, wheelId: 2, gliderId: 2 });
+      }}
+    >
+      complete-setup-stub
+    </button>
+  ),
+}));
+
 function Wrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -50,10 +74,24 @@ const water = {
   created_by: null,
   created_at: '2026-05-22T00:00:00.000Z',
 };
-const mario = { id: 1, name: 'Mario', image_path: 'characters/mario.png' };
-const body = { id: 1, name: 'Standard Kart', image_path: 'bodies/std.png' };
-const wheel = { id: 1, name: 'Standard Wheels', image_path: 'wheels/std.png' };
-const glider = { id: 1, name: 'Super Glider', image_path: 'gliders/std.png' };
+// Two of each list item (id 1 = the default, id 2 = the user's override) so
+// the rendered setup summary differs depending on which is selected.
+const characters = [
+  { id: 1, name: 'Mario', image_path: 'characters/mario.png' },
+  { id: 2, name: 'Luigi', image_path: 'characters/luigi.png' },
+];
+const bodies = [
+  { id: 1, name: 'Standard Kart', image_path: 'bodies/std.png' },
+  { id: 2, name: 'Pipe Frame', image_path: 'bodies/pipe.png' },
+];
+const wheels = [
+  { id: 1, name: 'Standard Wheels', image_path: 'wheels/std.png' },
+  { id: 2, name: 'Roller Wheels', image_path: 'wheels/roller.png' },
+];
+const gliders = [
+  { id: 1, name: 'Super Glider', image_path: 'gliders/std.png' },
+  { id: 2, name: 'Cloud Glider', image_path: 'gliders/cloud.png' },
+];
 
 /** Register MSW handlers for the game-data lists the sheet always loads. */
 function mockGameData(opts: { drinkTypes?: unknown[] } = {}) {
@@ -61,10 +99,10 @@ function mockGameData(opts: { drinkTypes?: unknown[] } = {}) {
     http.get('/api/v1/drink-types', () =>
       HttpResponse.json(opts.drinkTypes ?? [lager]),
     ),
-    http.get('/api/v1/characters', () => HttpResponse.json([mario])),
-    http.get('/api/v1/bodies', () => HttpResponse.json([body])),
-    http.get('/api/v1/wheels', () => HttpResponse.json([wheel])),
-    http.get('/api/v1/gliders', () => HttpResponse.json([glider])),
+    http.get('/api/v1/characters', () => HttpResponse.json(characters)),
+    http.get('/api/v1/bodies', () => HttpResponse.json(bodies)),
+    http.get('/api/v1/wheels', () => HttpResponse.json(wheels)),
+    http.get('/api/v1/gliders', () => HttpResponse.json(gliders)),
   );
 }
 
@@ -131,6 +169,43 @@ describe('RunEntrySheet', () => {
     );
 
     expect(await screen.findByText('Sparkling Water')).toBeInTheDocument();
+  });
+
+  it('lets the user override the default race setup', async () => {
+    mockGameData();
+    server.use(
+      http.get('/api/v1/runs/defaults', () =>
+        HttpResponse.json({
+          drink_type_id: 'd1',
+          character_id: 1,
+          body_id: 1,
+          wheel_id: 1,
+          glider_id: 1,
+          source: 'previous_run',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    render(
+      <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+
+    // Default setup summary (the id-1 items) shows first.
+    expect(
+      await screen.findByText(/Mario.*Standard Kart.*Standard Wheels/),
+    ).toBeInTheDocument();
+
+    // Open the setup picker and complete it with the id-2 setup; the pick wins.
+    await user.click(screen.getByRole('button', { name: /edit/i }));
+    await user.click(
+      await screen.findByRole('button', { name: /complete-setup-stub/i }),
+    );
+
+    expect(
+      await screen.findByText(/Luigi.*Pipe Frame.*Roller Wheels/),
+    ).toBeInTheDocument();
   });
 
   it('degrades to blank fields when the run-defaults request fails', async () => {

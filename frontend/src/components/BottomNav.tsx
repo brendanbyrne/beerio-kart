@@ -9,6 +9,13 @@ export default function BottomNav() {
   // Shares the ['my-session'] key with useSessions, so the two dedupe to one
   // fetch and the session mutations' invalidation keeps this tab in sync —
   // replacing the old re-fetch-on-navigation useEffect (PR-C2).
+  //
+  // Deliberately no refetchInterval here: on Home, useSessions polls this key
+  // at 5s; on Session/Profile this stays fresh via mount, local-mutation
+  // invalidation, and refetchOnWindowFocus (on by default). The old effect
+  // only re-fetched on navigation — never on a timer — so a sit-idle tab
+  // missing another participant's close is not a regression, and refocus
+  // covers it.
   const { data: mySessionId } = useQuery({
     queryKey: ['my-session'],
     queryFn: ({ signal }) => getMySession(signal),
