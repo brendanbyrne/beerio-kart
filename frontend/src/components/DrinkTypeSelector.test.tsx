@@ -1,0 +1,71 @@
+import { http, HttpResponse } from 'msw';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { server } from '../mocks/server';
+import DrinkTypeSelector from './DrinkTypeSelector';
+
+// Covers the "add a custom drink type" flow: the list loads from the API,
+// a submitted name either surfaces the backend's error message (failure) or
+// selects the freshly created type (success). MSW mocks the network at the
+// fetch boundary (react.md § 13).
+
+const water = {
+  id: 'd1',
+  name: 'Water',
+  alcoholic: false,
+  created_by: null,
+  created_at: '2026-05-18T00:00:00.000Z',
+};
+
+// The selector calls useDrinkTypes(), which GETs the list on mount. Default
+// it to a single existing type; individual tests override the POST.
+function mockList() {
+  server.use(http.get('/api/v1/drink-types', () => HttpResponse.json([water])));
+}
+
+async function openAddForm(user: ReturnType<typeof userEvent.setup>) {
+  // Wait out the hook's loading state, then reveal the add form.
+  await user.click(await screen.findByRole('button', { name: /add new/i }));
+  await user.type(screen.getByPlaceholderText(/drink name/i), 'Cider');
+}
+
+describe('DrinkTypeSelector add-drink flow', () => {
+  it('shows the backend error message when adding fails', async () => {
+    mockList();
+    server.use(
+      http.post('/api/v1/drink-types', () =>
+        HttpResponse.json({ error: 'Drink already exists' }, { status: 409 }),
+      ),
+    );
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<DrinkTypeSelector onSelect={onSelect} />);
+
+    await openAddForm(user);
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(await screen.findByText('Drink already exists')).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('selects the created drink type on success', async () => {
+    mockList();
+    const created = { ...water, id: 'd2', name: 'Cider', alcoholic: true };
+    server.use(
+      http.post('/api/v1/drink-types', () => HttpResponse.json(created)),
+    );
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<DrinkTypeSelector onSelect={onSelect} />);
+
+    await openAddForm(user);
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await vi.waitFor(() =>
+      expect(onSelect).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'd2', name: 'Cider' }),
+      ),
+    );
+  });
+});
