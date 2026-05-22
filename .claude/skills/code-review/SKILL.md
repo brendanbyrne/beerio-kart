@@ -190,7 +190,7 @@ For each standards file you loaded, walk its rules against the diff. Common high
 - **`rust.md`:** error handling shape (§ 1), type-driven design / newtypes (§ 2), `unwrap`/`expect` policy (§ 11), serde conventions on new DTOs (§ 14), doc comments on new public items (§ 6), file length (§ 13), Cargo deps (§ 15).
 - **`seaorm.md`:** N+1 queries (§ 2), transaction boundaries (§ 3), raw SQL parameterization (§ 10), `Option<Model>` not `unwrap`-ed (§ 7), `.all()` only when bounded (§ 2), set-based updates over fetch+save loops (§ 1), `before_save` for timestamps (§ 1), entity hand-edits (§ 6).
 - **`tokio.md`:** locks across `.await` (§ 3), `Send + 'static` requirements on spawned tasks (§ 9), blocking work on the runtime (§ 2), channel choice and bounding (§ 4), cancellation safety in `select!` (§ 6, § 7), timeouts on external calls (§ 12).
-- **`api-contract.md`:** wire format (snake_case JSON, ISO 8601 timestamps, error code field — § 2, § 6), idempotency keys on retry-vulnerable endpoints (§ 5), ETag on the polling endpoint (§ 3), versioning (§ 8).
+- **`api-contract.md`:** wire format (snake_case JSON, ISO 8601 timestamps, error code field — § 2, § 7), idempotency keys on retry-vulnerable endpoints (§ 5), ETag on the polling endpoint (§ 3), versioning (§ 8).
 
 **Cite the rule when you flag a finding.** Bad: "this should use a transaction." Good: "Per `seaorm.md` § 3, multi-write handlers must wrap in `db.transaction(...)` — this handler inserts into both `runs` and `run_flags` without one."
 
