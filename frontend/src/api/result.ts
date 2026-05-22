@@ -22,7 +22,7 @@ export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
 /**
  * Stable error `code` values. The first block mirrors the wire registry in
- * api-contract.md § 8 one-for-one — renaming a code there is a breaking wire
+ * api-contract.md § 7 one-for-one — renaming a code there is a breaking wire
  * change. The last two are client-synthesized:
  *  - `response_shape_mismatch` — a response parsed as JSON but failed its Zod
  *    schema (§ 8: contract drift, treated as a programmer error).
@@ -56,7 +56,7 @@ export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
 /**
  * The frontend's view of the backend error envelope (`{ error, code }`,
- * api-contract.md § 3). It discriminates on `code`: a `switch (err.code)`
+ * api-contract.md § 2). It discriminates on `code`: a `switch (err.code)`
  * narrows exhaustively against the closed `ApiErrorCode` set.
  *
  * Modeled as one shape rather than an expanded `{ code: 'a' } | { code: 'b' }`
