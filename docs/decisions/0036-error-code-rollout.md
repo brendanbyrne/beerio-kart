@@ -9,9 +9,9 @@ source: ad-hoc
 
 ## Context and problem statement
 
-`api-contract.md` § 3 has long specified that every error response carries
+`api-contract.md` § 2 has long specified that every error response carries
 both an `error` (human-readable) and a `code` (stable machine-readable)
-field. § 8 maintains a forward-looking registry of those codes. The
+field. § 7 maintains a forward-looking registry of those codes. The
 implementation, however, only ever emitted `{ "error": "..." }` — the
 `code` field was deferred from launch and never wired.
 
@@ -162,6 +162,6 @@ Option C threads the needle:
 - Implementing PR: [#158](https://github.com/brendanbyrne/beerio-kart/pull/158).
 - Closed Issues: [#146](https://github.com/brendanbyrne/beerio-kart/issues/146)
   (typed-Path-extractor 400s, subsumed by #157), [#157](https://github.com/brendanbyrne/beerio-kart/issues/157).
-- Standards refs: [`api-contract.md` § 3](../api-contract.md#3-error-response-contract),
-  [§ 8](../api-contract.md#8-error-code-registry),
+- Standards refs: [`api-contract.md` § 2](../api-contract.md#2-error-response-contract),
+  [§ 7](../api-contract.md#7-error-code-registry),
   [`design.md` Error response pattern](../design.md#error-response-pattern).

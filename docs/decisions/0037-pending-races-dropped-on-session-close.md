@@ -109,7 +109,7 @@ WHERE sessions.status = 'active'
                     AND srp.skipped_at >= NOW() - INTERVAL 1 HOUR)
 ```
 
-Five `NOT EXISTS` clauses, one per meaningful activity table. Each hits an indexed column; performance is fine at our scale. The predicate enumerates the same activity signals the ETag formula in `api-contract.md` § 4 uses — "what counts as 'something happened in this session.'" The two formulas should be kept in lockstep going forward; adding a new activity-producing endpoint means adding inputs to both.
+Five `NOT EXISTS` clauses, one per meaningful activity table. Each hits an indexed column; performance is fine at our scale. The predicate enumerates the same activity signals the ETag formula in `api-contract.md` § 3 uses — "what counts as 'something happened in this session.'" The two formulas should be kept in lockstep going forward; adding a new activity-producing endpoint means adding inputs to both.
 
 **Per-(race, user) status enum** (derived; not stored as such). These four states apply only to `(race, user)` pairs where a `session_race_participations` row exists — i.e., where the user was present at race creation. A user who joined the session *after* a race was created has no row for that race; none of the four states apply to them and the race simply doesn't appear in their experience.
 
@@ -126,7 +126,7 @@ Mutually exclusive in practice. `unraced` is the current "pending" state; rename
 
 - `docs/data-model.md` — `session_race_participations` table gets the `dropped_at` column; the Pending Race Tracking derivation simplifies to four clauses (drops the per-race expiry and the session-status filter); the four-state status enum gets a brief explanation with the eligibility prerequisite called out above the table; the Session Participants notes get the narrower rejoin-while-session-alive rule; the Sessions auto-close note updates to reflect the wider sweeper predicate.
 - `docs/user-workflows.md` § 1.5 — replace the rejoin-within-the-hour copy with "races stay submittable while the session is active. If you leave with pending races, you can rejoin as long as someone else is still in the session. If everyone leaves, the session ends and pending races are dropped — you'll see a notification next time you visit."
-- `docs/api-contract.md` § 4 — drop the 60-second time bucket from the ETag formula. With the per-race expiry gone, no time-based predicate ages a row out of the pending list without a corresponding data change, so the bucket no longer earns its keep. Six derived inputs, no time bucket.
+- `docs/api-contract.md` § 3 — drop the 60-second time bucket from the ETag formula. With the per-race expiry gone, no time-based predicate ages a row out of the pending list without a corresponding data change, so the bucket no longer earns its keep. Six derived inputs, no time bucket.
 - `docs/decisions/0035-race-anchored-session-lifetime.md` — add a `Links` note pointing at 0037 as the narrowing decision. ADR-0035 stays accepted; this ADR is the refinement.
 
 - [x] Approved
@@ -147,7 +147,7 @@ Mutually exclusive in practice. `unraced` is the current "pending" state; rename
 - **Solo-player limitation.** A player racing alone cannot leave-and-come-back; tapping Leave is automatically the last leave, which closes the session and drops their pending. Acceptable trade-off but worth flagging in the leave-confirmation copy if we ever notice solo-flow friction.
 - **Out-of-band coordination required** for leave-and-come-back in multi-player sessions. "Hey, don't leave yet, I want to come back" is a real-world ask. Acceptable for a friend-group app in voice/chat/same-room context.
 - **Submission window is no longer per-race.** A run submitted 4 hours after the race was created is fine, as long as the session has been continuously active in between. The "1-hour-per-race" framing goes away entirely in favor of "the session is the deadline." Easier to communicate; loses the (mostly cosmetic) per-race time pressure. Cherry-picking concern is still bounded by the ordered-submit guard in `create_run` and by the session's own lifetime.
-- **Sweeper predicate is more SQL** — five `NOT EXISTS` clauses vs. one. Each clause hits an indexed column, so performance is fine. The complexity is honest: it enumerates every signal that means "something is happening in this session." Same shape as the ETag formula in `api-contract.md` § 4. The two formulas now share a maintenance contract — adding a new activity-producing endpoint means adding inputs to both.
+- **Sweeper predicate is more SQL** — five `NOT EXISTS` clauses vs. one. Each clause hits an indexed column, so performance is fine. The complexity is honest: it enumerates every signal that means "something is happening in this session." Same shape as the ETag formula in `api-contract.md` § 3. The two formulas now share a maintenance contract — adding a new activity-producing endpoint means adding inputs to both.
 - **Closing a session now does more work** (one extra UPDATE on `session_race_participations` + one INSERT per affected user into `notifications`). Still O(participants), bounded by the session size; not a perf concern at friend-group scale.
 
 - [x] Approved
@@ -162,7 +162,7 @@ Suggested PR split:
 1. **Schema + entity** — add `dropped_at` to the migration and the entity. Cohabits cleanly with the existing nullable `skipped_at`.
 2. **Service code + simplifications** — add `close_session_and_drop_pending` helper; wire into `transfer_host_or_close` and `close_stale_sessions`; simplify `get_pending_races` (drop the per-race expiry and session-status clauses); extend the sweeper predicate to the five-clause activity check.
 3. **Notification consumer** — wire the `record_pending_drops` call into the close transaction. Depends on ADR-0038's notification surface being in place.
-4. **Docs** — `data-model.md`, `user-workflows.md` § 1.5, `api-contract.md` § 4 (drop the ETag time bucket), ADR-0035 cross-link.
+4. **Docs** — `data-model.md`, `user-workflows.md` § 1.5, `api-contract.md` § 3 (drop the ETag time bucket), ADR-0035 cross-link.
 
 Steps 1–2 can land together. Step 3 ships once ADR-0038's notifications module exists; this ADR can technically land *without* step 3, in which case drops are silent — undesirable for UX but mechanically correct. The natural form is one combined PR for steps 1–3 once ADR-0038 is signed off and its skeleton is in place.
 

@@ -113,7 +113,7 @@ The PRs below address every line item.
   - Brand-mint inside the schema via `.transform((s) => s as UserId)` etc., replacing the at-the-call-site brand casts from PR-B1.
   - Replace `await res.json() as Foo` with `Schema.parse(await res.json())` in `api/sessions.ts`, `api/runs.ts`, `api/client.ts`, and the direct `apiFetch` calls in `useAuth.tsx`, `useGameData.ts`, `useUserProfile.ts`, `DrinkTypeSelector.tsx`, `Onboarding.tsx`, `Profile.tsx`.
   - Introduce a `Result<T, ApiError>` type in `src/api/result.ts` (per `typescript.md` § 6).
-  - Define `ApiError` as a discriminated union on `code` values from `api-contract.md` § 8.
+  - Define `ApiError` as a discriminated union on `code` values from `api-contract.md` § 7.
   - Update `getRunDefaults` to return `Result` instead of a silent-fallback hardcoded value.
   - Add `AbortSignal` parameter to every API helper and thread it into `fetch`.
 - **Standards refs:** `typescript.md` § 6, § 7, § 8.

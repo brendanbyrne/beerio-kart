@@ -257,4 +257,5 @@ Each section above carries its own approval checkbox. Once all are checked:
 - Source: ad-hoc (Cowork chat discussion, 2026-05-16)
 - Companion: [ADR-0037](./0037-pending-races-dropped-on-session-close.md) — the first consumer of this system; ships in parallel.
 - Related ADRs: 0018 (polling, not WebSockets — confirms the delivery pattern), 0028 (TEXT timestamps — JSON payload follows the same shape), 0031 (auth — `/me` scoping), 0032 (cursor pagination — applied to `GET /me/notifications`).
+- Partially superseded by: [ADR-0039](./0039-api-client-generation.md) — the "Frontend type agreement" subsection above named `ts-rs`/`typeshare` as the leading codegen candidates and used "10–15 hand-maintained interfaces" as the revisit trigger. Both are superseded: the candidates failed on the `nutype` newtype convention (see ADR 0039's analysis), and the trigger has been reframed from interface count to "Zod-maintenance friction" with `schemars + json-schema-to-zod + brand-mint overlay` as the at-threshold path. The "hand-write notification types for MVP" decision itself stands.
 - Implementing PRs: <to fill in>

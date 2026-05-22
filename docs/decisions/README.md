@@ -55,7 +55,7 @@ See `template.md` for the starting point. Files are named `NNNN-kebab-case-title
 | [0036](0036-error-code-rollout.md) | Error code rollout shape | accepted | 2026-05-15 |
 | [0037](0037-pending-races-dropped-on-session-close.md) | Pending races dropped on session close | accepted | 2026-05-16 |
 | [0038](0038-notifications-system.md) | Notifications system | accepted | 2026-05-16 |
-| [0036](0036-error-code-rollout.md) | Error code rollout shape: `ErrorCode` enum + hybrid helper API | accepted | 2026-05-15 |
+| [0039](0039-api-client-generation.md) | API client generation: hand-rolled with Zod, codegen at threshold | accepted | 2026-05-21 |
 
 ## Adding a new ADR
 

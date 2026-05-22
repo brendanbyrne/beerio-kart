@@ -89,7 +89,7 @@ All route handlers return `Result<impl IntoResponse, error::Error>` where `error
 The variants with multiple possible codes (`BadRequest`, `Unauthorized`, `Forbidden`, `Conflict`) carry the [`ErrorCode`](../backend/src/error.rs) explicitly in a `code` field. Variants pinned to a single code derive theirs from `Error::code()`.
 
 **Key behaviors:**
-- Every error response emits both an `error` (human-readable) and a `code` (stable machine-readable) field in the JSON body. The `code` strings mirror the [api-contract.md § 8 registry](./api-contract.md#8-error-code-registry) one-to-one; the [`ErrorCode`](../backend/src/error.rs) enum is the source of truth. Wire-format design rationale lives in [ADR 0036](./decisions/0036-error-code-rollout.md).
+- Every error response emits both an `error` (human-readable) and a `code` (stable machine-readable) field in the JSON body. The `code` strings mirror the [api-contract.md § 7 registry](./api-contract.md#7-error-code-registry) one-to-one; the [`ErrorCode`](../backend/src/error.rs) enum is the source of truth. Wire-format design rationale lives in [ADR 0036](./decisions/0036-error-code-rollout.md).
 - The 500-class variants (`Internal`, `Token`, `Hash`) log the real error chain via `tracing::error!` (walking `error.source()`) but return a generic message to the client — internal details are never exposed.
 - `Internal` wraps an `anyhow::Error` (via `#[from]`). Construct source-bearing internals as `anyhow::Error::new(e).context("Loading user")` and synthetic ones (invariant violations, missing seed data) as `anyhow::anyhow!("Cup not found for cup_id {id}")`. The `.context(...)` static-string layer answers *what we were doing*; the wrapped source's `Display` answers *what failed concretely*. The boundary log walks the full chain. Per `coding-standards/rust.md` § 1, error-message strings start with a capital letter and have no trailing punctuation.
 - `Token` and `Hash` are typed wrappers (with `#[from]`) around `jsonwebtoken::errors::Error` and `argon2::password_hash::Error` respectively, so `?` works directly on token operations and password hashing. The wrapped error is reachable via `error.source()` so the boundary log captures the underlying detail.
@@ -133,7 +133,7 @@ See [`user-workflows.md`](./user-workflows.md) § 1.
 
 ## API Surface
 
-See [`api-contract.md`](./api-contract.md) § 1 (endpoint catalog) and §§ 2–10 (wire-format conventions).
+See [`api-contract.md`](./api-contract.md) § 1 (endpoint catalog) and §§ 2–9 (wire-format conventions).
 
 ## UI Screens (Mobile-First)
 

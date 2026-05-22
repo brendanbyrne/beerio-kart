@@ -126,25 +126,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 
 ---
 
-## 2. API client generation
-
-- **Decision:** The backend emits an OpenAPI 3.x spec from `utoipa` annotations on every route handler. The frontend consumes a generated TypeScript client (`openapi-typescript-codegen` or `openapi-fetch`) — no hand-rolled `fetch` wrappers per endpoint.
-- **Why:** § 1 lists ~40 endpoints. Hand-rolling a typed client and keeping it in sync with `error::Error`'s shape, request/response DTOs, and query-parameter quirks is a part-time job. With `utoipa`, the spec is derived from the same Rust types that handlers already use, so drift is impossible by construction. The cost is ~5 lines of `#[utoipa::path(...)]` per handler — cheap if added as routes are written, painful to retrofit.
-- **Implementation:**
-  - Add `utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }` and `utoipa-axum = "0.2"` to `backend/Cargo.toml`.
-  - Each route handler gets a `#[utoipa::path(...)]` attribute describing method, path, request body, responses, and tags.
-  - All request DTOs and response DTOs derive `utoipa::ToSchema`.
-  - `main.rs` exposes the spec at `/api/v1/openapi.json` (and optionally Swagger UI at `/api/v1/docs` in dev mode only).
-  - Frontend (when it lands) runs a Bun script in CI to regenerate the client from `/api/v1/openapi.json` and commits the diff.
-- **Trade-offs considered:**
-  - **`utoipa` vs. `apistos` vs. `aide`:** `utoipa` has the largest ecosystem and the cleanest Axum integration via `utoipa-axum`. `aide` is also good but its DSL is more invasive.
-  - **`openapi-typescript-codegen` vs. `openapi-fetch`:** `openapi-fetch` is smaller (no class hierarchy) and uses TypeScript's type system for path parameters at the call site. Recommend `openapi-fetch`.
-  - **Hand-rolled:** Considered and rejected — fine for 5 endpoints, untenable past 15.
-- **Source:** <https://docs.rs/utoipa>, <https://docs.rs/utoipa-axum>, <https://github.com/openapi-ts/openapi-typescript>
-
----
-
-## 3. Error response contract
+## 2. Error response contract
 
 - **Decision:** Error responses include both an HTTP status code and a stable machine-readable `code` field. Shape:
   ```json
@@ -160,7 +142,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 
 ---
 
-## 4. Polling & conditional GETs
+## 3. Polling & conditional GETs
 
 - **Decision:** `GET /sessions/:id` (the polling endpoint, called every 2–3s per § 1.5) supports `ETag` / `If-None-Match`. The backend computes a strong ETag from session state; clients sending `If-None-Match: <etag>` get `304 Not Modified` with an empty body when nothing's changed.
 - **Why:** Without conditional GETs, every poll transfers the full session state — participants, races, submission status, pending lists. With ~10 active users polling a multi-participant session every 2s, that's a lot of redundant JSON. A 304 response is dozens of bytes. On mobile, the bandwidth and battery savings are real; on the server, the CPU savings are smaller but real.
@@ -186,7 +168,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 
 ---
 
-## 5. Auth refresh flow
+## 4. Auth refresh flow
 
 - **Decision:** Access tokens carry their expiry visibly so the frontend can refresh *proactively* (~30s before expiry) rather than *reactively* (after a 401). The decoded JWT already includes `exp`; the frontend reads it from the access token after login/refresh. No backend change needed beyond what already exists.
 - **Why:** Reactive-only refresh produces user-visible jank: a request fails with 401, the interceptor refreshes, the request retries. For a polling app where multiple requests are in flight at all times, you can hit the 401 storm pattern (10 requests fail simultaneously, all trigger refresh, race conditions, retries multiply). Proactive refresh — single timer that fires before expiry — eliminates the storm.
@@ -200,7 +182,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 
 ---
 
-## 6. Idempotency keys
+## 5. Idempotency keys
 
 - **Decision:** Mutating endpoints that are vulnerable to retry storms accept an `Idempotency-Key` request header. The backend keys deduplication on `(user_id, endpoint, idempotency_key)` and returns the original response on a duplicate. Initial scope: `POST /runs`, `POST /sessions/:id/next-track`, `POST /sessions/:id/choose-track`.
 - **Why:** Issue [#75](https://github.com/brendanbyrne/beerio-kart/issues/75) tracks the canonical case — the double-tap on `next-track` hits the `UNIQUE(session_id, race_number)` constraint and returns 500. On mobile networks, retries from the frontend (timeout, network drop) are routine; without idempotency keys, a successfully-processed request whose response was lost on the network gets duplicated when the client retries.
@@ -217,7 +199,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 
 ---
 
-## 7. Time format
+## 6. Time format
 
 - **Decision:** All timestamps cross the wire as **ISO 8601 with explicit UTC offset** — `"2026-05-02T14:32:11.123Z"` (RFC 3339 subset, with the literal `Z`, including milliseconds). Frontend parses with `new Date(...)` (which handles ISO 8601 natively) and formats locally for display.
 - **Why:** Storing as TEXT in SQLite (per [`data-model.md`](./data-model.md)) means the on-the-wire format is a serialization choice, not a constraint. ISO 8601 / RFC 3339 is unambiguous, sortable as text, supported by every JSON library on both sides, and human-readable for debugging. Epoch seconds and epoch milliseconds are both popular but lose timezone information at the type level (you have to remember which one you're looking at) and aren't human-readable.
@@ -233,7 +215,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 
 ---
 
-## 8. Error code registry
+## 7. Error code registry
 
 The list of stable `code` values returned in error responses. Add to this list when a new error case is introduced.
 
@@ -261,7 +243,7 @@ The list of stable `code` values returned in error responses. Add to this list w
 
 ---
 
-## 9. Versioning
+## 8. Versioning
 
 - **Decision:** Path-based versioning (`/api/v1/...`) — already in § 1. A breaking change ships as `/api/v2/...`; the v1 endpoints continue to serve until all clients have migrated.
 - **Why:** Restated here so it doesn't get lost. The cost of v2 alongside v1 is low for an internal app — the duplication is mostly a thin layer that translates to the v2-internal types.
@@ -271,7 +253,7 @@ The list of stable `code` values returned in error responses. Add to this list w
 
 ---
 
-## 10. CORS
+## 9. CORS
 
 - **Decision:** Same-origin in production (Axum serves the frontend bundle, per [`design.md`](./design.md) § Tech Stack). No CORS middleware in the production binary. In dev mode (Vite dev server on a different port), enable a permissive CORS layer scoped to the dev origin.
 - **Why:** Same-origin avoids the entire CORS surface area and removes preflight latency from every non-trivial request. The dev-only loosening is needed because Vite serves on `:5173` while the API runs on `:3000`.
@@ -282,7 +264,7 @@ The list of stable `code` values returned in error responses. Add to this list w
 
 ---
 
-## 11. Document history
+## 10. Document history
 
 - 2026-05-02 — Initial draft. Sets API client generation, error code contract, polling/ETag, refresh flow, idempotency, time format, error code registry, versioning, CORS. The first six (API client generation through Time format) are the "decide before the backend gets much further" set; the rest (Error code registry, Versioning, CORS) are clarifications of decisions that were already made or implied. To be revisited when the frontend work starts.
 - 2026-05-02 — Added prelaunch carve-out to the Versioning section: while prelaunch, breaking changes ship in `/api/v1` directly rather than spinning up a v2 path. Mirrors the "launch" definition in `seaorm.md` § 5.
@@ -291,3 +273,4 @@ The list of stable `code` values returned in error responses. Add to this list w
 - 2026-05-15 — § 8 error code registry: added `504 | gateway_timeout` for the per-call DB timeout path introduced in PR-F4. The `code` field is deferred per § 3, so this isn't a wire-contract change today — the registry already documents codes ahead of implementation (e.g., `lap_times_mismatch`), and adding this row avoids drift when the `code` field eventually lands. PR [#155](https://github.com/brendanbyrne/beerio-kart/pull/155).
 - 2026-05-15 — `code` field rollout (#157). § 3 rewritten: dropped the speculative `Implementation:` block (the codebase shape is now real); references to "deferred" replaced with the actually-emitted shape; pointer to ADR 0036 added for the design rationale. § 8 grew two rows for the path/json extractor failures (`invalid_path_param`, `invalid_request_body`) added by the custom extractors that closed #146 as part of #157. The `code` field is now emitted on every error response.
 - 2026-05-16 — ADR-0037 + ADR-0038. New § 1.8 Notifications endpoint group (`GET /me/notifications`, `GET /me/notifications/unread-count`, `POST /me/notifications/read-all`); Admin renumbered 1.8 → 1.9. § 4 ETag formula dropped from seven inputs to six — the `FLOOR(NOW() / 60)` time bucket is removed now that ADR-0037 deleted the per-race expiry timer (no time-based predicate silently ages a pending row out anymore). § 1.5 `POST /sessions/:id/leave` description updated: leaving as the last participant closes the session and drops unresolved pending races. Issues [#58](https://github.com/brendanbyrne/beerio-kart/issues/58), [#164](https://github.com/brendanbyrne/beerio-kart/issues/164).
+- 2026-05-21 — Deleted § 2 "API client generation" (an aspirational `utoipa` + `openapi-fetch` plan from the 2026-05-02 initial draft, never implemented; the actual frontend is hand-rolled per-endpoint with Zod schemas at the boundary, per [`coding-standards/typescript.md`](./coding-standards/typescript.md) § 8 and PR-B2 / Issue [#191](https://github.com/brendanbyrne/beerio-kart/issues/191)). Renumbered the remaining sections: previous §§ 3–11 are now §§ 2–10 (Error response contract through Document history). The decision now lives in [ADR-0039](./decisions/0039-api-client-generation.md), which captures both the current hand-rolled state and the at-threshold codegen path (`schemars` + [`json-schema-to-zod`](https://www.npmjs.com/package/json-schema-to-zod) + brand-mint overlay). Cross-references swept across `design.md`, `coding-standards/typescript.md`, `research/rust-to-ts-codegen.md`, `decisions/0036-error-code-rollout.md`, `decisions/0037-pending-races-dropped-on-session-close.md`, `designs/2026-05-16-frontend-compliance-plan.md`, `backend/CLAUDE.md`, and `frontend/CLAUDE.md`. Code-file and `.claude/skills/` cross-references handed off to Claude Code via `.agents/handoffs/claude-code.md` (Cowork's sandbox blocks `.claude/` writes and is a docs-only assistant for `.rs`/`.ts` files).

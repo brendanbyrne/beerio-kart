@@ -198,14 +198,14 @@ The structural type system has no built-in way to say "`SessionId` and `UserId` 
 The split mirrors the backend's: *expected* failures are values, *unexpected* failures throw and are caught at the boundary.
 
 - **Rule:** Use a small `Result<T, E>` shape for *expected* domain failures returned from API helpers — validation rejections, 4xx responses, parse errors. Use `throw` for *unexpected* failures (network down, 5xx, programmer error) and catch them at an error boundary (see [`react.md`](./react.md) § Error boundaries).
-  - **Why:** Results make handleable failure visible in the signature — you can't forget to handle a domain error. But wrapping every fetch in Result is noisy; for *exceptional* paths, `throw` + boundary is simpler. The error-code envelope from `api-contract.md` § 8 is the natural shape for the `E` side of `Result`.
+  - **Why:** Results make handleable failure visible in the signature — you can't forget to handle a domain error. But wrapping every fetch in Result is noisy; for *exceptional* paths, `throw` + boundary is simpler. The error-code envelope from `api-contract.md` § 7 is the natural shape for the `E` side of `Result`.
   - **Example:**
     ```ts
     export type Result<T, E> =
       | { ok: true; value: T }
       | { ok: false; error: E };
 
-    // The backend already emits `{ error, code }` per api-contract.md § 8.
+    // The backend already emits `{ error, code }` per api-contract.md § 7.
     // ApiError is a discriminated union on the registry's code values:
     export type ApiError =
       | { code: 'invalid_credentials'; message: string }
@@ -368,11 +368,11 @@ Each row in this table maps to an ESLint rule listed in § 9.
 - **Rule:** Discriminator field is `kind` to match the backend's `#[serde(tag = "kind")]` convention.
   - **Why:** Zero translation logic at the parse step. Already in use for `NotificationPayload`; extend to every other tagged enum.
 
-- **Rule:** Error envelope is `{ error: string, code: ErrorCode }` per `api-contract.md` § 8. The TS `ApiError` union derives its `code` values directly from the registry; treat additions to the registry as a frontend breaking change that requires updating the union.
+- **Rule:** Error envelope is `{ error: string, code: ErrorCode }` per `api-contract.md` § 7. The TS `ApiError` union derives its `code` values directly from the registry; treat additions to the registry as a frontend breaking change that requires updating the union.
   - **Why:** The `code` is the machine-readable contract; relying on `error` text for branching is the anti-pattern the registry exists to eliminate.
 
-- **Rule:** Type-sync between Rust DTOs and TS DTOs is currently hand-maintained, with `frontend/src/api/types.ts` as the mirror. CI does not yet enforce drift detection. See `../research/rust-to-ts-codegen.md` for the evaluation of automated options (typeshare, ts-rs, specta, schemars, utoipa) — the recommendation as of 2026-05-16 is to stay hand-rolled until DTO count crosses ~30 types, then adopt `schemars` + `json-schema-to-typescript` (which is the only path that natively understands our `nutype` newtypes).
-  - **Why:** Every tool that parses Rust source directly (typeshare, ts-rs, specta) fails on `nutype`-generated structs because `nutype` rewrites the struct during macro expansion. `schemars` works because `nutype` has a first-class `schemars08` feature flag. Hand-rolling preserves optionality and keeps the contract legible to both Cowork and Claude Code in the meantime.
+- **Rule:** Type-sync between Rust DTOs and TS DTOs is currently hand-maintained, with the Zod schemas (per § 8) as the source of truth and TS types derived via `z.infer<typeof Schema>`. CI does not yet enforce drift detection. The full decision — current state, options considered, adoption trigger — lives in [ADR 0039](../decisions/0039-api-client-generation.md); the tool evaluation it draws from is [`../research/rust-to-ts-codegen.md`](../research/rust-to-ts-codegen.md) (typeshare, ts-rs, specta, schemars, utoipa). The at-threshold path is `schemars` + [`json-schema-to-zod`](https://www.npmjs.com/package/json-schema-to-zod) + a thin brand-mint overlay (generates the runtime Zod schemas, with [`frontend/src/api/brand.ts`](../../frontend/src/api/brand.ts) swapping in the branded `*IdSchema` for ID fields). The trigger is "Zod-maintenance friction," with DTO count (~30) as a proxy.
+  - **Why:** Every tool that parses Rust source directly (typeshare, ts-rs, specta) fails on `nutype`-generated structs because `nutype` rewrites the struct during macro expansion. `schemars` works because `nutype` has a first-class `schemars08` feature flag. Targeting Zod schemas (rather than static TS types) means the generated artifact replaces hand-written work instead of sitting alongside it. Hand-rolling for now preserves optionality and keeps the contract legible to both Cowork and Claude Code.
 
 ## 12. Testing
 
@@ -423,3 +423,4 @@ Tests are a deliverable, not optional. The frontend follows the same principle a
 
 - 2026-05-16 — Initial creation. Sourced from research conducted 2026-05-16 (TypeScript 5.9, ESLint 9, React 19.2 baselines). Companion files: `react.md`, `tailwind.md`, both created same day. Compliance plan: `../designs/2026-05-16-frontend-compliance-plan.md`. Type-sync research: `../research/rust-to-ts-codegen.md`.
 - 2026-05-18 — Added § 12 Testing. Mirrors the policy in `backend/CLAUDE.md` § Testing and the patterns in `rust.md` § 7. Surfaced during the compliance-Issue filing — the audit had flagged "no tests" as a notable gap outside standards scope; promoting it into the standards closes that gap. Companion update: `react.md` § 13 (React-specific testing); `frontend/CLAUDE.md` § Testing (policy block); compliance plan re-sequences PR-H2 (Vitest scaffolding) from optional to required and bumps it ahead of the runtime-behavior PRs.
+- 2026-05-21 — Updated the `api-contract.md` cross-references in § 6 (§ 8 → § 7, error-code registry) after `api-contract.md` § 2 (API client generation) was deleted and §§ 3–11 renumbered to §§ 2–10. Rewrote the § 11 type-sync rule to point at the new [ADR 0039](../decisions/0039-api-client-generation.md) as the authoritative decision (current hand-rolled-with-Zod state, options, adoption trigger), with `../research/rust-to-ts-codegen.md` as the tool evaluation it draws from; named `schemars` + `json-schema-to-zod` + a brand-mint overlay as the at-threshold path. Companion to ADR 0039 and the `api-contract.md` renumber.

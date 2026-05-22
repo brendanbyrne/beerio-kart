@@ -18,7 +18,7 @@ For deep conventions, read these once and refer back when relevant:
 - [`docs/coding-standards/react.md`](../docs/coding-standards/react.md) — React 19 patterns: component shape, hooks, data fetching (TanStack Query), forms (`useActionState`), error boundaries, accessibility, routing, file organization.
 - [`docs/coding-standards/tailwind.md`](../docs/coding-standards/tailwind.md) — Tailwind v4 styling: utility-first, mobile-first, CSS-first `@theme`, `clsx` for conditional classes, touch targets, Firefox/Safari quirks.
 - [`docs/user-workflows.md`](../docs/user-workflows.md) — end-user flows and screen-by-screen UI breakdown. Match what's specified there before introducing new UI patterns.
-- [`docs/api-contract.md`](../docs/api-contract.md) — endpoint catalog (§ 1) and wire-format conventions. The frontend consumes a typed client; never hand-roll fetches per endpoint.
+- [`docs/api-contract.md`](../docs/api-contract.md) — endpoint catalog (§ 1) and wire-format conventions. The frontend uses per-endpoint hand-written `fetch` wrappers with Zod schemas at the boundary; see [`docs/decisions/0039-api-client-generation.md`](../docs/decisions/0039-api-client-generation.md) for the decision and adoption trigger.
 - [`docs/design.md`](../docs/design.md) — high-level principles (single-handed, never rushed, inclusive by default) and design goals (minimize choices, prefer simple interactions, sensible defaults).
 - [`docs/designs/2026-05-16-frontend-compliance-plan.md`](../docs/designs/2026-05-16-frontend-compliance-plan.md) — active sequenced PR plan bringing the existing frontend code up to the standards. Consult before starting cross-cutting refactors to see what's already planned.
 

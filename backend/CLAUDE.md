@@ -9,7 +9,7 @@ Loaded automatically when Claude works in `backend/`. Captures conventions speci
 - **SeaORM** (built on `sqlx`) for the ORM. Hand-written entities per ADR 0023.
 - **SQLite** for storage. STRICT mode on lookup tables only — see ADR 0002.
 - **`tracing` + `tracing-subscriber` + `tower-http::TraceLayer`** for observability — see [`docs/design.md`](../docs/design.md) § Observability.
-- **`argon2` + `jsonwebtoken`** for auth — see [`docs/api-contract.md`](../docs/api-contract.md) § 1.1 and § 5, ADR 0031.
+- **`argon2` + `jsonwebtoken`** for auth — see [`docs/api-contract.md`](../docs/api-contract.md) § 1.1 and § 4, ADR 0031.
 
 ## Key reading
 
