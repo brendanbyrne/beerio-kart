@@ -73,10 +73,10 @@ describe('useGameData', () => {
   // body, each pointed at its own endpoint. Verify each hits its endpoint and
   // surfaces the result.
   it.each([
-    [useBodies, '/api/v1/bodies'],
-    [useWheels, '/api/v1/wheels'],
-    [useGliders, '/api/v1/gliders'],
-  ])('fetches %o from its endpoint', async (hook, endpoint) => {
+    [useBodies, '/api/v1/bodies', 'useBodies'],
+    [useWheels, '/api/v1/wheels', 'useWheels'],
+    [useGliders, '/api/v1/gliders', 'useGliders'],
+  ])('%s fetches its list from its endpoint', async (hook, endpoint) => {
     server.use(http.get(endpoint, () => HttpResponse.json([mario])));
 
     const { result } = renderHook(() => hook(), {

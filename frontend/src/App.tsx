@@ -1,6 +1,7 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { createQueryClient } from './api/queryClient';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -9,23 +10,10 @@ import Home from './pages/Home';
 import Profile from './pages/Profile';
 import Session from './pages/Session';
 
-/**
- * One QueryClient for the whole app, created at module scope so it survives
- * re-renders (a client recreated in render would drop the cache every time).
- * Defaults per the compliance plan (react.md § 4): revalidate on tab focus,
- * retry a failed fetch once, and treat data as fresh for 30s. Per-query
- * overrides (e.g. the long staleTime on static reference data) live in the
- * hooks themselves.
- */
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: true,
-      retry: 1,
-      staleTime: 30_000,
-    },
-  },
-});
+// One QueryClient for the whole app, created at module scope so it survives
+// re-renders (a client recreated in render would drop the cache every time).
+// Config + the contract-drift logging live in createQueryClient (api layer).
+const queryClient = createQueryClient();
 
 /** Shows a loading spinner while the initial silent refresh is in progress. */
 function AuthGate({ children }: { children: React.ReactNode }) {
