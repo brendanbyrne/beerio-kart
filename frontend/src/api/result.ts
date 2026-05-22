@@ -89,7 +89,7 @@ function isApiErrorCode(code: string): code is ApiErrorCode {
 }
 
 /**
- * The wire error envelope. `code` is optional: § 3 says the backend always
+ * The wire error envelope. `code` is optional: § 2 says the backend always
  * sends it, but a malformed or proxy-generated error response might not, and
  * a missing code degrades to `unknown` rather than throwing.
  */
