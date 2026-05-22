@@ -26,7 +26,7 @@ If you find yourself composing a substantive response in chat that the other ass
 
 ## What does NOT go here
 
-- **Self-notes / session state.** Those go in `.agents/memory/cowork.md` (Cowork) or `.agents/memory/claude-code.md` (Claude Code). Note that the basenames intentionally match the handoff filenames — both `.agents/memory/cowork.md` and `.agents/handoffs/cowork.md` are *for* Cowork, just one is from itself and the other is from Claude Code. Self-notes are persistent memory you keep for your own future sessions; handoffs are one-way coordination channels to the *other* assistant. Mixing them breaks the existence-as-signal rule.
+- **Self-notes / session state.** Cowork's go in `.agents/memory/cowork.md` (Claude Code uses its own native cross-session memory, not an in-repo file). Note that `.agents/memory/cowork.md` and `.agents/handoffs/cowork.md` share a basename — both are *for* Cowork, but one holds Cowork's own notes and the other is a one-way channel from Claude Code; the directory disambiguates. Self-notes are persistent memory you keep for your own future sessions; handoffs are one-way coordination channels to the *other* assistant. Mixing them breaks the existence-as-signal rule.
 - **Anything intended for git history.** This directory is gitignored except for this README — handoffs are by definition transient and shouldn't pollute the log.
 
 ## Don't prescribe branch names

@@ -283,7 +283,7 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 
 - **Anything that fits Issue shape.** That's an Issue, not a handoff.
 - **PR review feedback.** That's a PR comment, line-anchored where possible.
-- **Self-notes.** Those go in `.agents/memory/cowork.md` or `.agents/memory/claude-code.md`.
+- **Self-notes.** Cowork's go in `.agents/memory/cowork.md`; Claude Code uses its own native cross-session memory (not an in-repo file).
 - **Anything intended to outlive the assistant's "I'm done with this" moment.** That goes to a durable artifact — Issue, ADR, design record, or self-notes.
 
 ## Document history
