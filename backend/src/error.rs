@@ -12,7 +12,7 @@ use tracing::{error, warn};
 /// Stable error-code identifiers emitted in the `code` field of every error
 /// response.
 ///
-/// Mirrors the `api-contract.md` § 8 registry one-to-one — adding a new code
+/// Mirrors the `api-contract.md` § 7 registry one-to-one — adding a new code
 /// means adding a row there and a variant here in the same change.
 ///
 /// Codes are public API contract: once the frontend starts pattern-matching
