@@ -6,9 +6,9 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { useCharacters } from '../hooks/useGameData';
 import { useSessions } from '../hooks/useSessions';
 import { createSession } from '../api/sessions';
-import BottomNav from '../components/BottomNav';
+import { BottomNav } from '../components/BottomNav';
 
-export default function Home() {
+export function Home() {
   const { user } = useAuth();
   const { profile } = useUserProfile(user?.id);
   const { items: characters } = useCharacters();

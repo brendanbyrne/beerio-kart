@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { parseApiError } from '../api/result';
 import { useAuth } from '../hooks/useAuth';
-import RaceSetupPicker from '../components/RaceSetupPicker';
-import DrinkTypeSelector from '../components/DrinkTypeSelector';
+import { RaceSetupPicker } from '../components/RaceSetupPicker';
+import { DrinkTypeSelector } from '../components/DrinkTypeSelector';
 import type { DrinkType } from '../api/types';
 
 type Phase = 'race-setup' | 'drink-type';
 
-export default function Onboarding() {
+export function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>('race-setup');

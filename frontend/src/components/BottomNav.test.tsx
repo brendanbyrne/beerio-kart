@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { server } from '../mocks/server';
-import BottomNav from './BottomNav';
+import { BottomNav } from './BottomNav';
 
 // PR-C2 (Issue #186) replaced BottomNav's re-fetch-on-navigation useEffect with
 // a useQuery on the shared ['my-session'] key. Per react.md § 13 the test mocks

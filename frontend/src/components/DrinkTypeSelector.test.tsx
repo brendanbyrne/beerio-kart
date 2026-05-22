@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { server } from '../mocks/server';
-import DrinkTypeSelector from './DrinkTypeSelector';
+import { DrinkTypeSelector } from './DrinkTypeSelector';
 
 // Covers the "add a custom drink type" flow: the list loads from the API,
 // a submitted name either surfaces the backend's error message (failure) or

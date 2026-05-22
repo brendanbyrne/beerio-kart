@@ -11,10 +11,10 @@ import {
 } from '../api/sessions';
 import { formatTime } from '../utils/time';
 import type { SessionId } from '../api/brand';
-import RunEntrySheet from '../components/RunEntrySheet';
-import BottomNav from '../components/BottomNav';
+import { RunEntrySheet } from '../components/RunEntrySheet';
+import { BottomNav } from '../components/BottomNav';
 
-export default function Session() {
+export function Session() {
   // The route param is the external boundary where a raw URL string becomes
   // a SessionId — typing useParams with the branded type is the mint. The
   // `id!` assertions below are pre-existing (PR-D2 / Issue #192 removes them).

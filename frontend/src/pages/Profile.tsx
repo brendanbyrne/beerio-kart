@@ -10,14 +10,14 @@ import {
   useWheels,
   useGliders,
 } from '../hooks/useGameData';
-import RaceSetupPicker from '../components/RaceSetupPicker';
-import DrinkTypeSelector from '../components/DrinkTypeSelector';
-import BottomNav from '../components/BottomNav';
+import { RaceSetupPicker } from '../components/RaceSetupPicker';
+import { DrinkTypeSelector } from '../components/DrinkTypeSelector';
+import { BottomNav } from '../components/BottomNav';
 import type { DrinkType } from '../api/types';
 
 type EditMode = null | 'race-setup' | 'drink-type' | 'password';
 
-export default function Profile() {
+export function Profile() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { profile, refresh } = useUserProfile(user?.id);

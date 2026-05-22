@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { server } from '../mocks/server';
-import RunEntrySheet from './RunEntrySheet';
+import { RunEntrySheet } from './RunEntrySheet';
 import { RaceId, TrackId } from '../api/brand';
 import type { SessionRaceInfo } from '../api/types';
 
@@ -20,7 +20,7 @@ import type { SessionRaceInfo } from '../api/types';
 // its own multi-step flow is tested in its own file; here we only need the
 // completion signal to verify the user's pick overrides the default setup.
 vi.mock('./RaceSetupPicker', () => ({
-  default: ({
+  RaceSetupPicker: ({
     onComplete,
   }: {
     onComplete: (s: {

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { server } from '../mocks/server';
-import Session from './Session';
+import { Session } from './Session';
 
 // PR-C2 (Issue #186): the membership/state mutations must invalidate the keys
 // they make stale — join/leave touch ['my-session'], ['sessions'] and the
@@ -21,7 +21,7 @@ vi.mock('../hooks/useAuth', () => ({
 // callback — the full form is exercised in RunEntrySheet's own test; here we
 // only need the success signal to verify Session invalidates the detail.
 vi.mock('../components/RunEntrySheet', () => ({
-  default: ({ onSubmitted }: { onSubmitted: () => void }) => (
+  RunEntrySheet: ({ onSubmitted }: { onSubmitted: () => void }) => (
     <button onClick={onSubmitted}>submit-run-stub</button>
   ),
 }));

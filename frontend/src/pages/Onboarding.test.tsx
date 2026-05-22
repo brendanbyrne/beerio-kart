@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { server } from '../mocks/server';
-import Onboarding from './Onboarding';
+import { Onboarding } from './Onboarding';
 
 // Onboarding saves the race setup, then the drink type, via PUT /users/:id.
 // Covered behavior: when a save fails the user sees the backend's error and
@@ -17,7 +17,7 @@ vi.mock('../hooks/useAuth', () => ({
 }));
 
 vi.mock('../components/RaceSetupPicker', () => ({
-  default: ({ onComplete }: { onComplete: (s: unknown) => void }) => (
+  RaceSetupPicker: ({ onComplete }: { onComplete: (s: unknown) => void }) => (
     <button
       onClick={() =>
         onComplete({ characterId: 1, bodyId: 2, wheelId: 3, gliderId: 4 })
@@ -29,7 +29,7 @@ vi.mock('../components/RaceSetupPicker', () => ({
 }));
 
 vi.mock('../components/DrinkTypeSelector', () => ({
-  default: ({ onSelect }: { onSelect: (d: unknown) => void }) => (
+  DrinkTypeSelector: ({ onSelect }: { onSelect: (d: unknown) => void }) => (
     <button onClick={() => onSelect({ id: 'd1' })}>select-drink</button>
   ),
 }));
