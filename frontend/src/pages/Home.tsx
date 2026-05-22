@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { useCharacters } from '../hooks/useGameData';
@@ -13,6 +14,7 @@ export default function Home() {
   const { items: characters } = useCharacters();
   const { sessions, mySessionId, loading: sessionsLoading } = useSessions();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -35,6 +37,11 @@ export default function Home() {
     setError(null);
     try {
       const session = await createSession('random');
+      // Creating a session makes the user its first participant, so the
+      // membership and session-list queries are now stale — invalidate so the
+      // bottom-nav and Home list reflect it without waiting for the next poll.
+      void queryClient.invalidateQueries({ queryKey: ['my-session'] });
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
       navigate(`/session/${session.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session');

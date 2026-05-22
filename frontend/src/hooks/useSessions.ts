@@ -1,61 +1,42 @@
-import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { getMySession, listSessions } from '../api/sessions';
-import type { SessionId } from '../api/brand';
-import type { SessionSummary } from '../api/types';
 
 const POLL_INTERVAL_MS = 5000;
 
 /**
- * Fetches the active session list and the user's current session ID.
- * Polls every 5 seconds. Pauses when the tab is backgrounded.
+ * Fetches the active session list and the user's current session ID, polling
+ * every 5 seconds via TanStack Query (PR-C2).
+ *
+ * The legacy `Promise.all([listSessions(), getMySession()])` is split into two
+ * independent queries: `['sessions']` and `['my-session']`. The split lets
+ * `['my-session']` be shared with `BottomNav` — same key means one fetch,
+ * deduped by TanStack Query — and lets the session mutations (create / join /
+ * leave) invalidate just the affected key. `refetchIntervalInBackground: false`
+ * pauses both while the tab is hidden, replacing the old Page-Visibility
+ * listener.
+ *
+ * The legacy `{ sessions, mySessionId, loading }` shape is preserved so
+ * `Home.tsx` is untouched. `loading` stays true until both queries resolve,
+ * matching the old single-`Promise.all` gate.
  */
 export function useSessions() {
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [mySessionId, setMySessionId] = useState<SessionId | null>(null);
-  const [loading, setLoading] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionsQuery = useQuery({
+    queryKey: ['sessions'],
+    queryFn: ({ signal }) => listSessions(signal),
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+  });
 
-  useEffect(() => {
-    const doFetch = () => {
-      Promise.all([listSessions(), getMySession()]).then(
-        ([sessionList, activeId]) => {
-          setSessions(sessionList);
-          setMySessionId(activeId);
-          setLoading(false);
-        },
-      );
-    };
+  const mySessionQuery = useQuery({
+    queryKey: ['my-session'],
+    queryFn: ({ signal }) => getMySession(signal),
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+  });
 
-    const startPolling = () => {
-      if (intervalRef.current) return;
-      intervalRef.current = setInterval(doFetch, POLL_INTERVAL_MS);
-    };
-
-    const stopPolling = () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        doFetch();
-        startPolling();
-      } else {
-        stopPolling();
-      }
-    };
-
-    doFetch();
-    startPolling();
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, []);
-
-  return { sessions, mySessionId, loading };
+  return {
+    sessions: sessionsQuery.data ?? [],
+    mySessionId: mySessionQuery.data ?? null,
+    loading: sessionsQuery.isPending || mySessionQuery.isPending,
+  };
 }

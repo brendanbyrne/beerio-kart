@@ -1,70 +1,38 @@
-import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../api/sessions';
 import type { SessionId } from '../api/brand';
-import type { SessionDetail } from '../api/types';
 
 const POLL_INTERVAL_MS = 2500;
 
 /**
- * Polls GET /sessions/:id every 2.5 seconds.
- * Pauses polling when the tab is backgrounded (Page Visibility API).
- * Stops polling once the session ends (closed or not found).
+ * Polls `GET /sessions/:id` every 2.5 seconds via TanStack Query (PR-C2).
+ *
+ * `refetchInterval` returns `false` once the session is over — `getSession`
+ * resolves to `null` on a 404 and the closed session carries
+ * `status === 'closed'` (there is no `ended_at` field; this is the real
+ * contract, not the plan's illustrative example). `refetchIntervalInBackground:
+ * false` pauses polling while the tab is hidden, replacing the old
+ * Page-Visibility listener; on return TanStack Query fires a single catch-up
+ * fetch rather than backfilling every missed tick.
+ *
+ * The legacy `{ session, loading, ended }` shape is preserved so `Session.tsx`
+ * is untouched.
  */
 export function useSession(id: SessionId) {
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [ended, setEnded] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const endedRef = useRef(false);
+  const query = useQuery({
+    queryKey: ['session', id],
+    queryFn: ({ signal }) => getSession(id, signal),
+    refetchInterval: (q) =>
+      q.state.data == null || q.state.data.status === 'closed'
+        ? false
+        : POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    endedRef.current = false;
-
-    const stopPolling = () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-
-    const doFetch = async () => {
-      if (endedRef.current) return;
-      const data = await getSession(id);
-      if (cancelled) return;
-      if (data === null || data.status === 'closed') {
-        endedRef.current = true;
-        setEnded(true);
-        stopPolling();
-      }
-      setSession(data);
-      setLoading(false);
-    };
-
-    const startPolling = () => {
-      if (intervalRef.current || endedRef.current) return;
-      intervalRef.current = setInterval(doFetch, POLL_INTERVAL_MS);
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        doFetch();
-        startPolling();
-      } else {
-        stopPolling();
-      }
-    };
-
-    doFetch();
-    startPolling();
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      cancelled = true;
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [id]);
-
-  return { session, loading, ended };
+  const data = query.data;
+  return {
+    session: data ?? null,
+    loading: query.isPending,
+    ended: data === null || data?.status === 'closed',
+  };
 }
