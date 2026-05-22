@@ -330,7 +330,7 @@ export type TokenRefresh = z.infer<typeof TokenRefreshSchema>;
 
 /**
  * The decoded JWT access-token payload the frontend reads after a silent
- * refresh (it does not verify the signature — api-contract.md § 5). `sub` is
+ * refresh (it does not verify the signature — api-contract.md § 4). `sub` is
  * the user id, `username` the handle. Parsed through Zod like every other
  * untyped boundary, since `JSON.parse(atob(...))` is `any`.
  */
