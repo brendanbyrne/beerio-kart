@@ -100,6 +100,27 @@ function renderSession() {
 }
 
 describe('Session', () => {
+  it('redirects home when the route param is missing', async () => {
+    // useParams is typed as Partial<{ id: SessionId }> regardless of the route's
+    // declared path, so the component guards with `if (!id) <Navigate to="/" />`.
+    // Rendering at a path that has no :id segment exercises that guard.
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/session']}>
+          <Routes>
+            <Route path="/session" element={<Session />} />
+            <Route path="/" element={<div>home page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('home page')).toBeInTheDocument();
+  });
+
   it('invalidates membership and session keys when joining', async () => {
     server.use(
       http.get('/api/v1/sessions/s1', () => HttpResponse.json(otherSession)),

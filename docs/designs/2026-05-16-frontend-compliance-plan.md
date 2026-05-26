@@ -88,7 +88,7 @@ The PRs below address every line item.
 
 ### PR-B1: Branded ID types + `type` over `interface` in `api/types.ts`
 
-**Issue:** [#171](https://github.com/brendanbyrne/beerio-kart/issues/171)
+**Issue:** [#171](https://github.com/brendanbyrne/beerio-kart/issues/171) · **Merged PR:** [#198](https://github.com/brendanbyrne/beerio-kart/pull/198)
 
 - **Scope:**
   - Create `src/api/brand.ts` with the `Brand<T, B>` helper and exported brand types: `UserId`, `SessionId`, `RunId`, `RaceId`, `DrinkTypeId` (string brands); `CharacterId`, `BodyId`, `WheelId`, `GliderId`, `TrackId`, `CupId` (number brands).
@@ -106,7 +106,7 @@ The PRs below address every line item.
 
 ### PR-B2: Runtime-validated API responses (Zod)
 
-**Issue:** [#191](https://github.com/brendanbyrne/beerio-kart/issues/191)
+**Issue:** [#191](https://github.com/brendanbyrne/beerio-kart/issues/191) · **Merged PR:** [#199](https://github.com/brendanbyrne/beerio-kart/pull/199)
 
 - **Scope:**
   - Add Zod schemas for every API response shape in `src/api/types.ts`. Infer the TS types from the schemas (delete the hand-written types in favor of `z.infer<typeof ...>`).
@@ -129,7 +129,7 @@ The PRs below address every line item.
 
 ### PR-C1: TanStack Query setup + migration of static-data hooks
 
-**Issue:** [#176](https://github.com/brendanbyrne/beerio-kart/issues/176)
+**Issue:** [#176](https://github.com/brendanbyrne/beerio-kart/issues/176) · **Merged PR:** [#203](https://github.com/brendanbyrne/beerio-kart/pull/203)
 
 - **Scope:**
   - Wrap `App.tsx` in `QueryClientProvider`. Use the recommended default config (`refetchOnWindowFocus: true`, `retry: 1`, `staleTime: 30_000` for most queries).
@@ -146,7 +146,7 @@ The PRs below address every line item.
 
 ### PR-C2: TanStack Query migration of polling hooks
 
-**Issue:** [#186](https://github.com/brendanbyrne/beerio-kart/issues/186)
+**Issue:** [#186](https://github.com/brendanbyrne/beerio-kart/issues/186) · **Merged PR:** [#204](https://github.com/brendanbyrne/beerio-kart/pull/204)
 
 - **Scope:**
   - Migrate `useSession.ts`: replace the polling/visibility-API/`endedRef` logic with `useQuery({ refetchInterval: (q) => (q.state.data?.ended_at ? false : 2500), refetchIntervalInBackground: false })`.
@@ -167,7 +167,7 @@ The PRs below address every line item.
 
 ### PR-D1: Named exports everywhere
 
-**Issue:** [#175](https://github.com/brendanbyrne/beerio-kart/issues/175)
+**Issue:** [#175](https://github.com/brendanbyrne/beerio-kart/issues/175) · **Merged PR:** [#205](https://github.com/brendanbyrne/beerio-kart/pull/205)
 
 - **Scope:**
   - Convert all 12 default exports to named exports. Files: `main.tsx` (import), `App.tsx`, `BottomNav.tsx`, `DrinkTypeSelector.tsx`, `RaceSetupPicker.tsx`, `RunEntrySheet.tsx`, `Login.tsx`, `Register.tsx`, `Onboarding.tsx`, `Profile.tsx`, `Home.tsx`, `Session.tsx`.
@@ -178,7 +178,7 @@ The PRs below address every line item.
 - **Dependencies:** None hard, but ordering after PR-B1/B2 means the type churn is already done.
 - **Risk:** Low.
 - **Verification:** `bun run lint` and `bun run typecheck` pass with the rule at error level. App boots.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ### PR-D2: Remove non-null `!` assertions
 
@@ -334,7 +334,7 @@ The PRs below address every line item.
 
 > **Re-sequencing note (2026-05-18):** Originally optional and last. After `typescript.md` § 12 and `react.md` § 13 added a testing requirement to the standards, this PR is required infrastructure and moves to right after PR-A2 (before B1). Every subsequent PR in the plan now lands with tests for new/changed logic.
 
-**Issue:** [#193](https://github.com/brendanbyrne/beerio-kart/issues/193)
+**Issue:** [#193](https://github.com/brendanbyrne/beerio-kart/issues/193) · **Merged PR:** [#197](https://github.com/brendanbyrne/beerio-kart/pull/197)
 
 - **Scope:**
   - Add to devDependencies: `vitest`, `@vitest/coverage-v8`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `jsdom`, `msw`.
@@ -354,7 +354,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-A1 (lint config in place), PR-A2 (strict tsconfig so test files inherit the rules).
 - **Risk:** Low. New infrastructure only; no production code changes. The example tests are small enough to be self-documenting.
 - **Verification:** `bun test` runs and the example tests pass. `bun test:coverage` produces an HTML coverage report. CI job runs and uploads to Codecov. Pre-push lefthook hook fires on `git push`.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ---
 
@@ -364,14 +364,14 @@ All Issues live under [Milestone 9 — Hardening: Frontend standards compliance]
 
 | Order | PR | Title | Dep | Issue | Status |
 |---|---|---|---|---|---|
-| 1 | A1 | Lints + Prettier + packages | — | [#187](https://github.com/brendanbyrne/beerio-kart/issues/187) | [ ] |
-| 2 | A2 | Strict tsconfig flags | A1 | [#173](https://github.com/brendanbyrne/beerio-kart/issues/173) | [ ] |
-| 3 | **H2** | **Vitest + RTL + MSW + coverage CI** (test infrastructure — re-sequenced 2026-05-18) | A1, A2 | [#193](https://github.com/brendanbyrne/beerio-kart/issues/193) | [ ] |
-| 4 | B1 | Branded IDs + type-over-interface | A2, H2 | [#171](https://github.com/brendanbyrne/beerio-kart/issues/171) | [ ] |
-| 5 | B2 | Zod runtime validation + Result | B1, H2 | [#191](https://github.com/brendanbyrne/beerio-kart/issues/191) | [ ] |
-| 6 | C1 | TanStack Query setup + static hooks | B2, H2 | [#176](https://github.com/brendanbyrne/beerio-kart/issues/176) | [ ] |
-| 7 | C2 | TanStack Query polling hooks | C1, H2 | [#186](https://github.com/brendanbyrne/beerio-kart/issues/186) | [ ] |
-| 8 | D1 | Named exports everywhere | (B1) | [#175](https://github.com/brendanbyrne/beerio-kart/issues/175) | [ ] |
+| 1 | A1 | Lints + Prettier + packages | — | [#187](https://github.com/brendanbyrne/beerio-kart/issues/187) | [x] |
+| 2 | A2 | Strict tsconfig flags | A1 | [#173](https://github.com/brendanbyrne/beerio-kart/issues/173) | [x] |
+| 3 | **H2** | **Vitest + RTL + MSW + coverage CI** (test infrastructure — re-sequenced 2026-05-18) | A1, A2 | [#193](https://github.com/brendanbyrne/beerio-kart/issues/193) | [x] |
+| 4 | B1 | Branded IDs + type-over-interface | A2, H2 | [#171](https://github.com/brendanbyrne/beerio-kart/issues/171) | [x] |
+| 5 | B2 | Zod runtime validation + Result | B1, H2 | [#191](https://github.com/brendanbyrne/beerio-kart/issues/191) | [x] |
+| 6 | C1 | TanStack Query setup + static hooks | B2, H2 | [#176](https://github.com/brendanbyrne/beerio-kart/issues/176) | [x] |
+| 7 | C2 | TanStack Query polling hooks | C1, H2 | [#186](https://github.com/brendanbyrne/beerio-kart/issues/186) | [x] |
+| 8 | D1 | Named exports everywhere | (B1) | [#175](https://github.com/brendanbyrne/beerio-kart/issues/175) | [x] |
 | 9 | D2 | Remove `!` assertions | — | [#192](https://github.com/brendanbyrne/beerio-kart/issues/192) | [ ] |
 | 10 | D3 | Remove `as` casts | B2 | [#179](https://github.com/brendanbyrne/beerio-kart/issues/179) | [ ] |
 | 11 | E1 | Form migration to useActionState | B2, H2 | [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) | [ ] |
@@ -396,3 +396,4 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 - 2026-05-18 — Applied PR [#197](https://github.com/brendanbyrne/beerio-kart/pull/197) (PR-H2) review feedback. Collapsed the Vitest `include` to a single `src/**/*.test.{ts,tsx}` glob: the AC's second `src/__tests__/**/*.{ts,tsx}` glob was redundant (the first already matches `*.test.` files anywhere under `src/`) and would make Vitest try to run plain helper/fixture files in `src/__tests__/` as test suites. Integration tests there use the `*.test.tsx` suffix like any other test. Also added an `eslint.config.js` override disabling `import/no-default-export` for `**/*.config.{ts,js}` — config files structurally require a default export, so they can never satisfy the rule; the override also clears the pre-existing `vite.config.ts` warning and prevents PR-D1's error-flip from failing the build on config files.
 - 2026-05-18 — Reconciled the plan with PR-H2 ([#193](https://github.com/brendanbyrne/beerio-kart/issues/193)) as it was implemented. Two scope deltas from the AC, both decided with Brendan: (1) the coverage provider is `istanbul`, not `v8` — `v8` reports 0% under Bun, and the project has no Node toolchain (PR-H2 scope bullet updated). (2) The frontend CI job lives in a new path-filtered `.github/workflows/frontend.yml`; the backend coverage workflow gained a matching `backend/**` path filter and was renamed `coverage.yml` → `backend.yml` (workflow name `Coverage` → `Backend`) so each side's CI skips on the other's PRs and the two files are symmetric. `codecov.yml` was restructured into per-flag (`backend` / `frontend`) project + patch statuses with carryforward, and `frontend/**` was un-ignored; the frontend *project* status is `informational` until PR-H1's backfill — PR-H1 gained a scope bullet to flip it to blocking. There is no rust-lint CI job today (clippy/fmt run only in the lefthook pre-commit hook); creating one — with its own path filter — remains Issue [#195](https://github.com/brendanbyrne/beerio-kart/issues/195)'s scope.
 - 2026-05-18 — Reconciled the plan with PR-A1 ([#194](https://github.com/brendanbyrne/beerio-kart/pull/194)) and PR-A2 ([#196](https://github.com/brendanbyrne/beerio-kart/pull/196)), both merged. Corrected PR-A1's rule list: `consistent-type-definitions` and `import/no-default-export` ship at `warn`, not `error` — they fire on existing code, and the warn-down principle applies to named rules too. Recorded `import/consistent-type-specifier-style` (added during PR-A1 review) and, in PR-A2, `noImplicitOverride` plus the `typecheck`-script fix (`tsc --noEmit` → `tsc -b`). Added a PR-H1 scope bullet making it the explicit owner of flipping every remaining `warn`-level lint rule back to `error` — previously no PR owned the `consistent-type-definitions` flip. Per-PR **Merged PR** links added to the A1 and A2 sections. Sign-off checkboxes left for Brendan.
+- 2026-05-26 — Caught up sign-off bookkeeping for the first eight PRs in the pickup order. Checked the table rows and per-section boxes for D1 ([#205](https://github.com/brendanbyrne/beerio-kart/pull/205)) and H2 ([#197](https://github.com/brendanbyrne/beerio-kart/pull/197)) — both merged but their boxes had been missed in earlier reconciliations — and added the still-missing **Merged PR** links for H2, B1 ([#198](https://github.com/brendanbyrne/beerio-kart/pull/198)), B2 ([#199](https://github.com/brendanbyrne/beerio-kart/pull/199)), C1 ([#203](https://github.com/brendanbyrne/beerio-kart/pull/203)), C2 ([#204](https://github.com/brendanbyrne/beerio-kart/pull/204)), and D1 ([#205](https://github.com/brendanbyrne/beerio-kart/pull/205)) so every shipped PR section now points at its merged PR alongside its Issue. Companion to the PR-D2 ([#192](https://github.com/brendanbyrne/beerio-kart/issues/192)) pickup; D2's own sign-off stays open until that PR merges.

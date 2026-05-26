@@ -108,11 +108,16 @@ export function RaceSetupPicker({
     }
   }
 
-  const allSelected =
+  // Build the completed setup only when all four ids are picked. The Confirm
+  // button is disabled until `setup` is non-null, so `onComplete(setup)`
+  // never sees a partial value — the narrowing replaces four `!` assertions.
+  const setup =
     characterId !== null &&
     bodyId !== null &&
     wheelId !== null &&
-    gliderId !== null;
+    gliderId !== null
+      ? { characterId, bodyId, wheelId, gliderId }
+      : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -190,18 +195,11 @@ export function RaceSetupPicker({
         )}
         <button
           onClick={() => {
-            if (allSelected) {
-              onComplete({
-                characterId: characterId!,
-                bodyId: bodyId!,
-                wheelId: wheelId!,
-                gliderId: gliderId!,
-              });
-            }
+            if (setup) onComplete(setup);
           }}
-          disabled={!allSelected}
+          disabled={!setup}
           className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors ${
-            allSelected
+            setup
               ? 'bg-blue-500 text-white hover:bg-blue-600'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
           }`}
