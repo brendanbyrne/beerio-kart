@@ -92,6 +92,10 @@ export function App() {
                   </RequireAuth>
                 }
               />
+              {/* Catch-all: unknown paths (e.g. /session with no :id) redirect
+                  home rather than rendering an empty <Routes>. PR-F1 will
+                  replace this with a real 404/errorElement. */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </AuthGate>
         </AuthProvider>

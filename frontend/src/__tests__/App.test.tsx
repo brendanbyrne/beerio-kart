@@ -35,4 +35,24 @@ describe('App shell', () => {
       await screen.findByRole('button', { name: /log in/i }),
     ).toBeInTheDocument();
   });
+
+  it('routes unknown paths through the catch-all instead of rendering blank', async () => {
+    // PR-D2 / Issue #192 added <Route path="*" /> so paths that don't match
+    // any declared route (e.g. /session with no :id segment) redirect to "/"
+    // rather than rendering an empty <Routes>. With no auth, the / route
+    // bounces to /login, so the user-visible end state is the login screen.
+    server.use(
+      http.post(
+        '/api/v1/auth/refresh',
+        () => new HttpResponse(null, { status: 401 }),
+      ),
+    );
+
+    window.history.pushState({}, '', '/session');
+    render(<App />);
+
+    expect(
+      await screen.findByRole('button', { name: /log in/i }),
+    ).toBeInTheDocument();
+  });
 });
