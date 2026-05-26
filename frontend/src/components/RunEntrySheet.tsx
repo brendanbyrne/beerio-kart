@@ -231,7 +231,7 @@ export function RunEntrySheet({
               alt={race.track_name}
               className="w-10 h-10 rounded-lg object-contain bg-gray-100 flex-shrink-0"
               onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
+                e.currentTarget.style.display = 'none';
               }}
             />
             <div>
