@@ -93,8 +93,12 @@ export function App() {
                 }
               />
               {/* Catch-all: unknown paths (e.g. /session with no :id) redirect
-                  home rather than rendering an empty <Routes>. PR-F1 will
-                  replace this with a real 404/errorElement. */}
+                  home rather than rendering an empty <Routes>. Load-bearing
+                  for the deep-link-without-id case — Session.tsx's
+                  `if (!id) <Navigate />` guard can't fire from real browser
+                  navigation because <Route path="/session/:id"> requires the
+                  param, so this catch-all is what users actually hit. PR-F1
+                  (#190) will replace this with a real 404 / errorElement. */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </AuthGate>
