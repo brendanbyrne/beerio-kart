@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { useSession } from '../hooks/useSession';
@@ -16,11 +16,18 @@ import { BottomNav } from '../components/BottomNav';
 
 export function Session() {
   // The route param is the external boundary where a raw URL string becomes
-  // a SessionId — typing useParams with the branded type is the mint. The
-  // `id!` assertions below are pre-existing (PR-D2 / Issue #192 removes them).
+  // a SessionId — typing useParams with the branded type is the mint.
+  // useParams returns `Partial<{ id: SessionId }>` regardless of the route's
+  // declared path, so an early redirect is the type-safe way to narrow id
+  // from `SessionId | undefined` to `SessionId` for everything below.
   const { id } = useParams<{ id: SessionId }>();
+  if (!id) return <Navigate to="/" replace />;
+  return <SessionView id={id} />;
+}
+
+function SessionView({ id }: { id: SessionId }) {
   const { user } = useAuth();
-  const { session, loading, ended } = useSession(id!);
+  const { session, loading, ended } = useSession(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -30,10 +37,10 @@ export function Session() {
   const invalidateMembership = () => {
     void queryClient.invalidateQueries({ queryKey: ['my-session'] });
     void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-    void queryClient.invalidateQueries({ queryKey: ['session', id!] });
+    void queryClient.invalidateQueries({ queryKey: ['session', id] });
   };
   const invalidateSession = () => {
-    void queryClient.invalidateQueries({ queryKey: ['session', id!] });
+    void queryClient.invalidateQueries({ queryKey: ['session', id] });
   };
   const [leaving, setLeaving] = useState(false);
   const [joiningSession, setJoiningSession] = useState(false);
@@ -49,7 +56,7 @@ export function Session() {
   const handleLeave = async () => {
     setLeaving(true);
     try {
-      await leaveSession(id!);
+      await leaveSession(id);
       invalidateMembership();
       navigate('/');
     } catch {
@@ -61,7 +68,7 @@ export function Session() {
     setJoiningSession(true);
     setJoinError(null);
     try {
-      await joinSession(id!);
+      await joinSession(id);
       invalidateMembership();
     } catch (e) {
       setJoinError(e instanceof Error ? e.message : 'Failed to join session');
@@ -73,7 +80,7 @@ export function Session() {
     setPickingTrack(true);
     setTrackError(null);
     try {
-      await nextTrack(id!);
+      await nextTrack(id);
       invalidateSession();
     } catch (e) {
       setTrackError(e instanceof Error ? e.message : 'Failed to pick track');
@@ -86,7 +93,7 @@ export function Session() {
     setSkippingTrack(true);
     setTrackError(null);
     try {
-      await skipTurn(id!);
+      await skipTurn(id);
       invalidateSession();
     } catch (e) {
       setTrackError(e instanceof Error ? e.message : 'Failed to skip track');
