@@ -19,7 +19,12 @@ export function Session() {
   // a SessionId — typing useParams with the branded type is the mint.
   // useParams returns `Partial<{ id: SessionId }>` regardless of the route's
   // declared path, so an early redirect is the type-safe way to narrow id
-  // from `SessionId | undefined` to `SessionId` for everything below.
+  // from `SessionId | undefined` to `SessionId` for everything below. In
+  // production this branch is preempted by App.tsx's `path="*"` catch-all
+  // (real `/session` traffic redirects from there before Session ever
+  // mounts); the guard remains the type-narrowing path for tests and a
+  // defense if a future route mounts Session without a `:id` segment. If
+  // you remove one, look at the other.
   const { id } = useParams<{ id: SessionId }>();
   if (!id) return <Navigate to="/" replace />;
   return <SessionView id={id} />;
