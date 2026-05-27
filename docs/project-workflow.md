@@ -193,7 +193,7 @@ Before `git push`-ing a branch that will become a PR, run the same gates CI will
 Two failure modes account for most patch-gate misses:
 
 1. **Mocked-dependency blind spot.** When a test mocks a function the changed code depends on (e.g. `vi.mock('../hooks/useAuth')` replacing `changePassword`), the *real* body of that mocked function never runs. The form-level test passes; the new function body shows as uncovered. Fix: add a unit test for the new code at its own boundary (the `useAuth.test.tsx` `renderHook + AuthProvider + MSW` pattern is the frontend template).
-2. **Unreachable-defensive-guard blind spot.** Defensive branches that no realistic input can hit count as uncovered lines. Common shape: `if (typeof x !== 'string') return ...` around a `FormData.get()` on a `<input type="text" required>`. Fix: remove the unreachable branch (e.g. extract a narrow-once helper like [`frontend/src/utils/forms.ts`](../frontend/src/utils/forms.ts)'s `readString`) rather than ship a defensive return no test can hit.
+2. **Unreachable-defensive-guard blind spot.** Defensive branches that no realistic input can hit count as uncovered lines. Common shape: `if (typeof x !== 'string') return ...` around a `FormData.get()` on a `<input type="text" required>`. Fix: rewrite so the unreachable branch goes away — e.g. run `Object.fromEntries(formData)` through a Zod `safeParse` (the form-action pattern in [`Login.tsx`](../frontend/src/pages/Login.tsx)) and let the schema do both the read and the narrowing in one step, rather than shipping a defensive return that no test can hit.
 
 If `test:coverage` shows uncovered new lines, fix them locally — the failed-CI round trip is much more expensive than the ~30 s coverage run.
 
