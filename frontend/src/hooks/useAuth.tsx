@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  apiFetch,
   getAccessToken,
   setAccessToken,
   setOnAuthFailure,
@@ -29,6 +30,10 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<string | null>;
   register: (username: string, password: string) => Promise<string | null>;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<string | null>;
   logout: () => Promise<void>;
 }
 
@@ -107,6 +112,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
+  /** Returns an error message on failure, or null on success. */
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const res = await apiFetch('/api/v1/auth/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
+      if (!res.ok) return (await parseApiError(res)).message;
+      return null;
+    },
+    [],
+  );
+
   const logout = useCallback(async () => {
     try {
       // Send the access token so the server can bump refresh_token_version
@@ -129,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         register,
+        changePassword,
         logout,
       }}
     >
