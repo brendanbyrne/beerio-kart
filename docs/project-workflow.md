@@ -183,6 +183,20 @@ Why:
 
 For chore PRs without an Issue, omit the prefix (just the summary). For multi-Issue PRs, use the primary Issue number in the prefix; the commit body can reference others (`Refs #NN`).
 
+### Pre-push checks
+
+Before `git push`-ing a branch that will become a PR, run the same gates CI will run. Lefthook's pre-push hook covers tests + lint + typecheck automatically (see [`lefthook.yml`](../lefthook.yml)); the one it does **not** run is coverage, and Codecov enforces a blocking 80% patch-coverage gate on both backend and frontend (see [`codecov.yml`](../codecov.yml) → `coverage.status.patch`). A passing test suite does not imply the new lines were exercised — verify by running coverage locally:
+
+- **Frontend:** `cd frontend && bun run test:coverage` — read the "Uncovered Line #s" column for every file in `git diff main --name-only`. Fix gaps before pushing.
+- **Backend:** `cargo llvm-cov --workspace` from the repo root (requires `cargo install cargo-llvm-cov`). Same review: check that the lines you added show as hit.
+
+Two failure modes account for most patch-gate misses:
+
+1. **Mocked-dependency blind spot.** When a test mocks a function the changed code depends on (e.g. `vi.mock('../hooks/useAuth')` replacing `changePassword`), the *real* body of that mocked function never runs. The form-level test passes; the new function body shows as uncovered. Fix: add a unit test for the new code at its own boundary (the `useAuth.test.tsx` `renderHook + AuthProvider + MSW` pattern is the frontend template).
+2. **Unreachable-defensive-guard blind spot.** Defensive branches that no realistic input can hit count as uncovered lines. Common shape: `if (typeof x !== 'string') return ...` around a `FormData.get()` on a `<input type="text" required>`. Fix: remove the unreachable branch (e.g. extract a narrow-once helper like [`frontend/src/utils/forms.ts`](../frontend/src/utils/forms.ts)'s `readString`) rather than ship a defensive return no test can hit.
+
+If `test:coverage` shows uncovered new lines, fix them locally — the failed-CI round trip is much more expensive than the ~30 s coverage run.
+
 ### Review and merge
 
 - **Never push directly to `main`.** All code changes require a PR.
@@ -298,3 +312,4 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 - 2026-05-14 — Added `### Title` subsection under `## PR conventions` documenting the `<issue_number>: <Title>` PR title format (mirrors the existing commit-message convention). Captured so Claude Code applies the format when creating PRs.
 - 2026-05-15 — Updated the intro paragraph's reference for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
 - 2026-05-17 — § PR template structure item 4 (How to verify): added the rule that verification command blocks must be self-contained — capture values a later step needs (auth tokens, resource IDs) into shell variables, e.g. via `jq`, rather than asking the reviewer to substitute placeholders by hand. Mirrored in the `.github/pull_request_template.md` "How to verify" comment. Surfaced by PR [#165](https://github.com/brendanbyrne/beerio-kart/pull/165) review feedback.
+- 2026-05-27 — Added `### Pre-push checks` subsection under `## PR conventions`. Lefthook's pre-push hook covers tests/lint/typecheck but not coverage; Codecov's 80% patch gate is blocking and has failed initial pushes on PR [#210](https://github.com/brendanbyrne/beerio-kart/pull/210) (D3) and PR [#211](https://github.com/brendanbyrne/beerio-kart/pull/211) (E1) — the new subsection names the local commands (`bun run test:coverage`, `cargo llvm-cov --workspace`) and the two recurring failure modes (mocked-dependency blind spot, unreachable-defensive-guard blind spot). Threshold itself stays in `codecov.yml`; this doc points at it.
