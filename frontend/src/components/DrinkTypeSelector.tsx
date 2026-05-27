@@ -1,10 +1,11 @@
 import { useActionState, useState } from 'react';
+import { clsx } from 'clsx';
+import * as z from 'zod';
 import { useDrinkTypes } from '../hooks/useGameData';
 import { apiFetch } from '../api/client';
 import { parseApiError, parseBody } from '../api/result';
 import { DrinkTypeSchema } from '../api/types';
 import type { DrinkType } from '../api/types';
-import { readString } from '../utils/forms';
 import { SubmitButton } from './SubmitButton';
 
 interface DrinkTypeSelectorProps {
@@ -100,6 +101,13 @@ type AddState = { error: string | null };
 
 const ADD_INITIAL: AddState = { error: null };
 
+// `alcoholic` rides as a hidden input ('true' | 'false'); the schema's
+// transform turns it into a boolean before the POST body is built.
+const AddDrinkTypeFormSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  alcoholic: z.enum(['true', 'false']).transform((v) => v === 'true'),
+});
+
 // Extracted so its useActionState starts fresh each time the add card is
 // opened — the parent mounts/unmounts it via the showAddForm toggle.
 function AddDrinkTypeForm({
@@ -113,15 +121,18 @@ function AddDrinkTypeForm({
 
   const [state, submit] = useActionState<AddState, FormData>(
     async (_prev, formData) => {
-      const name = readString(formData, 'name').trim();
-      if (!name) return { error: 'Name is required' };
-      const alcoholicVal = readString(formData, 'alcoholic') === 'true';
+      const parsed = AddDrinkTypeFormSchema.safeParse(
+        Object.fromEntries(formData),
+      );
+      if (!parsed.success) {
+        return { error: 'Name is required' };
+      }
 
       try {
         const res = await apiFetch('/api/v1/drink-types', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, alcoholic: alcoholicVal }),
+          body: JSON.stringify(parsed.data),
         });
         if (!res.ok) {
           const err = await parseApiError(res);
@@ -158,16 +169,18 @@ function AddDrinkTypeForm({
           <button
             type="button"
             onClick={() => setAlcoholic(!alcoholic)}
-            className={`w-11 h-6 flex-shrink-0 rounded-full transition-colors relative ${
-              alcoholic ? 'bg-blue-500' : 'bg-gray-300'
-            }`}
+            className={clsx(
+              'w-11 h-6 flex-shrink-0 rounded-full transition-colors relative',
+              alcoholic ? 'bg-blue-500' : 'bg-gray-300',
+            )}
             aria-label="Toggle alcoholic"
             aria-pressed={alcoholic}
           >
             <span
-              className={`block absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                alcoholic ? 'translate-x-5' : 'translate-x-0'
-              }`}
+              className={clsx(
+                'block absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform',
+                alcoholic ? 'translate-x-5' : 'translate-x-0',
+              )}
             />
           </button>
           {alcoholic ? 'Alcoholic' : 'Non-alcoholic'}

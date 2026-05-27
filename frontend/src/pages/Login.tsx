@@ -1,12 +1,21 @@
 import { useActionState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import * as z from 'zod';
 import { useAuth } from '../hooks/useAuth';
 import { SubmitButton } from '../components/SubmitButton';
-import { readString } from '../utils/forms';
 
 type LoginState = { error: string | null };
 
 const INITIAL: LoginState = { error: null };
+
+// Native `required` keeps both fields non-empty, and the backend is
+// authoritative on credentials — this submit-time parse exists to satisfy
+// react.md § 8's "schema check at submit" rule and to give a single,
+// typed read of the FormData.
+const LoginFormSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
 
 export function Login() {
   const { login } = useAuth();
@@ -14,9 +23,11 @@ export function Login() {
 
   const [state, submit] = useActionState<LoginState, FormData>(
     async (_prev, formData) => {
-      const username = readString(formData, 'username');
-      const password = readString(formData, 'password');
-      const err = await login(username, password);
+      const parsed = LoginFormSchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return { error: 'Please fill in both fields' };
+      }
+      const err = await login(parsed.data.username, parsed.data.password);
       if (err) return { error: err };
       navigate('/');
       return { error: null };

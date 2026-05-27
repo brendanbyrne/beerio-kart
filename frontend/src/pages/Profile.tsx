@@ -1,5 +1,6 @@
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as z from 'zod';
 import { apiFetch } from '../api/client';
 import { parseApiError } from '../api/result';
 import { useAuth } from '../hooks/useAuth';
@@ -14,7 +15,6 @@ import { RaceSetupPicker } from '../components/RaceSetupPicker';
 import { DrinkTypeSelector } from '../components/DrinkTypeSelector';
 import { SubmitButton } from '../components/SubmitButton';
 import { BottomNav } from '../components/BottomNav';
-import { readString } from '../utils/forms';
 import type { DrinkType } from '../api/types';
 
 type EditMode = null | 'race-setup' | 'drink-type' | 'password';
@@ -31,6 +31,13 @@ export function Profile() {
   const [editMode, setEditMode] = useState<EditMode>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Stable callback for PasswordChangeForm so the form's success-timer
+  // effect doesn't re-fire (and reset the 1500 ms auto-close) every time
+  // Profile re-renders. The Compiler in PR-E2 will make this redundant.
+  const closePasswordForm = useCallback(() => {
+    setEditMode(null);
+  }, []);
 
   const char = characters.find((c) => c.id === profile?.preferred_character_id);
   const body = bodies.find((b) => b.id === profile?.preferred_body_id);
@@ -260,7 +267,7 @@ export function Profile() {
         {/* Password Change Card */}
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           {editMode === 'password' ? (
-            <PasswordChangeForm onDone={() => setEditMode(null)} />
+            <PasswordChangeForm onDone={closePasswordForm} />
           ) : (
             <button
               onClick={() => setEditMode('password')}
@@ -287,11 +294,19 @@ export function Profile() {
 }
 
 type PasswordState =
-  | { status: 'idle' }
-  | { status: 'error'; error: string }
-  | { status: 'success' };
+  | { kind: 'idle' }
+  | { kind: 'error'; error: string }
+  | { kind: 'success' };
 
-const PASSWORD_INITIAL: PasswordState = { status: 'idle' };
+const PASSWORD_INITIAL: PasswordState = { kind: 'idle' };
+
+// Mirrors the backend's password rules. `minLength=8` is also enforced by
+// the input attribute; this schema is the submit-time backstop per
+// react.md § 8.
+const PasswordFormSchema = z.object({
+  current_password: z.string().min(1),
+  new_password: z.string().min(8),
+});
 
 // Extracted so its useActionState starts fresh each time the password card
 // is opened — the parent mounts/unmounts it via the editMode toggle, which
@@ -301,11 +316,19 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
 
   const [state, submit] = useActionState<PasswordState, FormData>(
     async (_prev, formData) => {
-      const currentPassword = readString(formData, 'current_password');
-      const newPassword = readString(formData, 'new_password');
-      const err = await changePassword(currentPassword, newPassword);
-      if (err) return { status: 'error', error: err };
-      return { status: 'success' };
+      const parsed = PasswordFormSchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return {
+          kind: 'error',
+          error: 'New password must be at least 8 characters',
+        };
+      }
+      const err = await changePassword(
+        parsed.data.current_password,
+        parsed.data.new_password,
+      );
+      if (err) return { kind: 'error', error: err };
+      return { kind: 'success' };
     },
     PASSWORD_INITIAL,
   );
@@ -314,14 +337,15 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
   // visible. The setState (parent's setEditMode via onDone) lives inside
   // the timer callback, not synchronously in the effect body, so the
   // "setState in effect" lint rule (project_setstate_in_effect_is_error)
-  // does not apply.
+  // does not apply. `onDone` is `useCallback`-stable in the parent, so a
+  // Profile re-render during the 1500 ms window does not reset the timer.
   useEffect(() => {
-    if (state.status !== 'success') return;
+    if (state.kind !== 'success') return;
     const timer = setTimeout(onDone, 1500);
     return () => {
       clearTimeout(timer);
     };
-  }, [state.status, onDone]);
+  }, [state.kind, onDone]);
 
   return (
     <form action={submit} className="space-y-3">
@@ -343,10 +367,10 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
         minLength={8}
         required
       />
-      {state.status === 'error' && (
+      {state.kind === 'error' && (
         <p className="text-red-500 text-xs">{state.error}</p>
       )}
-      {state.status === 'success' && (
+      {state.kind === 'success' && (
         <p className="text-green-600 text-xs">Password changed!</p>
       )}
       <div className="flex gap-2">
