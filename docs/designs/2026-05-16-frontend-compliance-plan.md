@@ -197,7 +197,7 @@ The PRs below address every line item.
 
 ### PR-D3: Remove `as Foo` casts and unsafe response annotations
 
-**Issue:** [#179](https://github.com/brendanbyrne/beerio-kart/issues/179)
+**Issue:** [#179](https://github.com/brendanbyrne/beerio-kart/issues/179) · **Merged PR:** [#210](https://github.com/brendanbyrne/beerio-kart/pull/210)
 
 - **Scope:**
   - `RunEntrySheet.tsx:234` — replace `(e.target as HTMLImageElement)` with `e.currentTarget`. Safe here specifically because the handler is attached directly to the `<img>` and React types `currentTarget` to the element that owns the handler — no cast needed. Do not blindly apply this substitution in delegated handlers where `target` and `currentTarget` differ. (Line number drifted from `:176` since the plan was filed.)
@@ -207,7 +207,7 @@ The PRs below address every line item.
 - **Effort:** S.
 - **Dependencies:** PR-B2 (Zod schemas in place for the DrinkTypeSelector fix).
 - **Risk:** Low.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ---
 
@@ -373,7 +373,7 @@ All Issues live under [Milestone 9 — Hardening: Frontend standards compliance]
 | 7 | C2 | TanStack Query polling hooks | C1, H2 | [#186](https://github.com/brendanbyrne/beerio-kart/issues/186) | [x] |
 | 8 | D1 | Named exports everywhere | (B1) | [#175](https://github.com/brendanbyrne/beerio-kart/issues/175) | [x] |
 | 9 | D2 | Remove `!` assertions | — | [#192](https://github.com/brendanbyrne/beerio-kart/issues/192) | [x] |
-| 10 | D3 | Remove `as` casts | B2 | [#179](https://github.com/brendanbyrne/beerio-kart/issues/179) | [ ] |
+| 10 | D3 | Remove `as` casts | B2 | [#179](https://github.com/brendanbyrne/beerio-kart/issues/179) | [x] |
 | 11 | E1 | Form migration to useActionState | B2, H2 | [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) | [ ] |
 | 12 | E2 | Ref-as-prop, Doc Metadata, Compiler | A1, C2 | [#180](https://github.com/brendanbyrne/beerio-kart/issues/180) | [ ] |
 | 13 | F1 | Router upgrade + boundaries + lazy | D1, H2 | [#190](https://github.com/brendanbyrne/beerio-kart/issues/190) | [ ] |
@@ -398,3 +398,4 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 - 2026-05-18 — Reconciled the plan with PR-A1 ([#194](https://github.com/brendanbyrne/beerio-kart/pull/194)) and PR-A2 ([#196](https://github.com/brendanbyrne/beerio-kart/pull/196)), both merged. Corrected PR-A1's rule list: `consistent-type-definitions` and `import/no-default-export` ship at `warn`, not `error` — they fire on existing code, and the warn-down principle applies to named rules too. Recorded `import/consistent-type-specifier-style` (added during PR-A1 review) and, in PR-A2, `noImplicitOverride` plus the `typecheck`-script fix (`tsc --noEmit` → `tsc -b`). Added a PR-H1 scope bullet making it the explicit owner of flipping every remaining `warn`-level lint rule back to `error` — previously no PR owned the `consistent-type-definitions` flip. Per-PR **Merged PR** links added to the A1 and A2 sections. Sign-off checkboxes left for Brendan.
 - 2026-05-26 — Caught up sign-off bookkeeping for the first eight PRs in the pickup order. Checked the table rows and per-section boxes for D1 ([#205](https://github.com/brendanbyrne/beerio-kart/pull/205)) and H2 ([#197](https://github.com/brendanbyrne/beerio-kart/pull/197)) — both merged but their boxes had been missed in earlier reconciliations — and added the still-missing **Merged PR** links for H2, B1 ([#198](https://github.com/brendanbyrne/beerio-kart/pull/198)), B2 ([#199](https://github.com/brendanbyrne/beerio-kart/pull/199)), C1 ([#203](https://github.com/brendanbyrne/beerio-kart/pull/203)), C2 ([#204](https://github.com/brendanbyrne/beerio-kart/pull/204)), and D1 ([#205](https://github.com/brendanbyrne/beerio-kart/pull/205)) so every shipped PR section now points at its merged PR alongside its Issue. Companion to the PR-D2 ([#192](https://github.com/brendanbyrne/beerio-kart/issues/192)) pickup; D2's own sign-off stays open until that PR merges.
 - 2026-05-26 — PR-D2 ([#192](https://github.com/brendanbyrne/beerio-kart/issues/192)) merged as [#208](https://github.com/brendanbyrne/beerio-kart/pull/208). Flipped its per-section sign-off `[ ]` → `[x]` and the row-9 table checkbox to match, and added the **Merged PR** link alongside the Issue link. Companion to picking up PR-D3 ([#179](https://github.com/brendanbyrne/beerio-kart/issues/179)) — the next item in the pickup order.
+- 2026-05-27 — PR-D3 ([#179](https://github.com/brendanbyrne/beerio-kart/issues/179)) merged as [#210](https://github.com/brendanbyrne/beerio-kart/pull/210). Flipped its per-section sign-off `[ ]` → `[x]` and the row-10 table checkbox to match, and added the **Merged PR** link alongside the Issue link. Companion to picking up PR-E1 ([#182](https://github.com/brendanbyrne/beerio-kart/issues/182)) — the next item in the pickup order.
