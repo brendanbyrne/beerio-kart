@@ -1,12 +1,20 @@
 import { useActionState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import * as z from 'zod';
 import { useAuth } from '../hooks/useAuth';
 import { SubmitButton } from '../components/SubmitButton';
-import { readString } from '../utils/forms';
 
 type RegisterState = { error: string | null };
 
 const INITIAL: RegisterState = { error: null };
+
+// Mirror of the backend's username/password rules. The 8-char minimum is
+// also enforced by the input's `minLength`; this schema is the
+// submit-time backstop per react.md § 8.
+const RegisterFormSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(8),
+});
 
 export function Register() {
   const { register } = useAuth();
@@ -14,9 +22,11 @@ export function Register() {
 
   const [state, submit] = useActionState<RegisterState, FormData>(
     async (_prev, formData) => {
-      const username = readString(formData, 'username');
-      const password = readString(formData, 'password');
-      const err = await register(username, password);
+      const parsed = RegisterFormSchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return { error: 'Password must be at least 8 characters' };
+      }
+      const err = await register(parsed.data.username, parsed.data.password);
       if (err) return { error: err };
       navigate('/onboarding');
       return { error: null };

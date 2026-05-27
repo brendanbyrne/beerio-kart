@@ -82,4 +82,20 @@ describe('DrinkTypeSelector add-drink flow', () => {
       ),
     );
   });
+
+  it('catches an empty name with the Zod backstop if native validation is bypassed', async () => {
+    mockList();
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    renderWithClient(<DrinkTypeSelector onSelect={onSelect} />);
+
+    await user.click(await screen.findByRole('button', { name: /add new/i }));
+    // Strip `required` so the submit reaches the action and exercises the
+    // Zod safeguard — the second line of defense per react.md § 8.
+    screen.getByPlaceholderText(/drink name/i).removeAttribute('required');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

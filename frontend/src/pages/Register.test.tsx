@@ -64,14 +64,26 @@ describe('Register', () => {
     expect(register).not.toHaveBeenCalled();
   });
 
-  // The 8-character `minLength` on the password input is enforced by the
-  // browser at submit time, but jsdom does not block submission on
-  // `minLength` violations (it does on `required`), so a behavioural test
-  // here would lie about what real browsers do. The constraint is verified
-  // by manual smoke test instead; this test asserts the attribute is wired
-  // so a future rename can't silently drop it.
-  it('exposes minLength=8 on the password input', () => {
+  it('exposes minLength=8 on the password input (native first line)', () => {
     renderRegister();
     expect(screen.getByLabelText('Password')).toHaveAttribute('minLength', '8');
+  });
+
+  it('catches a short password with the Zod backstop at submit', async () => {
+    register.mockResolvedValue(null);
+    const user = userEvent.setup();
+    renderRegister();
+
+    // jsdom does not enforce `minLength` at submit (real browsers do), so
+    // the submit reaches the action and Zod is the only gate that fires —
+    // exactly the "submit-time backstop" react.md § 8 mandates.
+    await user.type(screen.getByLabelText('Username'), 'alice');
+    await user.type(screen.getByLabelText('Password'), 'short');
+    await user.click(screen.getByRole('button', { name: /register/i }));
+
+    expect(
+      await screen.findByText('Password must be at least 8 characters'),
+    ).toBeInTheDocument();
+    expect(register).not.toHaveBeenCalled();
   });
 });

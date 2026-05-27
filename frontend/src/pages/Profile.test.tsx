@@ -129,4 +129,26 @@ describe('Profile password change form', () => {
     ).not.toBeInTheDocument();
     expect(changePassword).not.toHaveBeenCalled();
   });
+
+  it('catches a short new password with the Zod backstop at submit', async () => {
+    changePassword.mockResolvedValue(null);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /change/i }));
+    // jsdom does not enforce `minLength` at submit, so the submit reaches
+    // the action and Zod is the only gate that fires — the "submit-time
+    // backstop" react.md § 8 mandates.
+    await user.type(
+      screen.getByPlaceholderText('Current password'),
+      'old-secret',
+    );
+    await user.type(screen.getByPlaceholderText(/new password/i), 'short');
+    await user.click(screen.getByRole('button', { name: /change password/i }));
+
+    expect(
+      await screen.findByText('New password must be at least 8 characters'),
+    ).toBeInTheDocument();
+    expect(changePassword).not.toHaveBeenCalled();
+  });
 });

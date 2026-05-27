@@ -67,4 +67,21 @@ describe('Login', () => {
 
     expect(login).not.toHaveBeenCalled();
   });
+
+  it('catches empty fields with the Zod backstop if native validation is bypassed', async () => {
+    login.mockResolvedValue(null);
+    const user = userEvent.setup();
+    renderLogin();
+
+    // Strip `required` so the submit reaches the action and exercises the
+    // Zod safeguard — the second line of defense per react.md § 8.
+    screen.getByLabelText('Username').removeAttribute('required');
+    screen.getByLabelText('Password').removeAttribute('required');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
+
+    expect(
+      await screen.findByText('Please fill in both fields'),
+    ).toBeInTheDocument();
+    expect(login).not.toHaveBeenCalled();
+  });
 });
