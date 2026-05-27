@@ -1,10 +1,17 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import type * as RouterDom from 'react-router-dom';
 import { server } from '../mocks/server';
 import { Onboarding } from './Onboarding';
+
+const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof RouterDom>('react-router-dom');
+  return { ...actual, useNavigate: () => navigate };
+});
 
 // Onboarding saves the race setup, then the drink type, via PUT /users/:id.
 // Covered behavior: when a save fails the user sees the backend's error and
@@ -53,6 +60,24 @@ describe('Onboarding', () => {
     expect(await screen.findByText('Invalid character')).toBeInTheDocument();
     // Still on race-setup; the drink phase never rendered.
     expect(screen.queryByText('select-drink')).not.toBeInTheDocument();
+  });
+
+  it('navigates home after both saves succeed', async () => {
+    navigate.mockReset();
+    server.use(http.put('/api/v1/users/u1', () => HttpResponse.json({})));
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <Onboarding />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByText('complete-setup'));
+    await user.click(await screen.findByText('select-drink'));
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/');
+    });
   });
 
   it('shows the backend error when the drink-type save fails', async () => {
