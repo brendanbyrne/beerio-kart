@@ -2,6 +2,7 @@ import { useActionState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { SubmitButton } from '../components/SubmitButton';
+import { readString } from '../utils/forms';
 
 type RegisterState = { error: string | null };
 
@@ -13,11 +14,8 @@ export function Register() {
 
   const [state, submit] = useActionState<RegisterState, FormData>(
     async (_prev, formData) => {
-      const username = formData.get('username');
-      const password = formData.get('password');
-      if (typeof username !== 'string' || typeof password !== 'string') {
-        return { error: 'Invalid form data' };
-      }
+      const username = readString(formData, 'username');
+      const password = readString(formData, 'password');
       const err = await register(username, password);
       if (err) return { error: err };
       navigate('/onboarding');

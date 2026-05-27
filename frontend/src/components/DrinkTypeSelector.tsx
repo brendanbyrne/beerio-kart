@@ -4,6 +4,7 @@ import { apiFetch } from '../api/client';
 import { parseApiError, parseBody } from '../api/result';
 import { DrinkTypeSchema } from '../api/types';
 import type { DrinkType } from '../api/types';
+import { readString } from '../utils/forms';
 import { SubmitButton } from './SubmitButton';
 
 interface DrinkTypeSelectorProps {
@@ -112,12 +113,9 @@ function AddDrinkTypeForm({
 
   const [state, submit] = useActionState<AddState, FormData>(
     async (_prev, formData) => {
-      const rawName = formData.get('name');
-      const name = typeof rawName === 'string' ? rawName.trim() : '';
+      const name = readString(formData, 'name').trim();
       if (!name) return { error: 'Name is required' };
-
-      const rawAlcoholic = formData.get('alcoholic');
-      const alcoholicVal = rawAlcoholic === 'true';
+      const alcoholicVal = readString(formData, 'alcoholic') === 'true';
 
       try {
         const res = await apiFetch('/api/v1/drink-types', {
