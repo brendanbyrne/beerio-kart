@@ -1,39 +1,42 @@
-import { useState, type FormEvent } from 'react';
+import { useActionState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { SubmitButton } from '../components/SubmitButton';
+
+type LoginState = { error: string | null };
+
+const INITIAL: LoginState = { error: null };
 
 export function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-
-    const err = await login(username, password);
-    setSubmitting(false);
-
-    if (err) {
-      setError(err);
-    } else {
+  const [state, submit] = useActionState<LoginState, FormData>(
+    async (_prev, formData) => {
+      const username = formData.get('username');
+      const password = formData.get('password');
+      if (typeof username !== 'string' || typeof password !== 'string') {
+        return { error: 'Invalid form data' };
+      }
+      const err = await login(username, password);
+      if (err) return { error: err };
       navigate('/');
-    }
-  }
+      return { error: null };
+    },
+    INITIAL,
+  );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <form
-        onSubmit={handleSubmit}
+        action={submit}
         className="w-full max-w-sm space-y-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
       >
         <h1 className="text-2xl font-bold text-gray-900 text-center">Log In</h1>
 
-        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+        {state.error && (
+          <p className="text-red-500 text-sm text-center">{state.error}</p>
+        )}
 
         <div>
           <label
@@ -44,9 +47,8 @@ export function Login() {
           </label>
           <input
             id="username"
+            name="username"
             type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
             className="w-full px-3 py-2.5 bg-gray-50 text-gray-900 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-400"
             autoComplete="username"
             required
@@ -62,22 +64,20 @@ export function Login() {
           </label>
           <input
             id="password"
+            name="password"
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
             className="w-full px-3 py-2.5 bg-gray-50 text-gray-900 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-400"
             autoComplete="current-password"
             required
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 disabled:bg-gray-300 transition-colors"
+        <SubmitButton
+          className="w-full py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors"
+          pendingLabel="Logging in..."
         >
-          {submitting ? 'Logging in...' : 'Log In'}
-        </button>
+          Log In
+        </SubmitButton>
 
         <p className="text-sm text-gray-400 text-center">
           Don&apos;t have an account?{' '}

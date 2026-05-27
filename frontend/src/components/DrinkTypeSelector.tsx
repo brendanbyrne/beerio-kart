@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 import { useDrinkTypes } from '../hooks/useGameData';
 import { apiFetch } from '../api/client';
 import { parseApiError, parseBody } from '../api/result';
 import { DrinkTypeSchema } from '../api/types';
 import type { DrinkType } from '../api/types';
+import { SubmitButton } from './SubmitButton';
 
 interface DrinkTypeSelectorProps {
   selectedId?: string | null;
@@ -18,10 +19,6 @@ export function DrinkTypeSelector({
 }: DrinkTypeSelectorProps) {
   const { items, loading, refresh } = useDrinkTypes();
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newAlcoholic, setNewAlcoholic] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -29,33 +26,6 @@ export function DrinkTypeSelector({
         Loading drink types...
       </div>
     );
-  }
-
-  async function handleAdd() {
-    if (!newName.trim()) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await apiFetch('/api/v1/drink-types', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), alcoholic: newAlcoholic }),
-      });
-      if (!res.ok) {
-        const err = await parseApiError(res);
-        setError(err.message);
-        return;
-      }
-      const created = await parseBody(DrinkTypeSchema, res);
-      refresh();
-      onSelect(created);
-      setShowAddForm(false);
-      setNewName('');
-    } catch {
-      setError('Network error');
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   return (
@@ -103,53 +73,14 @@ export function DrinkTypeSelector({
           + Not listed? Add new
         </button>
       ) : (
-        <div className="bg-gray-50 rounded-xl p-3 space-y-2">
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Drink name..."
-            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
-            autoFocus
-          />
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-              <button
-                type="button"
-                onClick={() => setNewAlcoholic(!newAlcoholic)}
-                className={`w-11 h-6 flex-shrink-0 rounded-full transition-colors relative ${
-                  newAlcoholic ? 'bg-blue-500' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`block absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                    newAlcoholic ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-              {newAlcoholic ? 'Alcoholic' : 'Non-alcoholic'}
-            </label>
-          </div>
-          {error && <p className="text-red-500 text-xs">{error}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setShowAddForm(false);
-                setError(null);
-              }}
-              className="flex-1 py-2 text-xs font-medium text-gray-500 bg-gray-200 rounded-lg"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleAdd}
-              disabled={!newName.trim() || submitting}
-              className="flex-1 py-2 text-xs font-semibold text-white bg-blue-500 rounded-lg disabled:bg-gray-300"
-            >
-              {submitting ? 'Adding...' : 'Add'}
-            </button>
-          </div>
-        </div>
+        <AddDrinkTypeForm
+          onAdded={(created) => {
+            refresh();
+            onSelect(created);
+            setShowAddForm(false);
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
       )}
 
       {onSkip && (
@@ -161,5 +92,105 @@ export function DrinkTypeSelector({
         </button>
       )}
     </div>
+  );
+}
+
+type AddState = { error: string | null };
+
+const ADD_INITIAL: AddState = { error: null };
+
+// Extracted so its useActionState starts fresh each time the add card is
+// opened — the parent mounts/unmounts it via the showAddForm toggle.
+function AddDrinkTypeForm({
+  onAdded,
+  onCancel,
+}: {
+  onAdded: (created: DrinkType) => void;
+  onCancel: () => void;
+}) {
+  const [alcoholic, setAlcoholic] = useState(true);
+
+  const [state, submit] = useActionState<AddState, FormData>(
+    async (_prev, formData) => {
+      const rawName = formData.get('name');
+      const name = typeof rawName === 'string' ? rawName.trim() : '';
+      if (!name) return { error: 'Name is required' };
+
+      const rawAlcoholic = formData.get('alcoholic');
+      const alcoholicVal = rawAlcoholic === 'true';
+
+      try {
+        const res = await apiFetch('/api/v1/drink-types', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, alcoholic: alcoholicVal }),
+        });
+        if (!res.ok) {
+          const err = await parseApiError(res);
+          return { error: err.message };
+        }
+        const created = await parseBody(DrinkTypeSchema, res);
+        onAdded(created);
+        return { error: null };
+      } catch {
+        return { error: 'Network error' };
+      }
+    },
+    ADD_INITIAL,
+  );
+
+  return (
+    <form action={submit} className="bg-gray-50 rounded-xl p-3 space-y-2">
+      <input
+        type="text"
+        name="name"
+        placeholder="Drink name..."
+        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+        autoFocus
+        required
+        maxLength={60}
+      />
+      <input
+        type="hidden"
+        name="alcoholic"
+        value={alcoholic ? 'true' : 'false'}
+      />
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <button
+            type="button"
+            onClick={() => setAlcoholic(!alcoholic)}
+            className={`w-11 h-6 flex-shrink-0 rounded-full transition-colors relative ${
+              alcoholic ? 'bg-blue-500' : 'bg-gray-300'
+            }`}
+            aria-label="Toggle alcoholic"
+            aria-pressed={alcoholic}
+          >
+            <span
+              className={`block absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                alcoholic ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+          {alcoholic ? 'Alcoholic' : 'Non-alcoholic'}
+        </label>
+      </div>
+      {state.error && <p className="text-red-500 text-xs">{state.error}</p>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 py-2 text-xs font-medium text-gray-500 bg-gray-200 rounded-lg"
+        >
+          Cancel
+        </button>
+        <SubmitButton
+          className="flex-1 py-2 text-xs font-semibold text-white bg-blue-500 rounded-lg"
+          pendingLabel="Adding..."
+        >
+          Add
+        </SubmitButton>
+      </div>
+    </form>
   );
 }

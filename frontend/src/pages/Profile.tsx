@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { parseApiError } from '../api/result';
@@ -12,6 +12,7 @@ import {
 } from '../hooks/useGameData';
 import { RaceSetupPicker } from '../components/RaceSetupPicker';
 import { DrinkTypeSelector } from '../components/DrinkTypeSelector';
+import { SubmitButton } from '../components/SubmitButton';
 import { BottomNav } from '../components/BottomNav';
 import type { DrinkType } from '../api/types';
 
@@ -29,12 +30,6 @@ export function Profile() {
   const [editMode, setEditMode] = useState<EditMode>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  // Password change state
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   const char = characters.find((c) => c.id === profile?.preferred_character_id);
   const body = bodies.find((b) => b.id === profile?.preferred_body_id);
@@ -92,41 +87,6 @@ export function Profile() {
       setEditMode(null);
     } catch {
       setSaveError('Network error — please try again');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleChangePassword() {
-    setPasswordError(null);
-    setPasswordSuccess(false);
-    if (newPassword.length < 8) {
-      setPasswordError('New password must be at least 8 characters');
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await apiFetch('/api/v1/auth/password', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
-      });
-      if (!res.ok) {
-        setPasswordError((await parseApiError(res)).message);
-        return;
-      }
-      setPasswordSuccess(true);
-      setCurrentPassword('');
-      setNewPassword('');
-      setTimeout(() => {
-        setEditMode(null);
-        setPasswordSuccess(false);
-      }, 1500);
-    } catch {
-      setPasswordError('Network error');
     } finally {
       setSaving(false);
     }
@@ -299,51 +259,7 @@ export function Profile() {
         {/* Password Change Card */}
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           {editMode === 'password' ? (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-700">
-                Change Password
-              </h3>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Current password"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
-              />
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="New password (min 8 characters)"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
-              />
-              {passwordError && (
-                <p className="text-red-500 text-xs">{passwordError}</p>
-              )}
-              {passwordSuccess && (
-                <p className="text-green-600 text-xs">Password changed!</p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setEditMode(null);
-                    setPasswordError(null);
-                    setCurrentPassword('');
-                    setNewPassword('');
-                  }}
-                  className="flex-1 py-2 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleChangePassword}
-                  disabled={saving || !currentPassword || !newPassword}
-                  className="flex-1 py-2 text-xs font-semibold text-white bg-blue-500 rounded-lg disabled:bg-gray-300"
-                >
-                  {saving ? 'Saving...' : 'Change Password'}
-                </button>
-              </div>
-            </div>
+            <PasswordChangeForm onDone={() => setEditMode(null)} />
           ) : (
             <button
               onClick={() => setEditMode('password')}
@@ -366,5 +282,93 @@ export function Profile() {
 
       <BottomNav />
     </div>
+  );
+}
+
+type PasswordState =
+  | { status: 'idle' }
+  | { status: 'error'; error: string }
+  | { status: 'success' };
+
+const PASSWORD_INITIAL: PasswordState = { status: 'idle' };
+
+// Extracted so its useActionState starts fresh each time the password card
+// is opened — the parent mounts/unmounts it via the editMode toggle, which
+// means a previous "success" status can't bleed into the next open.
+function PasswordChangeForm({ onDone }: { onDone: () => void }) {
+  const { changePassword } = useAuth();
+
+  const [state, submit] = useActionState<PasswordState, FormData>(
+    async (_prev, formData) => {
+      const currentPassword = formData.get('current_password');
+      const newPassword = formData.get('new_password');
+      if (
+        typeof currentPassword !== 'string' ||
+        typeof newPassword !== 'string'
+      ) {
+        return { status: 'error', error: 'Invalid form data' };
+      }
+      const err = await changePassword(currentPassword, newPassword);
+      if (err) return { status: 'error', error: err };
+      return { status: 'success' };
+    },
+    PASSWORD_INITIAL,
+  );
+
+  // On success, close the form after a short pause so the message is
+  // visible. The setState (parent's setEditMode via onDone) lives inside
+  // the timer callback, not synchronously in the effect body, so the
+  // "setState in effect" lint rule (project_setstate_in_effect_is_error)
+  // does not apply.
+  useEffect(() => {
+    if (state.status !== 'success') return;
+    const timer = setTimeout(onDone, 1500);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [state.status, onDone]);
+
+  return (
+    <form action={submit} className="space-y-3">
+      <h3 className="text-sm font-semibold text-gray-700">Change Password</h3>
+      <input
+        type="password"
+        name="current_password"
+        autoComplete="current-password"
+        placeholder="Current password"
+        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+        required
+      />
+      <input
+        type="password"
+        name="new_password"
+        autoComplete="new-password"
+        placeholder="New password (min 8 characters)"
+        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+        minLength={8}
+        required
+      />
+      {state.status === 'error' && (
+        <p className="text-red-500 text-xs">{state.error}</p>
+      )}
+      {state.status === 'success' && (
+        <p className="text-green-600 text-xs">Password changed!</p>
+      )}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onDone}
+          className="flex-1 py-2 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg"
+        >
+          Cancel
+        </button>
+        <SubmitButton
+          className="flex-1 py-2 text-xs font-semibold text-white bg-blue-500 rounded-lg"
+          pendingLabel="Saving..."
+        >
+          Change Password
+        </SubmitButton>
+      </div>
+    </form>
   );
 }

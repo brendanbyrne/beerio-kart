@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { parseApiError } from '../api/result';
@@ -9,22 +9,27 @@ import type { DrinkType } from '../api/types';
 
 type Phase = 'race-setup' | 'drink-type';
 
+type Setup = {
+  characterId: number;
+  bodyId: number;
+  wheelId: number;
+  gliderId: number;
+};
+
+type SaveState = { error: string | null };
+
+const INITIAL: SaveState = { error: null };
+
 export function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>('race-setup');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function saveRaceSetup(setup: {
-    characterId: number;
-    bodyId: number;
-    wheelId: number;
-    gliderId: number;
-  }) {
-    if (!user) return;
-    setSaving(true);
-    setError(null);
+  const [raceState, saveRaceSetup, savingRaceSetup] = useActionState<
+    SaveState,
+    Setup
+  >(async (_prev, setup) => {
+    if (!user) return { error: 'Not signed in' };
     try {
       const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
@@ -36,39 +41,35 @@ export function Onboarding() {
           preferred_glider_id: setup.gliderId,
         }),
       });
-      if (!res.ok) {
-        setError((await parseApiError(res)).message);
-        return;
-      }
+      if (!res.ok) return { error: (await parseApiError(res)).message };
       setPhase('drink-type');
+      return { error: null };
     } catch {
-      setError('Network error — please try again');
-    } finally {
-      setSaving(false);
+      return { error: 'Network error — please try again' };
     }
-  }
+  }, INITIAL);
 
-  async function saveDrinkType(dt: DrinkType) {
-    if (!user) return;
-    setSaving(true);
-    setError(null);
+  const [drinkState, saveDrinkType, savingDrinkType] = useActionState<
+    SaveState,
+    DrinkType
+  >(async (_prev, dt) => {
+    if (!user) return { error: 'Not signed in' };
     try {
       const res = await apiFetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preferred_drink_type_id: dt.id }),
       });
-      if (!res.ok) {
-        setError((await parseApiError(res)).message);
-        return;
-      }
+      if (!res.ok) return { error: (await parseApiError(res)).message };
       navigate('/');
+      return { error: null };
     } catch {
-      setError('Network error — please try again');
-    } finally {
-      setSaving(false);
+      return { error: 'Network error — please try again' };
     }
-  }
+  }, INITIAL);
+
+  const saving = savingRaceSetup || savingDrinkType;
+  const error = phase === 'race-setup' ? raceState.error : drinkState.error;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

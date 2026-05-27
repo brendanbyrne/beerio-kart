@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Login } from './Login';
@@ -38,7 +38,11 @@ describe('Login', () => {
     await user.type(screen.getByLabelText('Password'), 'hunter2');
     await user.click(screen.getByRole('button', { name: /log in/i }));
 
-    expect(login).toHaveBeenCalledWith('alice', 'hunter2');
+    // The action runs inside a transition; waitFor lets it settle before we
+    // check that login was invoked with the FormData-read values.
+    await waitFor(() => {
+      expect(login).toHaveBeenCalledWith('alice', 'hunter2');
+    });
   });
 
   it('shows the error message when login fails', async () => {
