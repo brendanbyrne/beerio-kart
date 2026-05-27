@@ -14,6 +14,7 @@ import { RaceSetupPicker } from '../components/RaceSetupPicker';
 import { DrinkTypeSelector } from '../components/DrinkTypeSelector';
 import { SubmitButton } from '../components/SubmitButton';
 import { BottomNav } from '../components/BottomNav';
+import { readString } from '../utils/forms';
 import type { DrinkType } from '../api/types';
 
 type EditMode = null | 'race-setup' | 'drink-type' | 'password';
@@ -300,14 +301,8 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
 
   const [state, submit] = useActionState<PasswordState, FormData>(
     async (_prev, formData) => {
-      const currentPassword = formData.get('current_password');
-      const newPassword = formData.get('new_password');
-      if (
-        typeof currentPassword !== 'string' ||
-        typeof newPassword !== 'string'
-      ) {
-        return { status: 'error', error: 'Invalid form data' };
-      }
+      const currentPassword = readString(formData, 'current_password');
+      const newPassword = readString(formData, 'new_password');
       const err = await changePassword(currentPassword, newPassword);
       if (err) return { status: 'error', error: err };
       return { status: 'success' };
