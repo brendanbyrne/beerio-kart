@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -206,6 +206,28 @@ describe('RunEntrySheet', () => {
     expect(
       await screen.findByText(/Luigi.*Pipe Frame.*Roller Wheels/),
     ).toBeInTheDocument();
+  });
+
+  it('hides the track thumbnail when the image fails to load', async () => {
+    mockGameData();
+    server.use(
+      http.get(
+        '/api/v1/runs/defaults',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+
+    render(
+      <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+
+    const img = await screen.findByAltText('Mario Circuit');
+    expect(img.style.display).not.toBe('none');
+
+    fireEvent.error(img);
+
+    expect(img.style.display).toBe('none');
   });
 
   it('degrades to blank fields when the run-defaults request fails', async () => {
