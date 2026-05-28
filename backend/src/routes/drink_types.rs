@@ -19,8 +19,9 @@ use crate::{
 /// Wire representation of a `drink_types` row.
 #[derive(Serialize)]
 pub struct DrinkTypeResponse {
-    /// Stable UUID. Seeded drinks have known fixed IDs; user-created drinks
-    /// derive theirs from the uppercased name (see `services::drink_types`).
+    /// Stable UUID, derived from `(uppercased name, alcoholic)` (see
+    /// `drink_type_id::drink_type_uuid`) for both seeded and user-created
+    /// drinks.
     pub id: DrinkTypeId,
     /// Display name. Unique case-insensitively.
     pub name: String,
@@ -54,7 +55,8 @@ impl DrinkTypeResponse {
 /// Body shape for `POST /drink-types`.
 #[derive(Deserialize)]
 pub struct CreateDrinkTypeRequest {
-    /// Display name. Case-insensitive uniqueness; existing matches return 200.
+    /// Display name. Unique case-insensitively *per alcoholic flag*; an
+    /// existing `(name, alcoholic)` match returns 200.
     pub name: String,
     /// `true` for alcoholic drinks, `false` for non-alcoholic.
     pub alcoholic: bool,
@@ -71,9 +73,11 @@ pub struct Filters {
 
 /// POST /api/v1/drink-types — create or return an existing drink type.
 ///
-/// Dedup is case-insensitive (the UUID is derived from the uppercased name),
-/// so re-submitting an existing name returns the original row with 200 rather
-/// than a 409.
+/// Dedup keys on `(name, alcoholic)`: the UUID is derived from the uppercased
+/// name plus the alcoholic flag, so re-submitting an existing name *with the
+/// same flag* returns the original row with 200 rather than a 409. The
+/// alcoholic and non-alcoholic forms of the same name are distinct drinks
+/// (e.g. alcoholic vs non-alcoholic "Punch") and coexist.
 ///
 /// # Errors
 ///
@@ -91,8 +95,9 @@ pub async fn create_drink_type(
     let name = DrinkTypeName::try_from(req.name)
         .map_err(|_| Error::bad_request("Drink type name must be 1-200 characters"))?;
 
-    // Deterministic UUID from uppercased name — case-insensitive dedup
-    let id = drink_type_uuid(name.as_ref());
+    // Deterministic UUID from (uppercased name, alcoholic) — case-insensitive
+    // dedup that keeps the alcoholic and non-alcoholic forms distinct.
+    let id = drink_type_uuid(name.as_ref(), req.alcoholic);
 
     // Check if this drink type already exists (by UUID)
     if let Some(existing) = db_query(drink_types::Entity::find_by_id(id).one(&state.db)).await? {

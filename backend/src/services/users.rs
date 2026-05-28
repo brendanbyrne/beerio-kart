@@ -193,7 +193,7 @@ mod tests {
     use crate::test_helpers::{create_user, seed_game_data, setup_db};
 
     fn drink_id() -> DrinkTypeId {
-        crate::drink_type_id::drink_type_uuid("Test Beer")
+        crate::drink_type_id::drink_type_uuid("Test Beer", true)
     }
 
     #[tokio::test]

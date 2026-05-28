@@ -210,7 +210,7 @@ async fn seed_drink_types(db: &DatabaseConnection) -> anyhow::Result<()> {
 
     let txn = db_txn(db.begin()).await?;
     for item in items {
-        let id = drink_type_uuid(&item.name);
+        let id = drink_type_uuid(&item.name, item.alcoholic);
         // `created_at` is populated by `drink_types::ActiveModelBehavior::before_save`.
         let model = drink_types::ActiveModel {
             id: Set((&id).into()),
