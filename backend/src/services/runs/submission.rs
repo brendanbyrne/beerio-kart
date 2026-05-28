@@ -357,7 +357,7 @@ mod tests {
     };
 
     fn test_drink_id() -> DrinkTypeId {
-        crate::drink_type_id::drink_type_uuid("Test Beer")
+        crate::drink_type_id::drink_type_uuid("Test Beer", true)
     }
 
     // ── validate_time_fields (pure, no DB needed) ────────────────────

@@ -320,7 +320,7 @@ mod tests {
     };
 
     fn test_drink_id() -> DrinkTypeId {
-        crate::drink_type_id::drink_type_uuid("Test Beer")
+        crate::drink_type_id::drink_type_uuid("Test Beer", true)
     }
 
     fn valid_run_request(session_race_id: &SessionRaceId) -> CreateRunRequest {

@@ -794,7 +794,7 @@ mod tests {
         assert_eq!(pending.len(), 1);
 
         // Insert a run row for this (race, user)
-        let drink_id = drink_type_uuid("Test Beer");
+        let drink_id = drink_type_uuid("Test Beer", true);
         let _drink = drink_types::Entity::find_by_id(drink_id)
             .one(&db)
             .await
@@ -1165,7 +1165,7 @@ mod tests {
         let race = next_track(&db, &session.id, &host_id).await.unwrap();
 
         // Insert a run row to satisfy the "already submitted" precondition.
-        let drink_id = drink_type_uuid("Test Beer");
+        let drink_id = drink_type_uuid("Test Beer", true);
         drink_types::Entity::find_by_id(drink_id)
             .one(&db)
             .await

@@ -232,7 +232,7 @@ async fn seed_test_data(db: &sea_orm::DatabaseConnection) {
     let now = chrono::Utc::now().naive_utc();
     let txn = db.begin().await.expect("begin");
     for item in &dt_json {
-        let id = drink_type_uuid(&item.name);
+        let id = drink_type_uuid(&item.name, item.alcoholic);
         drink_types::ActiveModel {
             id: Set((&id).into()),
             name: Set(item.name.clone()),
@@ -617,6 +617,52 @@ async fn test_create_drink_type_deduplicates_case_insensitively() {
         body2["name"], "Molson Canadian",
         "Preserves original casing"
     );
+}
+
+#[tokio::test]
+async fn test_create_drink_type_same_name_different_alcoholic_are_distinct() {
+    let (server, _db) = setup_test_app().await;
+    let (token, _) = register_and_get_token(&server, "testuser").await;
+
+    // Alcoholic "Punch"
+    let res1 = server
+        .post("/api/v1/drink-types")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&json!({ "name": "Punch", "alcoholic": true }))
+        .await;
+    res1.assert_status(axum::http::StatusCode::OK);
+    let body1: Value = res1.json();
+
+    // Non-alcoholic "Punch" — same name, different flag → a DISTINCT drink,
+    // not a dedup hit. The submitted flag must be honored, not discarded.
+    let res2 = server
+        .post("/api/v1/drink-types")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .json(&json!({ "name": "Punch", "alcoholic": false }))
+        .await;
+    res2.assert_status(axum::http::StatusCode::OK);
+    let body2: Value = res2.json();
+
+    assert_ne!(
+        body1["id"], body2["id"],
+        "Different alcoholic flag → distinct drink-type IDs"
+    );
+    assert_eq!(body1["alcoholic"], true);
+    assert_eq!(body2["alcoholic"], false);
+
+    // Both are retrievable and listed — the second didn't overwrite the first.
+    let list = server
+        .get("/api/v1/drink-types")
+        .add_header(AUTH_HEADER, auth_value(&token))
+        .await;
+    let items: Value = list.json();
+    let punches = items
+        .as_array()
+        .expect("array")
+        .iter()
+        .filter(|d| d["name"] == "Punch")
+        .count();
+    assert_eq!(punches, 2, "Both Punch variants persist");
 }
 
 #[tokio::test]

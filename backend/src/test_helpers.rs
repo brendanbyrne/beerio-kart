@@ -243,7 +243,7 @@ pub async fn insert_run(
     track_id: i32,
 ) -> RunId {
     let id = RunId::new_v4();
-    let drink_id = drink_type_uuid("Test Beer");
+    let drink_id = drink_type_uuid("Test Beer", true);
     runs::ActiveModel {
         id: Set((&id).into()),
         user_id: Set(user_id.into()),
@@ -358,7 +358,7 @@ pub async fn seed_game_data(db: &DatabaseConnection) {
     .await
     .expect("insert glider");
 
-    let drink_id = drink_type_uuid("Test Beer");
+    let drink_id = drink_type_uuid("Test Beer", true);
     drink_types::ActiveModel {
         id: Set((&drink_id).into()),
         name: Set("Test Beer".to_string()),

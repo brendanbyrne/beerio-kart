@@ -171,7 +171,7 @@ async fn seed_minimal_game_data(db: &sea_orm::DatabaseConnection) {
     .expect("insert glider");
 
     drink_types::ActiveModel {
-        id: Set(drink_type_uuid("Test Beer").into()),
+        id: Set(drink_type_uuid("Test Beer", true).into()),
         name: Set("Test Beer".to_string()),
         alcoholic: Set(true),
         created_at: Set(Utc::now().naive_utc()),
@@ -184,7 +184,7 @@ async fn seed_minimal_game_data(db: &sea_orm::DatabaseConnection) {
 
 /// Build a valid `CreateRunRequest` body for the given race ID.
 fn run_request_json(session_race_id: &str) -> Value {
-    let drink_id = drink_type_uuid("Test Beer");
+    let drink_id = drink_type_uuid("Test Beer", true);
     json!({
         "session_race_id": session_race_id,
         "track_time": 120_000,

@@ -174,14 +174,25 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .primary_key(),
                     )
-                    .col(
-                        ColumnDef::new(DrinkTypes::Name)
-                            .text()
-                            .not_null()
-                            .unique_key(),
-                    )
+                    .col(ColumnDef::new(DrinkTypes::Name).text().not_null())
                     .col(ColumnDef::new(DrinkTypes::Alcoholic).boolean().not_null())
                     .col(ColumnDef::new(DrinkTypes::CreatedAt).date_time().not_null())
+                    .to_owned(),
+            )
+            .await?;
+
+        // A drink type is identified by (name, alcoholic): the alcoholic and
+        // non-alcoholic forms of the same name are distinct drinks, so the
+        // uniqueness is composite rather than name-alone. (App-level dedup is
+        // case-insensitive via the derived PK; this index is the DB backstop.)
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_drink_types_name_alcoholic")
+                    .table(DrinkTypes::Table)
+                    .col(DrinkTypes::Name)
+                    .col(DrinkTypes::Alcoholic)
+                    .unique()
                     .to_owned(),
             )
             .await?;
