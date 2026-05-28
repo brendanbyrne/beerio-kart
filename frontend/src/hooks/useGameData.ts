@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as z from 'zod';
 import { apiFetch } from '../api/client';
@@ -72,9 +71,9 @@ export function useDrinkTypes(): {
   // A user adding a custom drink type invalidates the cache so the list
   // refetches — replaces the version-counter `useEffect` re-run from the
   // legacy hook.
-  const refresh = useCallback(() => {
+  const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['drink-types'] });
-  }, [queryClient]);
+  };
 
   return { items: query.data ?? [], loading: query.isPending, refresh };
 }

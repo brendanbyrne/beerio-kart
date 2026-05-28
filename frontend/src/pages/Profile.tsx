@@ -1,4 +1,4 @@
-import { useActionState, useCallback, useEffect, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as z from 'zod';
 import { apiFetch } from '../api/client';
@@ -32,12 +32,12 @@ export function Profile() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Stable callback for PasswordChangeForm so the form's success-timer
-  // effect doesn't re-fire (and reset the 1500 ms auto-close) every time
-  // Profile re-renders. The Compiler in PR-E2 will make this redundant.
-  const closePasswordForm = useCallback(() => {
+  // Passed to PasswordChangeForm as `onDone`. The React Compiler keeps it
+  // referentially stable, so the form's success-timer effect doesn't re-fire
+  // (and reset the 1500 ms auto-close) when Profile re-renders.
+  const closePasswordForm = () => {
     setEditMode(null);
-  }, []);
+  };
 
   const char = characters.find((c) => c.id === profile?.preferred_character_id);
   const body = bodies.find((b) => b.id === profile?.preferred_body_id);
@@ -185,6 +185,7 @@ export function Profile() {
   // Default: profile view
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <title>Profile · Beerio Kart</title>
       {/* Header */}
       <div className="bg-white px-5 pt-6 pb-5 border-b border-gray-100">
         <h1 className="text-xl font-bold text-gray-900">{profile.username}</h1>
@@ -336,9 +337,9 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
   // On success, close the form after a short pause so the message is
   // visible. The setState (parent's setEditMode via onDone) lives inside
   // the timer callback, not synchronously in the effect body, so the
-  // "setState in effect" lint rule (project_setstate_in_effect_is_error)
-  // does not apply. `onDone` is `useCallback`-stable in the parent, so a
-  // Profile re-render during the 1500 ms window does not reset the timer.
+  // "set-state-in-effect" lint rule does not apply. `onDone` is kept
+  // referentially stable by the React Compiler, so a Profile re-render
+  // during the 1500 ms window does not reset the timer.
   useEffect(() => {
     if (state.kind !== 'success') return;
     const timer = setTimeout(onDone, 1500);
