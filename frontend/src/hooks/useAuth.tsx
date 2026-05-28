@@ -43,6 +43,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Kept as useCallback (a react.md § 7 carve-out): clearAuth is both a
+  // dependency of the mount effect below and registered into module scope
+  // via setOnAuthFailure, so it must be referentially stable. exhaustive-deps
+  // (a static rule that can't see the Compiler's memoization) enforces this,
+  // and react.md § 6 forbids silencing it — so the explicit hook stays.
   const clearAuth = useCallback(() => {
     setAccessToken(null);
     setUser(null);
@@ -81,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearAuth]);
 
   /** Returns an error message on failure, or null on success. */
-  const login = useCallback(async (username: string, password: string) => {
+  const login = async (username: string, password: string) => {
     const res = await fetch('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -94,10 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(data.access_token);
     setUser(data.user);
     return null;
-  }, []);
+  };
 
   /** Returns an error message on failure, or null on success. */
-  const register = useCallback(async (username: string, password: string) => {
+  const register = async (username: string, password: string) => {
     const res = await fetch('/api/v1/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -110,26 +115,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(data.access_token);
     setUser(data.user);
     return null;
-  }, []);
+  };
 
   /** Returns an error message on failure, or null on success. */
-  const changePassword = useCallback(
-    async (currentPassword: string, newPassword: string) => {
-      const res = await apiFetch('/api/v1/auth/password', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
-      });
-      if (!res.ok) return (await parseApiError(res)).message;
-      return null;
-    },
-    [],
-  );
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string,
+  ) => {
+    const res = await apiFetch('/api/v1/auth/password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+    if (!res.ok) return (await parseApiError(res)).message;
+    return null;
+  };
 
-  const logout = useCallback(async () => {
+  const logout = async () => {
     try {
       // Send the access token so the server can bump refresh_token_version
       const token = getAccessToken();
@@ -141,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Even if the server call fails, clear local state
     }
     clearAuth();
-  }, [clearAuth]);
+  };
 
   return (
     <AuthContext.Provider

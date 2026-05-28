@@ -230,6 +230,91 @@ describe('RunEntrySheet', () => {
     expect(img.style.display).toBe('none');
   });
 
+  // The slide-to-DQ control measures its track from `offsetWidth` (a layout
+  // value jsdom reports as 0) and maps the pointer's clientX through
+  // `getBoundingClientRect`. Pin both so the drag math is deterministic: a
+  // 300px-wide track with its left edge at x=0. The confirm threshold is
+  // `width - thumb(44) - 4 = 252`.
+  function pinSliderGeometry() {
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      value: 300,
+    });
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({
+        left: 0,
+        top: 0,
+        right: 300,
+        bottom: 48,
+        width: 300,
+        height: 48,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+    return () => {
+      rect.mockRestore();
+      delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth;
+    };
+  }
+
+  it('disqualifies the run when the slider is dragged past the threshold', async () => {
+    mockGameData();
+    server.use(
+      http.get(
+        '/api/v1/runs/defaults',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+    const restore = pinSliderGeometry();
+
+    render(
+      <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+
+    const thumb = (await screen.findByText('»')).parentElement;
+    if (!thumb?.parentElement) throw new Error('slider track not found');
+    const track = thumb.parentElement;
+
+    // Grab the thumb, drag past the 252px threshold, and release.
+    fireEvent.mouseDown(thumb);
+    fireEvent.mouseMove(track, { clientX: 300 });
+    fireEvent.mouseUp(track);
+
+    expect(await screen.findByText('Disqualified')).toBeInTheDocument();
+    restore();
+  });
+
+  it('snaps back without disqualifying when released before the threshold', async () => {
+    mockGameData();
+    server.use(
+      http.get(
+        '/api/v1/runs/defaults',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+    const restore = pinSliderGeometry();
+
+    render(
+      <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+
+    const thumb = (await screen.findByText('»')).parentElement;
+    if (!thumb?.parentElement) throw new Error('slider track not found');
+    const track = thumb.parentElement;
+
+    // A short drag (well under the 252px threshold) releases without confirming.
+    fireEvent.mouseDown(thumb);
+    fireEvent.mouseMove(track, { clientX: 50 });
+    fireEvent.mouseUp(track);
+
+    expect(screen.queryByText('Disqualified')).not.toBeInTheDocument();
+    restore();
+  });
+
   it('degrades to blank fields when the run-defaults request fails', async () => {
     mockGameData({ drinkTypes: [] });
     server.use(

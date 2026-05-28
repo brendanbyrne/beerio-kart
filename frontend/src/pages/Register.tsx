@@ -36,6 +36,7 @@ export function Register() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <title>Register · Beerio Kart</title>
       <form
         action={submit}
         className="w-full max-w-sm space-y-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm"

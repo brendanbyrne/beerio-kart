@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
   SessionRaceInfo,
@@ -107,16 +107,14 @@ export function RunEntrySheet({
         : '';
 
   // Derive drink type object from ID + loaded data (or explicit user pick)
-  const resolvedDrinkType = useMemo(() => {
-    if (drinkType) return drinkType;
-    if (drinkTypeId && drinkTypes.length > 0) {
-      return drinkTypes.find((dt) => dt.id === drinkTypeId) ?? null;
-    }
-    return null;
-  }, [drinkType, drinkTypeId, drinkTypes]);
+  const resolvedDrinkType = drinkType
+    ? drinkType
+    : drinkTypeId && drinkTypes.length > 0
+      ? (drinkTypes.find((dt) => dt.id === drinkTypeId) ?? null)
+      : null;
 
   // Derive setup summary from IDs + loaded game data
-  const setupSummary = useMemo(() => {
+  const setupSummary = ((): string => {
     if (
       !characterId ||
       !characters.length ||
@@ -132,16 +130,7 @@ export function RunEntrySheet({
       gliders.find((g) => g.id === gliderId)?.name,
     ].filter(Boolean);
     return parts.length === 4 ? parts.join(' \u00B7 ') : '';
-  }, [
-    characterId,
-    bodyId,
-    wheelId,
-    gliderId,
-    characters,
-    bodies,
-    wheels,
-    gliders,
-  ]);
+  })();
 
   const parsedTotal = parseTimeFields(totalTime.m, totalTime.ss, totalTime.mmm);
   const parsedLap1 = parseTimeFields(lap1.m, lap1.ss, lap1.mmm);
@@ -609,20 +598,17 @@ function SlideToConfirm({
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const handleMove = useCallback(
-    (clientX: number) => {
-      if (!dragging || confirmed || !trackRef.current) return;
-      const rect = trackRef.current.getBoundingClientRect();
-      const x = Math.min(
-        Math.max(0, clientX - rect.left - thumbW / 2),
-        trackWidth - thumbW,
-      );
-      setOffsetX(x);
-    },
-    [dragging, confirmed, trackWidth],
-  );
+  const handleMove = (clientX: number) => {
+    if (!dragging || confirmed || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const x = Math.min(
+      Math.max(0, clientX - rect.left - thumbW / 2),
+      trackWidth - thumbW,
+    );
+    setOffsetX(x);
+  };
 
-  const handleEnd = useCallback(() => {
+  const handleEnd = () => {
     if (!dragging) return;
     setDragging(false);
     const threshold = trackWidth - thumbW - 4;
@@ -632,7 +618,7 @@ function SlideToConfirm({
     } else {
       setOffsetX(0);
     }
-  }, [dragging, offsetX, onConfirm, trackWidth]);
+  };
 
   if (confirmed) {
     return (

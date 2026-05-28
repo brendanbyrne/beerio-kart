@@ -73,6 +73,9 @@ export function Onboarding() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      <title>
+        {`${phase === 'race-setup' ? 'Pick Your Setup' : 'Pick Your Drink'} · Beerio Kart`}
+      </title>
       {/* Header */}
       <div className="px-5 pt-6 pb-4">
         <h1 className="text-xl font-bold text-gray-900">

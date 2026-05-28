@@ -161,6 +161,7 @@ function SessionView({ id }: { id: SessionId }) {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <title>Session · Beerio Kart</title>
       {/* Zone 1 — Session Header (sticky top) */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
         <button

@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 import { parseBody } from '../api/result';
@@ -38,9 +37,9 @@ export function useUserProfile(userId: string | undefined): {
           },
   });
 
-  const refresh = useCallback(() => {
+  const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['user-profile', userId] });
-  }, [queryClient, userId]);
+  };
 
   return { profile: query.data ?? null, loading: query.isPending, refresh };
 }

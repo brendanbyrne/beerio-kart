@@ -51,6 +51,7 @@ export function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <title>Home · Beerio Kart</title>
       {/* Header */}
       <div className="bg-white px-5 pt-6 pb-5 border-b border-gray-100">
         <div className="flex items-center gap-3">
