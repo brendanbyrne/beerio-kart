@@ -121,16 +121,17 @@ User-created. Specific beverages used during runs (e.g., "Molson Canadian", "LaC
 
 ```
 drink_types
-├── id: UUID (primary key, deterministic via uuid_v5 of uppercased name)
-├── name: TEXT (unique, not null, stored as-entered by first creator)
+├── id: UUID (primary key, deterministic via uuid_v5 of (uppercased name, alcoholic))
+├── name: TEXT (not null, stored as-entered by first creator)
 ├── alcoholic: BOOLEAN (not null)
 ├── created_by: UUID (foreign key -> users, nullable — null for pre-seeded entries)
 └── created_at: TIMESTAMP (not null)
 ```
 
 Notes:
-- UUID derived from `uuid_v5(DRINK_TYPE_NAMESPACE, uppercase(name))`. Ensures case-insensitive deduplication at the database level.
-- If a user submits a drink that already exists (different casing), the app detects the UUID collision, shows the existing entry, and offers to use it.
+- UUID derived from `uuid_v5(DRINK_TYPE_NAMESPACE, "{uppercase(name)}\x1f{alcoholic}")`. Name matched case-insensitively; the `alcoholic` flag is part of the identity, so the two forms of the same name (e.g. "Punch") are distinct drinks with distinct IDs.
+- A composite `UNIQUE(name, alcoholic)` index backstops the app-level dedup at the DB layer (the derived PK is the primary guard).
+- If a user submits a drink whose `(name, alcoholic)` already exists (any casing of the name), the app returns the existing entry. The same name with the *other* flag creates a distinct drink.
 - `alcoholic` must be explicitly set by the user (no default).
 - Image support for drink types deferred to a future phase.
 
@@ -404,3 +405,4 @@ Each session uses one ruleset that determines how tracks are selected. The rules
 - 2026-05-13 — § `run_flags` now enumerates the canonical snake_case storage values for `reason` alongside the display text, mirroring the storage-vs-display split already documented for `sessions.{ruleset,status,least_played_drink_category}`. The values are load-bearing as of PR-D3 ([#120](https://github.com/brendanbyrne/beerio-kart/issues/120) / PR [#148](https://github.com/brendanbyrne/beerio-kart/pull/148)), which committed them via `RunFlagReason::string_value` annotations on the `DeriveActiveEnum` backing the column. Review feedback from PR #148.
 - 2026-05-15 — Updated the 2026-05-05 history entry's path reference for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
 - 2026-05-16 — ADR-0037 + ADR-0038. `session_race_participations` gains a nullable `dropped_at` column and the four-state per-(race, user) status enum (`unraced` / `raced` / `skipped` / `dropped`). Pending Race Tracking derivation simplified to four clauses — the per-race 1-hour timer and the `sessions.status` filter are gone; the session is the deadline. Session liveness note rewritten: the stale-session sweeper now uses a five-signal activity predicate, and closing a session drops its unresolved pending races + records notifications. Session Participants rejoin rule updated to "rejoin while the session is alive." New `notifications` table section added (ADR-0038 inbox). Issues [#51](https://github.com/brendanbyrne/beerio-kart/issues/51), [#58](https://github.com/brendanbyrne/beerio-kart/issues/58), [#164](https://github.com/brendanbyrne/beerio-kart/issues/164).
+- 2026-05-28 — § Drink Types: a drink's identity is now `(uppercased name, alcoholic)`, not name alone. The derived UUID hashes `"{uppercase(name)}\x1f{alcoholic}"`, the standalone `UNIQUE(name)` constraint became composite `UNIQUE(name, alcoholic)`, and the dedup note now distinguishes a same-`(name, alcoholic)` collision (returns existing) from the same name with the other flag (distinct drink). Companion to PR [#213](https://github.com/brendanbyrne/beerio-kart/pull/213) / Issue [#212](https://github.com/brendanbyrne/beerio-kart/issues/212). Review feedback from PR #213.
