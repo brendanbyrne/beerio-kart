@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -230,6 +230,15 @@ describe('RunEntrySheet', () => {
     expect(img.style.display).toBe('none');
   });
 
+  // pinSliderGeometry pollutes HTMLElement.prototype globally, so cleanup must
+  // run even if an assertion throws mid-test — an end-of-body restore() would
+  // leak the mock into later tests. afterEach always drains it (react.md § 13).
+  let restoreGeometry: (() => void) | null = null;
+  afterEach(() => {
+    restoreGeometry?.();
+    restoreGeometry = null;
+  });
+
   // The slide-to-DQ control measures its track from `offsetWidth` (a layout
   // value jsdom reports as 0) and maps the pointer's clientX through
   // `getBoundingClientRect`. Pin both so the drag math is deterministic: a
@@ -253,7 +262,7 @@ describe('RunEntrySheet', () => {
         y: 0,
         toJSON: () => ({}),
       } as DOMRect);
-    return () => {
+    restoreGeometry = () => {
       rect.mockRestore();
       delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth;
     };
@@ -267,7 +276,7 @@ describe('RunEntrySheet', () => {
         () => new HttpResponse(null, { status: 500 }),
       ),
     );
-    const restore = pinSliderGeometry();
+    pinSliderGeometry();
 
     render(
       <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
@@ -284,7 +293,6 @@ describe('RunEntrySheet', () => {
     fireEvent.mouseUp(track);
 
     expect(await screen.findByText('Disqualified')).toBeInTheDocument();
-    restore();
   });
 
   it('snaps back without disqualifying when released before the threshold', async () => {
@@ -295,7 +303,7 @@ describe('RunEntrySheet', () => {
         () => new HttpResponse(null, { status: 500 }),
       ),
     );
-    const restore = pinSliderGeometry();
+    pinSliderGeometry();
 
     render(
       <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
@@ -312,7 +320,6 @@ describe('RunEntrySheet', () => {
     fireEvent.mouseUp(track);
 
     expect(screen.queryByText('Disqualified')).not.toBeInTheDocument();
-    restore();
   });
 
   it('degrades to blank fields when the run-defaults request fails', async () => {
