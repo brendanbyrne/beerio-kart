@@ -45,11 +45,18 @@ async function openAddForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('DrinkTypeSelector add-drink flow', () => {
-  it('shows the backend error message when adding fails', async () => {
+  // Generic backend-failure path. Note this is NOT the duplicate-name case:
+  // POST /drink-types dedups by name and returns the existing row with 200
+  // (api-contract.md § 1.4), so a duplicate never errors. This exercises the
+  // form's surfacing of an actual server error (e.g. a 500).
+  it('surfaces a backend error when the create request fails', async () => {
     mockList();
     server.use(
       http.post('/api/v1/drink-types', () =>
-        HttpResponse.json({ error: 'Drink already exists' }, { status: 409 }),
+        HttpResponse.json(
+          { error: 'Something went wrong', code: 'internal' },
+          { status: 500 },
+        ),
       ),
     );
     const onSelect = vi.fn();
@@ -59,7 +66,7 @@ describe('DrinkTypeSelector add-drink flow', () => {
     await openAddForm(user);
     await user.click(screen.getByRole('button', { name: /^add$/i }));
 
-    expect(await screen.findByText('Drink already exists')).toBeInTheDocument();
+    expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
   });
 
