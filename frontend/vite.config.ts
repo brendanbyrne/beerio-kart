@@ -3,6 +3,18 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import babel from '@rolldown/plugin-babel';
 import tailwindcss from '@tailwindcss/vite';
 
+// `apiFetch` calls the backend with same-origin relative URLs (/api/...), so
+// both the dev server and `vite preview` must forward /api to the Axum backend
+// on :3000. `vite preview` does NOT inherit `server.proxy`, so the rule is
+// shared here and applied to both — without the preview entry, a production
+// build served by `bun run preview` can't reach the API.
+const apiProxy = {
+  '/api': {
+    target: 'http://localhost:3000',
+    changeOrigin: true,
+  },
+};
+
 export default defineConfig({
   plugins: [
     react(),
@@ -17,11 +29,9 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-    },
+    proxy: apiProxy,
+  },
+  preview: {
+    proxy: apiProxy,
   },
 });
