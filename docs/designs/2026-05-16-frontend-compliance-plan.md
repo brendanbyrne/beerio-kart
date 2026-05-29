@@ -215,7 +215,7 @@ The PRs below address every line item.
 
 ### PR-E1: Form migration to `useActionState` + `useFormStatus`
 
-**Issue:** [#182](https://github.com/brendanbyrne/beerio-kart/issues/182)
+**Issue:** [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) · **Merged PR:** [#211](https://github.com/brendanbyrne/beerio-kart/pull/211)
 
 - **Scope:**
   - Convert `Login.tsx` from controlled inputs + manual `submitting` flag to uncontrolled inputs + `useActionState`. Add a shared `SubmitButton` component using `useFormStatus`.
@@ -228,11 +228,11 @@ The PRs below address every line item.
 - **Effort:** M-L.
 - **Dependencies:** PR-B2 (Zod schemas).
 - **Risk:** Medium. Form behavior change is user-visible. Test each form's happy path and error path explicitly.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ### PR-E2: Ref-as-prop, Document Metadata, React Compiler
 
-**Issue:** [#180](https://github.com/brendanbyrne/beerio-kart/issues/180)
+**Issue:** [#180](https://github.com/brendanbyrne/beerio-kart/issues/180) · **PR:** [#214](https://github.com/brendanbyrne/beerio-kart/pull/214) (approved, pending merge)
 
 - **Scope:**
   - Audit any `forwardRef` usage (none expected in current code; the audit didn't surface any) and convert if found.
@@ -245,7 +245,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-A1 (lints), PR-C2 (data layer settled — Compiler interacts with re-render shape).
 - **Risk:** Low-medium. Compiler is v1.0 stable; treated by the React team as production-ready. Monitor first few PRs after merge for any unexpected re-render behavior.
 - **Verification:** Build succeeds; dev mode works; no Compiler errors in console. Profile a representative page (Session.tsx with active polling) before and after — re-render count should be equal or lower.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ---
 
@@ -374,8 +374,8 @@ All Issues live under [Milestone 9 — Hardening: Frontend standards compliance]
 | 8 | D1 | Named exports everywhere | (B1) | [#175](https://github.com/brendanbyrne/beerio-kart/issues/175) | [x] |
 | 9 | D2 | Remove `!` assertions | — | [#192](https://github.com/brendanbyrne/beerio-kart/issues/192) | [x] |
 | 10 | D3 | Remove `as` casts | B2 | [#179](https://github.com/brendanbyrne/beerio-kart/issues/179) | [x] |
-| 11 | E1 | Form migration to useActionState | B2, H2 | [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) | [ ] |
-| 12 | E2 | Ref-as-prop, Doc Metadata, Compiler | A1, C2 | [#180](https://github.com/brendanbyrne/beerio-kart/issues/180) | [ ] |
+| 11 | E1 | Form migration to useActionState | B2, H2 | [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) | [x] |
+| 12 | E2 | Ref-as-prop, Doc Metadata, Compiler | A1, C2 | [#180](https://github.com/brendanbyrne/beerio-kart/issues/180) | [x] |
 | 13 | F1 | Router upgrade + boundaries + lazy | D1, H2 | [#190](https://github.com/brendanbyrne/beerio-kart/issues/190) | [ ] |
 | 14 | G1 | Tailwind `@theme` + `clsx` | — | [#183](https://github.com/brendanbyrne/beerio-kart/issues/183) | [ ] |
 | 15 | G2 | Accessibility sweep | G1 | [#184](https://github.com/brendanbyrne/beerio-kart/issues/184) | [ ] |
@@ -400,3 +400,4 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 - 2026-05-26 — PR-D2 ([#192](https://github.com/brendanbyrne/beerio-kart/issues/192)) merged as [#208](https://github.com/brendanbyrne/beerio-kart/pull/208). Flipped its per-section sign-off `[ ]` → `[x]` and the row-9 table checkbox to match, and added the **Merged PR** link alongside the Issue link. Companion to picking up PR-D3 ([#179](https://github.com/brendanbyrne/beerio-kart/issues/179)) — the next item in the pickup order.
 - 2026-05-27 — PR-D3 ([#179](https://github.com/brendanbyrne/beerio-kart/issues/179)) merged as [#210](https://github.com/brendanbyrne/beerio-kart/pull/210). Flipped its per-section sign-off `[ ]` → `[x]` and the row-10 table checkbox to match, and added the **Merged PR** link alongside the Issue link. Companion to picking up PR-E1 ([#182](https://github.com/brendanbyrne/beerio-kart/issues/182)) — the next item in the pickup order.
 - 2026-05-27 — PR-E1 scope: clarified that `Onboarding.tsx`'s "two-phase form" doesn't render its own `<form>` — both phases delegate to picker children that dispatch already-typed payloads via callback, so the Zod-at-submit rule applies only to the four real forms (Login, Register, Profile password, DrinkTypeSelector add-form). Surfaced during [#211](https://github.com/brendanbyrne/beerio-kart/pull/211) review when "Zod schema at submit time for each form" prompted "does Onboarding need one?" — answered in the scope text rather than relitigated by future reviewers.
+- 2026-05-29 — E-stream sign-off bookkeeping. PR-E1 ([#182](https://github.com/brendanbyrne/beerio-kart/issues/182)) merged as [#211](https://github.com/brendanbyrne/beerio-kart/pull/211): flipped its per-section sign-off `[ ]` → `[x]`, the row-11 table box, and added the **Merged PR** link. PR-E2 ([#180](https://github.com/brendanbyrne/beerio-kart/issues/180), PR [#214](https://github.com/brendanbyrne/beerio-kart/pull/214)) is approved but **not yet merged** — at Brendan's request its sign-off and row-12 box were pre-checked ahead of merge; its annotation reads **PR** (not **Merged PR**) and this entry avoids the usual "merged as #X" wording, since #214 is still open. Promote E2 to the **Merged PR** form when #214 lands.
