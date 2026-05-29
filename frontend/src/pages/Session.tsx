@@ -123,9 +123,14 @@ function SessionView({ id }: { id: SessionId }) {
     if (hasMany) setHistoryExpanded(false);
   }, [hasMany]);
 
+  // Rendered in every branch (loading / ended / default) so the tab title
+  // tracks the route from mount, not only once session data resolves.
+  const pageTitle = <title>Session · Beerio Kart</title>;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        {pageTitle}
         <p className="text-gray-400">Loading session...</p>
       </div>
     );
@@ -134,6 +139,7 @@ function SessionView({ id }: { id: SessionId }) {
   if (ended || !session) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4 px-4">
+        {pageTitle}
         <p className="text-3xl">{'\uD83C\uDFC1'}</p>
         <p className="text-base font-semibold text-gray-900">Session ended</p>
         <button
@@ -161,7 +167,7 @@ function SessionView({ id }: { id: SessionId }) {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <title>Session · Beerio Kart</title>
+      {pageTitle}
       {/* Zone 1 — Session Header (sticky top) */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
         <button

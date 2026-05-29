@@ -105,9 +105,14 @@ export function Profile() {
     navigate('/login');
   }
 
+  // Rendered in every branch (loading / edit modes / default) so the tab title
+  // tracks the route from mount, not only once profile data resolves.
+  const pageTitle = <title>Profile · Beerio Kart</title>;
+
   if (!profile) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        {pageTitle}
         <p className="text-gray-400">Loading profile...</p>
       </div>
     );
@@ -117,6 +122,7 @@ export function Profile() {
   if (editMode === 'race-setup') {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
+        {pageTitle}
         <div className="px-4 pt-4 pb-2 flex items-center">
           <button
             onClick={() => setEditMode(null)}
@@ -153,6 +159,7 @@ export function Profile() {
   if (editMode === 'drink-type') {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
+        {pageTitle}
         <div className="px-4 pt-4 pb-2 flex items-center">
           <button
             onClick={() => setEditMode(null)}
@@ -185,7 +192,7 @@ export function Profile() {
   // Default: profile view
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <title>Profile · Beerio Kart</title>
+      {pageTitle}
       {/* Header */}
       <div className="bg-white px-5 pt-6 pb-5 border-b border-gray-100">
         <h1 className="text-xl font-bold text-gray-900">{profile.username}</h1>
