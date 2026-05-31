@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { AppProviders, routes } from '../App';
+import { AppProviders, routes } from './App';
 
 // PR-F1 (Issue #190): the router maps each path to its lazily-loaded page.
 // This verifies the wiring for an authenticated visitor without dragging in
@@ -12,7 +12,7 @@ import { AppProviders, routes } from '../App';
 // named-export → React.lazy adapter for each page). The unauthenticated path
 // and the real Login render live in App.test.tsx.
 
-vi.mock('../hooks/useAuth', () => ({
+vi.mock('./hooks/useAuth', () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
   useAuth: () => ({
     user: { id: 'u1', username: 'alice' },
@@ -24,13 +24,13 @@ vi.mock('../hooks/useAuth', () => ({
     logout: vi.fn(),
   }),
 }));
-vi.mock('../pages/Home', () => ({ Home: () => <div>home page</div> }));
-vi.mock('../pages/Profile', () => ({ Profile: () => <div>profile page</div> }));
-vi.mock('../pages/Session', () => ({ Session: () => <div>session page</div> }));
-vi.mock('../pages/Onboarding', () => ({
+vi.mock('./pages/Home', () => ({ Home: () => <div>home page</div> }));
+vi.mock('./pages/Profile', () => ({ Profile: () => <div>profile page</div> }));
+vi.mock('./pages/Session', () => ({ Session: () => <div>session page</div> }));
+vi.mock('./pages/Onboarding', () => ({
   Onboarding: () => <div>onboarding page</div>,
 }));
-vi.mock('../pages/Register', () => ({
+vi.mock('./pages/Register', () => ({
   Register: () => <div>register page</div>,
 }));
 
