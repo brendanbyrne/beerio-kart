@@ -11,8 +11,6 @@ There are two goals with this project.
 
 Project documentation lives in [`docs/`](./docs). Start with [`docs/README.md`](./docs/README.md) — a short index that routes you to the right file (architecture, data model, API contract, coding standards, roadmap, project workflow) based on what you're doing.
 
-Run `tree` if you want a current map of the repo layout; directories whose purpose isn't self-evident carry their own `README.md`.
-
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (stable, plus `nightly` for `rustfmt` only — see Setup)
