@@ -69,9 +69,12 @@ export default defineConfig([
       '@typescript-eslint/consistent-type-definitions': ['warn', 'type'],
       // import/no-default-export: all default exports converted in PR-D1.
       'import/no-default-export': 'error',
-      // no-explicit-any / no-non-null-assertion: flipped to error in PR-F1.
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-non-null-assertion': 'warn',
+      // no-explicit-any / no-non-null-assertion: flipped to error in PR-F1
+      // (#190). Offenders were removed earlier — the `any`-typed
+      // `await res.json()` calls by PR-B2's Zod parses, the `!` assertions by
+      // PR-D2 — so the flip lands with zero violations in production code.
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
 
       // consistent-type-specifier-style — named in typescript.md § 9 but
       // omitted from the PR-A1 AC; added per PR review. `prefer-top-level`
