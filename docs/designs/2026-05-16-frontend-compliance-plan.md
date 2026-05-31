@@ -253,7 +253,7 @@ The PRs below address every line item.
 
 ### PR-F1: Router upgrade + error boundaries + lazy routes
 
-**Issue:** [#190](https://github.com/brendanbyrne/beerio-kart/issues/190)
+**Issue:** [#190](https://github.com/brendanbyrne/beerio-kart/issues/190) · **Merged PR:** [#218](https://github.com/brendanbyrne/beerio-kart/pull/218)
 
 - **Scope:**
   - Migrate `App.tsx` from `BrowserRouter` + `<Routes>` to `createBrowserRouter` + `RouterProvider`.
@@ -267,7 +267,7 @@ The PRs below address every line item.
 - **Dependencies:** PR-D1 (named exports).
 - **Risk:** Medium. `createBrowserRouter` is structurally different from the old `<Routes>` form. The error-boundary placement requires thought (per-route vs route-element-with-its-own-boundary).
 - **Verification:** Every existing route navigates correctly. Triggering an error in one route (temporarily `throw new Error('test')` in a page) shows the route-scoped fallback, not the global one. Bundle analyzer shows separate chunks per route.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ---
 
@@ -376,7 +376,7 @@ All Issues live under [Milestone 9 — Hardening: Frontend standards compliance]
 | 10 | D3 | Remove `as` casts | B2 | [#179](https://github.com/brendanbyrne/beerio-kart/issues/179) | [x] |
 | 11 | E1 | Form migration to useActionState | B2, H2 | [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) | [x] |
 | 12 | E2 | Ref-as-prop, Doc Metadata, Compiler | A1, C2 | [#180](https://github.com/brendanbyrne/beerio-kart/issues/180) | [x] |
-| 13 | F1 | Router upgrade + boundaries + lazy | D1, H2 | [#190](https://github.com/brendanbyrne/beerio-kart/issues/190) | [ ] |
+| 13 | F1 | Router upgrade + boundaries + lazy | D1, H2 | [#190](https://github.com/brendanbyrne/beerio-kart/issues/190) | [x] |
 | 14 | G1 | Tailwind `@theme` + `clsx` | — | [#183](https://github.com/brendanbyrne/beerio-kart/issues/183) | [ ] |
 | 15 | G2 | Accessibility sweep | G1 | [#184](https://github.com/brendanbyrne/beerio-kart/issues/184) | [ ] |
 | 16 | H1 | Lint cleanup + drift-check CI + test-coverage backfill | All | [#185](https://github.com/brendanbyrne/beerio-kart/issues/185) | [ ] |
@@ -401,3 +401,4 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 - 2026-05-27 — PR-D3 ([#179](https://github.com/brendanbyrne/beerio-kart/issues/179)) merged as [#210](https://github.com/brendanbyrne/beerio-kart/pull/210). Flipped its per-section sign-off `[ ]` → `[x]` and the row-10 table checkbox to match, and added the **Merged PR** link alongside the Issue link. Companion to picking up PR-E1 ([#182](https://github.com/brendanbyrne/beerio-kart/issues/182)) — the next item in the pickup order.
 - 2026-05-27 — PR-E1 scope: clarified that `Onboarding.tsx`'s "two-phase form" doesn't render its own `<form>` — both phases delegate to picker children that dispatch already-typed payloads via callback, so the Zod-at-submit rule applies only to the four real forms (Login, Register, Profile password, DrinkTypeSelector add-form). Surfaced during [#211](https://github.com/brendanbyrne/beerio-kart/pull/211) review when "Zod schema at submit time for each form" prompted "does Onboarding need one?" — answered in the scope text rather than relitigated by future reviewers.
 - 2026-05-29 — E-stream sign-off bookkeeping. PR-E1 ([#182](https://github.com/brendanbyrne/beerio-kart/issues/182)) merged as [#211](https://github.com/brendanbyrne/beerio-kart/pull/211) and PR-E2 ([#180](https://github.com/brendanbyrne/beerio-kart/issues/180)) signed off via [#214](https://github.com/brendanbyrne/beerio-kart/pull/214). Flipped both per-section sign-offs `[ ]` → `[x]`, table rows 11 and 12, and added the **Merged PR** links. Note: E2 was signed off at Brendan's request while #214 had review approval but hadn't yet landed on `main` — the box reflects sign-off rather than a confirmed merge.
+- 2026-05-31 — PR-F1 ([#190](https://github.com/brendanbyrne/beerio-kart/issues/190)) merged as [#218](https://github.com/brendanbyrne/beerio-kart/pull/218). Flipped its per-section sign-off `[ ]` → `[x]` and the row-13 table checkbox to match, and added the **Merged PR** link alongside the Issue link. F1 closes Stream F; the remaining open items are G1 ([#183](https://github.com/brendanbyrne/beerio-kart/issues/183)), G2 ([#184](https://github.com/brendanbyrne/beerio-kart/issues/184)), and H1 ([#185](https://github.com/brendanbyrne/beerio-kart/issues/185)), with G1 next in the pickup order.
