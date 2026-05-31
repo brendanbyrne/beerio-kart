@@ -3,8 +3,16 @@ import { Link, isRouteErrorResponse, useRouteError } from 'react-router-dom';
 // Route-scoped errorElement (react.md § 9, § 11). react-router renders this in
 // place of a route's element when that element throws during render, catching
 // the crash *before* it bubbles to the app-level AppErrorFallback. That keeps
-// failures isolated to one route — a busted page can't blank the whole app —
-// and gives the user a way out via the "Go home" link rather than a dead end.
+// failures isolated to one route — a busted page can't blank the whole app.
+//
+// Two recovery paths, and the order matters. With code-split routes the most
+// common real trigger here isn't a logic crash — it's a dynamic-import failure
+// after a redeploy: a user on a stale index.html navigates to a route whose
+// chunk hash no longer exists, lazy() throws, and we land here. "Go home" is a
+// client-side <Link> that re-hits the same stale manifest and can loop, so the
+// primary action is a hard Reload (re-fetches index.html + a fresh manifest —
+// the reliable fix for the chunk-load case); "Go home" stays as the secondary
+// way out for an actual render crash on one page.
 export function RouteErrorFallback() {
   const error = useRouteError();
 
@@ -32,12 +40,23 @@ export function RouteErrorFallback() {
           {detail}
         </pre>
       )}
-      <Link
-        to="/"
-        className="min-h-[44px] flex items-center px-6 py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors"
-      >
-        Go home
-      </Link>
+      <div className="flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            window.location.reload();
+          }}
+          className="min-h-[44px] px-6 py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors"
+        >
+          Reload
+        </button>
+        <Link
+          to="/"
+          className="min-h-[44px] flex items-center text-sm text-blue-500 hover:underline font-medium"
+        >
+          Go home
+        </Link>
+      </div>
     </div>
   );
 }

@@ -68,10 +68,14 @@ describe('App shell', () => {
     ).toBeInTheDocument();
   });
 
-  it('attaches a route-scoped errorElement to every top-level route', () => {
+  it('attaches the route-scoped errorElement to every top-level route', () => {
     expect(routes.length).toBeGreaterThan(0);
     for (const r of routes) {
-      expect(r.errorElement).toBeDefined();
+      // toEqual, not toBeDefined: pin that it's specifically RouteErrorFallback
+      // (route-scoped), so a regression wiring the global AppErrorFallback — or
+      // any other element — onto a route fails here. React elements compare
+      // structurally under toEqual.
+      expect(r.errorElement).toEqual(<RouteErrorFallback />);
     }
   });
 
