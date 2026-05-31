@@ -2,7 +2,7 @@
 
 > **Scope.** End-user-facing flows: how a player navigates the app from registration through racing, viewing stats, and admin review. Plus the screen-by-screen breakdown of what each surface contains.
 >
-> **Not in this file.** Game rules, design principles, tech stack, and architecture live in [`design.md`](./design.md). Endpoint catalog and wire-format conventions live in [`api-contract.md`](./api-contract.md). Database schema lives in [`data-model.md`](./data-model.md). For project-operational workflow (Issue lifecycle, milestones, PRs, triage), see [`project-workflow.md`](./project-workflow.md).
+> **Not in this file.** Game rules, design principles, and architecture live in [`design.md`](./design.md). Endpoint catalog and wire-format conventions live in [`api-contract.md`](./api-contract.md). Database schema lives in [`data-model.md`](./data-model.md). For project-operational workflow (Issue lifecycle, milestones, PRs, triage), see [`project-workflow.md`](./project-workflow.md).
 
 UI Screens are listed in § 2.
 

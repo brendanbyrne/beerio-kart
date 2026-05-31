@@ -4,10 +4,10 @@ Rust web server for Beerio Kart, built with [Axum](https://github.com/tokio-rs/a
 
 ## Tech
 
-- **Framework:** [Axum](https://github.com/tokio-rs/axum) (async web framework)
+- **Framework:** [Axum](https://github.com/tokio-rs/axum) (async web framework) — learning opportunity; strong async/WebSocket support.
 - **Runtime:** [Tokio](https://tokio.rs) (multi-thread async runtime)
-- **ORM:** [SeaORM](https://www.sea-ql.org/SeaORM/) backed by [SQLx](https://docs.rs/sqlx)
-- **Database:** SQLite (with a path to PostgreSQL later — see `../docs/design.md`)
+- **ORM:** [SeaORM](https://www.sea-ql.org/SeaORM/) backed by [SQLx](https://docs.rs/sqlx) — Rust-native query API; database-agnostic; eases the SQLite→PostgreSQL path.
+- **Database:** SQLite — file-based; no separate server; sufficient for this scale (path to PostgreSQL later; see [`../docs/design.md`](../docs/design.md) § Architecture).
 - **Auth:** [argon2](https://docs.rs/argon2) (password hashing) + [jsonwebtoken](https://docs.rs/jsonwebtoken) (JWT access + refresh tokens)
 - **Logging:** [tracing](https://docs.rs/tracing) + `tower-http::TraceLayer`
 - **Edition:** Rust 2024 (1.85+)

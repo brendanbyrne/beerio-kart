@@ -19,8 +19,8 @@ use serde_json::json;
 /// `HandleErrorLayer` errors fallibly today), so the fallback is 500.
 ///
 /// The response body shape matches the project-wide JSON-error contract
-/// (`{ "error": "<message>" }`) documented in `docs/design.md` §
-/// Observability and implemented for the normal `Error::IntoResponse`
+/// (`{ "error": "<message>" }`) documented in `docs/api-contract.md` § 2
+/// (Error response contract) and implemented for the normal `Error::IntoResponse`
 /// path in `error.rs`.
 //
 // `async` looks unused (no `.await`), but `HandleErrorLayer::new` requires
@@ -79,7 +79,7 @@ mod tests {
         assert_eq!(content_type.as_deref(), Some("application/json"));
         // Catches the regression that motivated this test: a plain-text
         // body would fail `from_slice` above. Asserting the shape here is
-        // the contract from `docs/design.md` § Observability.
+        // the contract from `docs/api-contract.md` § 2 (Error response contract).
         assert_eq!(body, json!({ "error": "Service overloaded" }));
     }
 

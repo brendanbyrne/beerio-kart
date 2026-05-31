@@ -1,7 +1,7 @@
 # Beerio Kart
 
 ## Start of Session
-Read `docs/design.md` at the start of every session. It is the single source of truth for the project's design and reflects the full history of design decisions.
+Read `docs/design.md` at the start of every session — the architectural overview (rules, principles, design goals, constraints, and system architecture) and the entry point to the rest of the design surface. It's authoritative for the project's principles and architecture; implementation detail now lives in the coding standards, `api-contract.md`, and `data-model.md` (all indexed in [`docs/README.md`](../docs/README.md)).
 
 ### Handoff files
 

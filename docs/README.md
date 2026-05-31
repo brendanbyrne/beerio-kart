@@ -16,7 +16,7 @@ Start with `design.md` if you're new.
 
 ## Layout
 
-- `design.md` — architectural overview (rules, principles, tech stack)
+- `design.md` — architectural overview (rules, principles, architecture)
 - `data-model.md` — database schema
 - `user-workflows.md` — user workflows + UI screens
 - `api-contract.md` — wire-format conventions and endpoint list
