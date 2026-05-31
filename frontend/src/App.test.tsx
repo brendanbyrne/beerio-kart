@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
-import { server } from '../mocks/server';
-import { App, AppProviders, routes } from '../App';
-import { AppErrorFallback } from '../components/AppErrorFallback';
-import { RouteErrorFallback } from '../components/RouteErrorFallback';
+import { server } from './mocks/server';
+import { App, AppProviders, routes } from './App';
+import { AppErrorFallback } from './components/AppErrorFallback';
+import { RouteErrorFallback } from './components/RouteErrorFallback';
 
 // App shell wired up across PR-C1 (provider tree) and PR-F1 (Issue #190 —
 // createBrowserRouter + RouterProvider, lazy routes, app-level + per-route
