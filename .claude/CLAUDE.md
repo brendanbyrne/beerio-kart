@@ -37,6 +37,7 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 - Don't assume knowledge — Brendan has deep C++/Python experience but is new to web dev, databases, and Rust.
 - If a command fails because it needs sudo or a password, **stop and ask Brendan** before trying alternative approaches. Don't attempt workarounds (e.g., installing via conda, pip, or other package managers) — just explain what's needed and let Brendan handle the installation.
 - When introducing web/database concepts, explain them briefly.
+- **Subagent capability default.** Unless a task explicitly specifies a different level, launch all subagents at the **Opus** level of capability.
 
 ## Repo Location
 - **Single checkout:** `C:\Users\obiva\beerio-kart` (Windows), accessible from WSL2 at `/mnt/c/Users/obiva/beerio-kart`.

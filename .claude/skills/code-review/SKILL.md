@@ -99,6 +99,10 @@ bun run typecheck 2>&1
 
 If any fail, include the output. If all pass, note that briefly so it's clear the check was performed.
 
+## Test quality (when the diff touches tests)
+
+If the PR adds or changes test files — Rust `#[test]`/`#[tokio::test]` modules or `*.test.ts(x)` / `*.spec.ts(x)` — launch a subagent to run the `test-quality-review` skill on the changed test files, and fold its findings into this review under the matching severity tier. That skill verifies tests test *what their names claim* (assertion-free tests, weak `is_err()` / status-only rejection asserts that don't pin the `ErrorCode`, tautological / over-mocked tests, missing-`await` async tests) — a dimension this review otherwise doesn't cover in depth. Delegate it rather than duplicating the analysis inline, and cite the subagent's findings (file:line + the fix). Skip when the diff touches no test files.
+
 ## Review structure
 
 Two outputs: a chat summary for orientation, and a GitHub PR review where the durable findings live.
