@@ -45,7 +45,7 @@ export function Login() {
         <h1 className="text-2xl font-bold text-gray-900 text-center">Log In</h1>
 
         {state.error && (
-          <p className="text-red-500 text-sm text-center">{state.error}</p>
+          <p className="text-danger text-sm text-center">{state.error}</p>
         )}
 
         <div>
@@ -83,7 +83,7 @@ export function Login() {
         </div>
 
         <SubmitButton
-          className="w-full py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors"
+          className="w-full py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors"
           pendingLabel="Logging in..."
         >
           Log In
@@ -93,7 +93,7 @@ export function Login() {
           Don&apos;t have an account?{' '}
           <Link
             to="/register"
-            className="text-blue-500 hover:underline font-medium"
+            className="text-brand-primary hover:underline font-medium"
           >
             Register
           </Link>

@@ -36,7 +36,7 @@ export function RouteErrorFallback() {
         Something on this screen failed to load. The rest of the app is fine.
       </p>
       {import.meta.env.DEV && (
-        <pre className="max-w-full overflow-auto text-xs text-red-500">
+        <pre className="max-w-full overflow-auto text-xs text-danger">
           {detail}
         </pre>
       )}
@@ -46,13 +46,13 @@ export function RouteErrorFallback() {
           onClick={() => {
             window.location.reload();
           }}
-          className="min-h-[44px] px-6 py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors"
+          className="min-h-touch px-6 py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors"
         >
           Reload
         </button>
         <Link
           to="/"
-          className="min-h-[44px] flex items-center text-sm text-blue-500 hover:underline font-medium"
+          className="min-h-touch flex items-center text-sm text-brand-primary hover:underline font-medium"
         >
           Go home
         </Link>

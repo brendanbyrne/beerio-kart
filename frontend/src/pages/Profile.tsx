@@ -126,7 +126,7 @@ export function Profile() {
         <div className="px-4 pt-4 pb-2 flex items-center">
           <button
             onClick={() => setEditMode(null)}
-            className="text-blue-500 text-sm font-medium"
+            className="text-brand-primary text-sm font-medium"
           >
             &larr; Back
           </button>
@@ -136,7 +136,7 @@ export function Profile() {
           <div className="w-12" />
         </div>
         {saveError && (
-          <p className="text-red-500 text-sm text-center px-4">{saveError}</p>
+          <p className="text-danger text-sm text-center px-4">{saveError}</p>
         )}
         <div className="flex-1 flex flex-col min-h-0">
           {saving ? (
@@ -163,7 +163,7 @@ export function Profile() {
         <div className="px-4 pt-4 pb-2 flex items-center">
           <button
             onClick={() => setEditMode(null)}
-            className="text-blue-500 text-sm font-medium"
+            className="text-brand-primary text-sm font-medium"
           >
             &larr; Back
           </button>
@@ -173,7 +173,7 @@ export function Profile() {
           <div className="w-12" />
         </div>
         {saveError && (
-          <p className="text-red-500 text-sm text-center px-4">{saveError}</p>
+          <p className="text-danger text-sm text-center px-4">{saveError}</p>
         )}
         <div className="flex-1 px-4 pt-2">
           {saving ? (
@@ -209,7 +209,7 @@ export function Profile() {
         >
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-gray-700">Race Setup</h3>
-            <span className="text-xs text-blue-500 font-medium">Edit</span>
+            <span className="text-xs text-brand-primary font-medium">Edit</span>
           </div>
           {char ? (
             <div className="grid grid-cols-4 gap-2">
@@ -247,7 +247,7 @@ export function Profile() {
             <h3 className="text-sm font-semibold text-gray-700">
               Preferred Drink
             </h3>
-            <span className="text-xs text-blue-500 font-medium">Edit</span>
+            <span className="text-xs text-brand-primary font-medium">Edit</span>
           </div>
           {profile.preferred_drink_type ? (
             <div className="flex items-center gap-2">
@@ -282,7 +282,9 @@ export function Profile() {
               className="w-full flex items-center justify-between"
             >
               <h3 className="text-sm font-semibold text-gray-700">Password</h3>
-              <span className="text-xs text-blue-500 font-medium">Change</span>
+              <span className="text-xs text-brand-primary font-medium">
+                Change
+              </span>
             </button>
           )}
         </div>
@@ -290,7 +292,7 @@ export function Profile() {
         {/* Logout */}
         <button
           onClick={handleLogout}
-          className="w-full py-3 text-sm font-semibold text-red-500 bg-white rounded-xl border border-gray-200 hover:bg-red-50 transition-colors"
+          className="w-full py-3 text-sm font-semibold text-danger bg-white rounded-xl border border-gray-200 hover:bg-red-50 transition-colors"
         >
           Log Out
         </button>
@@ -376,10 +378,10 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
         required
       />
       {state.kind === 'error' && (
-        <p className="text-red-500 text-xs">{state.error}</p>
+        <p className="text-danger text-xs">{state.error}</p>
       )}
       {state.kind === 'success' && (
-        <p className="text-green-600 text-xs">Password changed!</p>
+        <p className="text-success text-xs">Password changed!</p>
       )}
       <div className="flex gap-2">
         <button
@@ -390,7 +392,7 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
           Cancel
         </button>
         <SubmitButton
-          className="flex-1 py-2 text-xs font-semibold text-white bg-blue-500 rounded-lg"
+          className="flex-1 py-2 text-xs font-semibold text-white bg-brand-primary rounded-lg"
           pendingLabel="Saving..."
         >
           Change Password
