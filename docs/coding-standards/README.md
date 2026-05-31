@@ -25,6 +25,7 @@ Companion documents:
 - [`../designs/2026-05-16-frontend-audit.md`](../designs/2026-05-16-frontend-audit.md) — per-file compliance baseline for `frontend/src/` against the new standards. Source of the findings in the compliance plan.
 - [`../designs/2026-05-16-frontend-compliance-plan.md`](../designs/2026-05-16-frontend-compliance-plan.md) — active sequenced PR plan to bring the existing frontend codebase to the standard.
 - [`../research/rust-to-ts-codegen.md`](../research/rust-to-ts-codegen.md) — evaluation of automated Rust→TypeScript type-sync tools (typeshare, ts-rs, specta, schemars). Informs `typescript.md` § 11.
+- [`../research/unit-test-audit.md`](../research/unit-test-audit.md) — the backend+frontend test audit that produced `testing.md`'s rules: the anti-pattern taxonomy, per-file findings, and the cleared false-positives. Source of Issue #217.
 
 ## How to use these docs
 
