@@ -363,6 +363,7 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
       <input
         type="password"
         name="current_password"
+        aria-label="Current password"
         autoComplete="current-password"
         placeholder="Current password"
         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
@@ -371,6 +372,7 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
       <input
         type="password"
         name="new_password"
+        aria-label="New password"
         autoComplete="new-password"
         placeholder="New password (min 8 characters)"
         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
@@ -387,12 +389,12 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
         <button
           type="button"
           onClick={onDone}
-          className="flex-1 py-2 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg"
+          className="flex-1 min-h-touch py-2 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg"
         >
           Cancel
         </button>
         <SubmitButton
-          className="flex-1 py-2 text-xs font-semibold text-white bg-brand-primary rounded-lg"
+          className="flex-1 min-h-touch py-2 text-xs font-semibold text-white bg-brand-primary rounded-lg"
           pendingLabel="Saving..."
         >
           Change Password

@@ -71,7 +71,7 @@ export function DrinkTypeSelector({
       {!showAddForm ? (
         <button
           onClick={() => setShowAddForm(true)}
-          className="text-sm text-brand-primary font-medium py-2 hover:text-brand-primary-strong transition-colors"
+          className="text-sm text-brand-primary font-medium min-h-touch py-2 hover:text-brand-primary-strong transition-colors"
         >
           + Not listed? Add new
         </button>
@@ -89,7 +89,7 @@ export function DrinkTypeSelector({
       {onSkip && (
         <button
           onClick={onSkip}
-          className="mt-3 py-2 text-sm text-gray-400 hover:text-gray-500 transition-colors"
+          className="mt-3 min-h-touch py-2 text-sm text-gray-400 hover:text-gray-500 transition-colors"
         >
           Skip for now
         </button>
@@ -154,9 +154,9 @@ function AddDrinkTypeForm({
       <input
         type="text"
         name="name"
+        aria-label="Drink name"
         placeholder="Drink name..."
         className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
-        autoFocus
         required
         maxLength={60}
       />
@@ -192,12 +192,12 @@ function AddDrinkTypeForm({
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 py-2 text-xs font-medium text-gray-500 bg-gray-200 rounded-lg"
+          className="flex-1 min-h-touch py-2 text-xs font-medium text-gray-500 bg-gray-200 rounded-lg"
         >
           Cancel
         </button>
         <SubmitButton
-          className="flex-1 py-2 text-xs font-semibold text-white bg-brand-primary rounded-lg"
+          className="flex-1 min-h-touch py-2 text-xs font-semibold text-white bg-brand-primary rounded-lg"
           pendingLabel="Adding..."
         >
           Add

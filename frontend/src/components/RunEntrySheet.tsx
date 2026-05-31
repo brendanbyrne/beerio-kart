@@ -17,6 +17,7 @@ import {
 } from '../hooks/useGameData';
 import { DrinkTypeSelector } from './DrinkTypeSelector';
 import { RaceSetupPicker } from './RaceSetupPicker';
+import { useModalA11y } from '../hooks/useModalA11y';
 
 interface TimeFields {
   m: string;
@@ -69,6 +70,11 @@ export function RunEntrySheet({
 
   const [showDrinkPicker, setShowDrinkPicker] = useState(false);
   const [showSetupPicker, setShowSetupPicker] = useState(false);
+
+  // Trap focus / close-on-Escape / restore-focus for the sheet (react.md § 10).
+  // The trap suspends while a full-screen sub-picker is open so it doesn't fight
+  // the picker for focus; the picker has its own Back control.
+  const dialogRef = useModalA11y(onClose, !showDrinkPicker && !showSetupPicker);
 
   // Load game data for resolving default names
   const { items: drinkTypes } = useDrinkTypes();
@@ -202,11 +208,20 @@ export function RunEntrySheet({
 
   return (
     <div className="fixed inset-0 z-30 flex flex-col justify-end">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Close"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40"
+      />
 
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Log your run"
         className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[92%]"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center pt-2.5 pb-1">
           <div className="w-9 h-1 bg-gray-300 rounded-full" />
@@ -235,10 +250,11 @@ export function RunEntrySheet({
 
           {/* Total Time */}
           <div className="mb-4">
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <span className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Total Time
-            </label>
+            </span>
             <TimeInputGroup
+              groupLabel="Total time"
               fields={totalTime}
               setFields={setTotalTime}
               large
@@ -249,9 +265,9 @@ export function RunEntrySheet({
 
           {/* Lap Times */}
           <div className="mb-5">
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <span className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Lap Times
-            </label>
+            </span>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-semibold text-gray-400 w-6 text-right">
@@ -259,6 +275,7 @@ export function RunEntrySheet({
                 </span>
                 <div className="flex-1">
                   <TimeInputGroup
+                    groupLabel="Lap 1"
                     fields={lap1}
                     setFields={setLap1}
                     mRef={lap1MRef}
@@ -274,6 +291,7 @@ export function RunEntrySheet({
                 </span>
                 <div className="flex-1">
                   <TimeInputGroup
+                    groupLabel="Lap 2"
                     fields={lap2}
                     setFields={setLap2}
                     mRef={lap2MRef}
@@ -289,6 +307,7 @@ export function RunEntrySheet({
                 </span>
                 <div className="flex-1">
                   <TimeInputGroup
+                    groupLabel="Lap 3"
                     fields={lap3}
                     setFields={setLap3}
                     mRef={lap3MRef}
@@ -312,9 +331,9 @@ export function RunEntrySheet({
 
           {/* Drink */}
           <div className="mb-4">
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <span className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Drink
-            </label>
+            </span>
             <button
               onClick={() => setShowDrinkPicker(true)}
               className="w-full flex items-center justify-between px-3.5 min-h-[48px] bg-gray-50 border border-gray-200 rounded-xl text-left"
@@ -346,9 +365,9 @@ export function RunEntrySheet({
 
           {/* Race Setup */}
           <div className="mb-4">
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <span className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Race Setup
-            </label>
+            </span>
             <button
               onClick={() => setShowSetupPicker(true)}
               className="w-full flex items-center justify-between px-3.5 min-h-[48px] bg-gray-50 border border-gray-200 rounded-xl text-left"
@@ -373,9 +392,9 @@ export function RunEntrySheet({
 
           {/* DQ */}
           <div className="mb-6">
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <span className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Didn&apos;t finish drink?
-            </label>
+            </span>
             <SlideToConfirm
               key={dq ? 'dq' : 'no-dq'}
               confirmed={dq}
@@ -461,6 +480,8 @@ export function RunEntrySheet({
 // ── Time Input Group (self-contained with auto-advance) ─────────────
 
 interface TimeInputGroupProps {
+  /** Accessible-name prefix for the three inputs, e.g. "Total time", "Lap 1". */
+  groupLabel: string;
   fields: TimeFields;
   setFields: React.Dispatch<React.SetStateAction<TimeFields>>;
   large?: boolean;
@@ -471,6 +492,7 @@ interface TimeInputGroupProps {
 }
 
 function TimeInputGroup({
+  groupLabel,
   fields,
   setFields,
   large,
@@ -532,6 +554,7 @@ function TimeInputGroup({
     <div className="flex items-center gap-1.5 justify-center">
       <input
         ref={resolvedMRef}
+        aria-label={`${groupLabel} minutes`}
         className={clsx(inputClass, large ? 'w-14' : 'w-10')}
         value={fields.m}
         onChange={handleChange('m', 1)}
@@ -544,6 +567,7 @@ function TimeInputGroup({
       <span className={sepClass}>:</span>
       <input
         ref={ssRef}
+        aria-label={`${groupLabel} seconds`}
         className={clsx(inputClass, large ? 'w-16' : 'w-12')}
         value={fields.ss}
         onChange={handleChange('ss', 2)}
@@ -556,6 +580,7 @@ function TimeInputGroup({
       <span className={sepClass}>.</span>
       <input
         ref={resolvedMmmRef}
+        aria-label={`${groupLabel} milliseconds`}
         className={clsx(inputClass, large ? 'w-[72px]' : 'w-14')}
         value={fields.mmm}
         onChange={handleChange('mmm', 3)}
@@ -644,10 +669,21 @@ function SlideToConfirm({
   return (
     <div
       ref={trackRef}
+      role="button"
+      tabIndex={0}
+      aria-label="Slide or press Enter to disqualify this run"
       className="relative w-full h-12 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden select-none touch-none"
+      // Drag starts anywhere on the track (the thumb is presentational, so a
+      // press on it bubbles here). Keyboard users get an Enter/Space shortcut
+      // since the slide gesture isn't operable from the keyboard.
+      onMouseDown={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
       onMouseMove={(e) => handleMove(e.clientX)}
       onMouseUp={handleEnd}
       onMouseLeave={handleEnd}
+      onTouchStart={() => setDragging(true)}
       onTouchMove={(e) => {
         // touches[0] is Touch | undefined under noUncheckedIndexedAccess;
         // a touchmove always carries at least one touch, but narrow anyway.
@@ -655,6 +691,12 @@ function SlideToConfirm({
         if (touch) handleMove(touch.clientX);
       }}
       onTouchEnd={handleEnd}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onConfirm();
+        }
+      }}
     >
       <div
         className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -665,18 +707,12 @@ function SlideToConfirm({
         </span>
       </div>
       <div
+        aria-hidden="true"
         className="absolute top-1 h-10 rounded-lg bg-danger shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing"
         style={{
           width: thumbW,
           left: offsetX + 4,
           transition: dragging ? 'none' : 'left 0.25s ease',
-        }}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          if (!confirmed) setDragging(true);
-        }}
-        onTouchStart={() => {
-          if (!confirmed) setDragging(true);
         }}
       >
         <span className="text-white text-[16px] font-bold">&raquo;</span>

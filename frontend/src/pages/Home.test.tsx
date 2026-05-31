@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -76,5 +76,43 @@ describe('Home', () => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['my-session'] });
     });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['sessions'] });
+  });
+
+  it('closes the create-session modal on Escape and restores focus to the trigger', async () => {
+    // PR-G2 (Issue #184): the create-session modal is a real dialog — Escape
+    // closes it and focus returns to the button that opened it (react.md § 10).
+    server.use(
+      http.get('/api/v1/users/u1', () => HttpResponse.json(profile)),
+      http.get('/api/v1/characters', () => HttpResponse.json([])),
+      http.get('/api/v1/sessions', () => HttpResponse.json([])),
+      http.get('/api/v1/sessions/mine', () =>
+        HttpResponse.json({ session_id: null }),
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const trigger = await screen.findByRole('button', {
+      name: /start a session/i,
+    });
+    await user.click(trigger);
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(trigger).toHaveFocus();
   });
 });

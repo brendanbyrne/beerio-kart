@@ -88,7 +88,7 @@ export function Register() {
         </div>
 
         <SubmitButton
-          className="w-full py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-strong transition-colors"
+          className="w-full min-h-touch py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-strong transition-colors"
           pendingLabel="Creating account..."
         >
           Register
