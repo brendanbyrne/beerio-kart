@@ -146,14 +146,22 @@ mod tests {
     }
 
     #[tokio::test]
+    #[tracing_test::traced_test]
     async fn test_supervised_catches_panic_and_returns() {
-        // If `supervised` failed to catch, this test would itself panic and
-        // be reported as failed. Reaching the assertion proves the panic
-        // was contained — the log path is exercised by hand via smoke tests.
+        // Reaching the line after `.await` proves the panic was contained (an
+        // uncaught panic would fail the test). Beyond containment,
+        // `supervised`'s job is to *log* the panic (tokio.md § 5), so assert
+        // the error-path log line landed rather than leaving that branch
+        // unverified.
         supervised("test-panic", async move {
             panic!("intentional panic for supervised() test");
         })
         .await;
+
+        assert!(
+            logs_contain("task panicked"),
+            "supervised must log the panic on the error path"
+        );
     }
 
     #[tokio::test]

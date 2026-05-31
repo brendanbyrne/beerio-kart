@@ -84,6 +84,8 @@ async fn test_auth_user_missing_header_returns_401() {
     let server = setup_server(None).await;
     let response = server.get("/auth-only").await;
     response.assert_status(StatusCode::UNAUTHORIZED);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "token_invalid");
 }
 
 #[tokio::test]
@@ -94,6 +96,8 @@ async fn test_auth_user_malformed_header_no_bearer_returns_401() {
         .add_header("Authorization", "Token abc123")
         .await;
     response.assert_status(StatusCode::UNAUTHORIZED);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "token_invalid");
 }
 
 #[tokio::test]
@@ -104,6 +108,8 @@ async fn test_auth_user_empty_token_returns_401() {
         .add_header("Authorization", "Bearer ")
         .await;
     response.assert_status(StatusCode::UNAUTHORIZED);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "token_invalid");
 }
 
 #[tokio::test]
@@ -116,6 +122,10 @@ async fn test_auth_user_refresh_token_as_access_returns_401() {
         .add_header("Authorization", format!("Bearer {refresh}"))
         .await;
     response.assert_status(StatusCode::UNAUTHORIZED);
+    // Refresh tokens are valid JWTs signed with the same key; the 401 must be
+    // because the token *type* is wrong, not a generic rejection.
+    let body: Value = response.json();
+    assert_eq!(body["code"], "token_invalid");
 }
 
 #[tokio::test]
@@ -145,6 +155,10 @@ async fn test_admin_user_non_admin_returns_403() {
         .add_header("Authorization", format!("Bearer {token}"))
         .await;
     response.assert_status(StatusCode::FORBIDDEN);
+    // Distinct cause from the no-admin-configured test below, same code: the
+    // admin gate fired (admin_required), not some other 403.
+    let body: Value = response.json();
+    assert_eq!(body["code"], "admin_required");
 }
 
 #[tokio::test]
@@ -171,4 +185,9 @@ async fn test_admin_user_no_admin_configured_returns_403() {
         .add_header("Authorization", format!("Bearer {token}"))
         .await;
     response.assert_status(StatusCode::FORBIDDEN);
+    // No ADMIN_USER_ID configured: a valid user still can't reach an admin
+    // route, and the gate's code is admin_required (same as the non-admin
+    // path above — pinning it proves both distinct causes hit the admin gate).
+    let body: Value = response.json();
+    assert_eq!(body["code"], "admin_required");
 }

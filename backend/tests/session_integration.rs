@@ -383,6 +383,10 @@ async fn test_join_closed_session_returns_409() {
         .add_header(AUTH_HEADER, auth_value(&token_user2))
         .await;
     res.assert_status(axum::http::StatusCode::CONFLICT);
+    // 409 specifically because the session is closed — not the already-in-a-
+    // session conflict the join-twice test exercises.
+    let body: Value = res.json();
+    assert_eq!(body["code"], "session_closed");
 }
 
 #[tokio::test]
@@ -396,6 +400,9 @@ async fn test_create_session_with_invalid_ruleset_returns_400() {
         .json(&json!({ "ruleset": "invalid_thing" }))
         .await;
     res.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "bad_request");
+    assert!(body["error"].as_str().unwrap().contains("Invalid ruleset"));
 }
 
 #[tokio::test]
@@ -425,6 +432,16 @@ async fn test_join_session_twice_returns_409() {
         .add_header(AUTH_HEADER, auth_value(&token_user2))
         .await;
     res.assert_status(axum::http::StatusCode::CONFLICT);
+    // 409 because the user is already in this session (the generic conflict),
+    // distinct from the session-closed conflict above.
+    let body: Value = res.json();
+    assert_eq!(body["code"], "conflict");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("Already in session")
+    );
 }
 
 #[tokio::test]
@@ -484,6 +501,8 @@ async fn test_get_nonexistent_session_returns_404() {
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::NOT_FOUND);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "not_found");
 }
 
 #[tokio::test]
@@ -632,6 +651,8 @@ async fn test_skip_endpoint_unknown_race_returns_404() {
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::NOT_FOUND);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "not_found");
 }
 
 #[tokio::test]
@@ -654,6 +675,14 @@ async fn test_skip_endpoint_already_submitted_returns_409() {
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::CONFLICT);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "conflict");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("Already submitted")
+    );
 }
 
 #[tokio::test]
@@ -860,6 +889,8 @@ async fn test_skip_after_leaving_returns_403() {
         .add_header(AUTH_HEADER, auth_value(&token_user2))
         .await;
     res.assert_status(axum::http::StatusCode::FORBIDDEN);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "forbidden");
 }
 
 // ═══════════════════════════════════════════════════════════════════════

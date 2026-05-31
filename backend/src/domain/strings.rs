@@ -296,26 +296,26 @@ mod tests {
 
     #[test]
     fn test_username_rejects_empty() {
-        assert!(Username::try_from(String::new()).is_err());
+        Username::try_from(String::new()).unwrap_err();
     }
 
     #[test]
     fn test_username_rejects_whitespace_only() {
         // After `sanitize(trim)` the result is empty, which fails the
         // `len_char_min = 1` check.
-        assert!(Username::try_from("   ".to_string()).is_err());
+        Username::try_from("   ".to_string()).unwrap_err();
     }
 
     #[test]
     fn test_username_rejects_too_long() {
         let s = "a".repeat(31);
-        assert!(Username::try_from(s).is_err());
+        Username::try_from(s).unwrap_err();
     }
 
     #[test]
     fn test_username_accepts_exactly_thirty_chars() {
         let s = "a".repeat(30);
-        assert!(Username::try_from(s).is_ok());
+        Username::try_from(s).unwrap();
     }
 
     #[test]
@@ -323,7 +323,7 @@ mod tests {
         // 30 multi-byte chars (each 4 bytes in UTF-8) = 120 bytes but
         // exactly 30 chars, so it should be accepted.
         let s = "🏎".repeat(30);
-        assert!(Username::try_from(s).is_ok());
+        Username::try_from(s).unwrap();
     }
 
     #[test]
@@ -357,17 +357,17 @@ mod tests {
 
     #[test]
     fn test_email_rejects_no_at_sign() {
-        assert!(EmailAddress::try_from("aliceexample.com".to_string()).is_err());
+        EmailAddress::try_from("aliceexample.com".to_string()).unwrap_err();
     }
 
     #[test]
     fn test_email_rejects_no_dot_in_domain() {
-        assert!(EmailAddress::try_from("alice@example".to_string()).is_err());
+        EmailAddress::try_from("alice@example".to_string()).unwrap_err();
     }
 
     #[test]
     fn test_email_rejects_multiple_at_signs() {
-        assert!(EmailAddress::try_from("a@b@example.com".to_string()).is_err());
+        EmailAddress::try_from("a@b@example.com".to_string()).unwrap_err();
     }
 
     // ── Password ────────────────────────────────────────────────────
@@ -375,25 +375,32 @@ mod tests {
     #[test]
     fn test_password_accepts_minimum_length() {
         let s = "a".repeat(8);
-        assert!(Password::try_from(s).is_ok());
+        Password::try_from(s).unwrap();
     }
 
     #[test]
     fn test_password_accepts_maximum_length() {
         let s = "a".repeat(128);
-        assert!(Password::try_from(s).is_ok());
+        Password::try_from(s).unwrap();
     }
 
     #[test]
     fn test_password_rejects_too_short() {
         let s = "a".repeat(7);
-        assert!(Password::try_from(s).is_err());
+        // `Password` intentionally omits `Debug` (no plaintext in panics/logs),
+        // so `.err().expect(...)` stands in for `.unwrap_err()`, which would
+        // need `Password: Debug`.
+        Password::try_from(s)
+            .err()
+            .expect("a 7-char password is below the 8-char minimum");
     }
 
     #[test]
     fn test_password_rejects_too_long() {
         let s = "a".repeat(129);
-        assert!(Password::try_from(s).is_err());
+        Password::try_from(s)
+            .err()
+            .expect("a 129-char password is above the 128-char maximum");
     }
 
     // ── PasswordHash ────────────────────────────────────────────────
@@ -401,24 +408,24 @@ mod tests {
     #[test]
     fn test_password_hash_accepts_argon2id_prefix() {
         let s = "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAA$AAAA".to_string();
-        assert!(PasswordHash::try_from(s).is_ok());
+        PasswordHash::try_from(s).unwrap();
     }
 
     #[test]
     fn test_password_hash_accepts_argon2i_prefix() {
         let s =
             "$argon2i$v=19$m=4096,t=3,p=1$c2FsdHNhbHQ$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
-        assert!(PasswordHash::try_from(s).is_ok());
+        PasswordHash::try_from(s).unwrap();
     }
 
     #[test]
     fn test_password_hash_rejects_non_argon2_prefix() {
-        assert!(PasswordHash::try_from("$bcrypt$junk".to_string()).is_err());
+        PasswordHash::try_from("$bcrypt$junk".to_string()).unwrap_err();
     }
 
     #[test]
     fn test_password_hash_rejects_plaintext() {
-        assert!(PasswordHash::try_from("hunter2".to_string()).is_err());
+        PasswordHash::try_from("hunter2".to_string()).unwrap_err();
     }
 
     #[test]
@@ -443,24 +450,24 @@ mod tests {
 
     #[test]
     fn test_drink_type_name_rejects_empty() {
-        assert!(DrinkTypeName::try_from(String::new()).is_err());
+        DrinkTypeName::try_from(String::new()).unwrap_err();
     }
 
     #[test]
     fn test_drink_type_name_rejects_whitespace_only() {
-        assert!(DrinkTypeName::try_from("   ".to_string()).is_err());
+        DrinkTypeName::try_from("   ".to_string()).unwrap_err();
     }
 
     #[test]
     fn test_drink_type_name_rejects_too_long() {
         let s = "a".repeat(201);
-        assert!(DrinkTypeName::try_from(s).is_err());
+        DrinkTypeName::try_from(s).unwrap_err();
     }
 
     #[test]
     fn test_drink_type_name_accepts_max_length() {
         let s = "a".repeat(200);
-        assert!(DrinkTypeName::try_from(s).is_ok());
+        DrinkTypeName::try_from(s).unwrap();
     }
 
     // ── ImagePath ───────────────────────────────────────────────────
@@ -473,12 +480,12 @@ mod tests {
 
     #[test]
     fn test_image_path_rejects_empty() {
-        assert!(ImagePath::try_from(String::new()).is_err());
+        ImagePath::try_from(String::new()).unwrap_err();
     }
 
     #[test]
     fn test_image_path_rejects_whitespace_only() {
-        assert!(ImagePath::try_from("   ".to_string()).is_err());
+        ImagePath::try_from("   ".to_string()).unwrap_err();
     }
 
     #[test]
@@ -497,7 +504,7 @@ mod tests {
         // RunNotes only caps the upper bound — an empty string is a valid
         // "user provided notes but they're blank" value, distinct from
         // `Option::None` ("user didn't provide notes at all").
-        assert!(RunNotes::try_from(String::new()).is_ok());
+        RunNotes::try_from(String::new()).unwrap();
     }
 
     #[test]
@@ -509,7 +516,7 @@ mod tests {
     #[test]
     fn test_run_notes_rejects_too_long() {
         let s = "a".repeat(2001);
-        assert!(RunNotes::try_from(s).is_err());
+        RunNotes::try_from(s).unwrap_err();
     }
 
     // ── Cross-newtype: serde round-trip ─────────────────────────────
@@ -533,7 +540,7 @@ mod tests {
         let s = "a".repeat(31);
         let json = format!("\"{s}\"");
         let result: Result<Username, _> = serde_json::from_str(&json);
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     // Property test: any string that passes Username's constructor round-trips

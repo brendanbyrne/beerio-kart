@@ -136,55 +136,55 @@ mod tests {
     #[test]
     fn test_race_time_accepts_typical_two_minute_run() {
         // 2:00.000 — middle of the road, well inside bounds.
-        assert!(RaceTimeMs::try_from(120_000).is_ok());
+        RaceTimeMs::try_from(120_000).unwrap();
     }
 
     #[test]
     fn test_race_time_accepts_one_ms_lower_bound() {
         // Technically valid; lap-sum check is independent of the bound.
-        assert!(RaceTimeMs::try_from(1).is_ok());
+        RaceTimeMs::try_from(1).unwrap();
     }
 
     #[test]
     fn test_race_time_accepts_max() {
-        assert!(RaceTimeMs::try_from(MAX_TIME_MS).is_ok());
+        RaceTimeMs::try_from(MAX_TIME_MS).unwrap();
     }
 
     #[test]
     fn test_race_time_rejects_zero() {
-        assert!(RaceTimeMs::try_from(0).is_err());
+        RaceTimeMs::try_from(0).unwrap_err();
     }
 
     #[test]
     fn test_race_time_rejects_negative() {
-        assert!(RaceTimeMs::try_from(-1).is_err());
+        RaceTimeMs::try_from(-1).unwrap_err();
     }
 
     #[test]
     fn test_race_time_rejects_over_ten_minutes() {
-        assert!(RaceTimeMs::try_from(MAX_TIME_MS + 1).is_err());
+        RaceTimeMs::try_from(MAX_TIME_MS + 1).unwrap_err();
     }
 
     // ── LapTimeMs ────────────────────────────────────────────────────
 
     #[test]
     fn test_lap_time_accepts_typical() {
-        assert!(LapTimeMs::try_from(40_000).is_ok());
+        LapTimeMs::try_from(40_000).unwrap();
     }
 
     #[test]
     fn test_lap_time_rejects_zero() {
-        assert!(LapTimeMs::try_from(0).is_err());
+        LapTimeMs::try_from(0).unwrap_err();
     }
 
     #[test]
     fn test_lap_time_rejects_negative() {
-        assert!(LapTimeMs::try_from(-1).is_err());
+        LapTimeMs::try_from(-1).unwrap_err();
     }
 
     #[test]
     fn test_lap_time_rejects_over_max() {
-        assert!(LapTimeMs::try_from(MAX_TIME_MS + 1).is_err());
+        LapTimeMs::try_from(MAX_TIME_MS + 1).unwrap_err();
     }
 
     // ── assert_lap_sum happy path ────────────────────────────────────
@@ -197,7 +197,7 @@ mod tests {
             LapTimeMs::try_from(41_000).unwrap(),
         ];
         let total = RaceTimeMs::try_from(120_000).unwrap();
-        assert!(assert_lap_sum(laps, total).is_ok());
+        assert_lap_sum(laps, total).unwrap();
     }
 
     #[test]
@@ -209,7 +209,7 @@ mod tests {
             LapTimeMs::try_from(1).unwrap(),
         ];
         let total = RaceTimeMs::try_from(3).unwrap();
-        assert!(assert_lap_sum(laps, total).is_ok());
+        assert_lap_sum(laps, total).unwrap();
     }
 
     // ── assert_lap_sum unhappy path ──────────────────────────────────
@@ -276,7 +276,7 @@ mod tests {
             LapTimeMs::try_from(40_999).unwrap(),
         ];
         let total = RaceTimeMs::try_from(120_000).unwrap();
-        assert!(assert_lap_sum(laps, total).is_err());
+        assert_lap_sum(laps, total).unwrap_err();
     }
 
     // ── Property: any valid (laps, total) tuple where the laps sum to
@@ -300,6 +300,33 @@ mod tests {
             ];
             let total = RaceTimeMs::try_from(total_value).unwrap();
             prop_assert!(assert_lap_sum(laps, total).is_ok());
+        }
+
+        /// Negative property: any nonzero perturbation of the total away from
+        /// the true lap sum is rejected. Complements the round-trip test
+        /// above, which — by recomputing the total as `l1 + l2 + l3` (the
+        /// SUT's own arithmetic) — can only ever exercise the accept path. A
+        /// regression that made `assert_lap_sum` accept *everything* would
+        /// still pass the round-trip; this case pins the reject side.
+        #[test]
+        fn test_assert_lap_sum_rejects_total_perturbed_off_the_sum(
+            l1 in 1i32..=200_000,
+            l2 in 1i32..=200_000,
+            l3 in 1i32..=200_000,
+            offset in prop_oneof![-50_000i32..=-1, 1i32..=50_000],
+        ) {
+            let perturbed = l1 + l2 + l3 + offset;
+            // Only exercise perturbations that stay a constructible
+            // RaceTimeMs; an out-of-range total is a different rejection path
+            // (the TryFrom bound), not the lap-sum check under test.
+            prop_assume!((MIN_TIME_MS..=MAX_TIME_MS).contains(&perturbed));
+            let laps = [
+                LapTimeMs::try_from(l1).unwrap(),
+                LapTimeMs::try_from(l2).unwrap(),
+                LapTimeMs::try_from(l3).unwrap(),
+            ];
+            let total = RaceTimeMs::try_from(perturbed).unwrap();
+            prop_assert!(assert_lap_sum(laps, total).is_err());
         }
     }
 }

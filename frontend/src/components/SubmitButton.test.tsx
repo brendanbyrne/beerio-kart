@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { SubmitButton } from './SubmitButton';
 
 // useFormStatus reads pending state from the nearest <form>. Outside a form
@@ -16,9 +17,34 @@ describe('SubmitButton', () => {
     expect(button).toHaveAttribute('type', 'submit');
   });
 
-  it('falls back to children when no pendingLabel is provided', () => {
-    render(<SubmitButton>Save</SubmitButton>);
-    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  it('keeps showing children while pending when no pendingLabel is given', async () => {
+    // The pending fallback (`pending && pendingLabel !== undefined ? … : children`)
+    // only matters when pending=true. Render inside a form whose action is held
+    // open so useFormStatus reports pending, then assert the button is disabled
+    // and STILL shows its children. Rendering outside a form (the prior version
+    // of this test) leaves pending=false and never exercises this branch.
+    let release!: () => void;
+    const action = () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    const user = userEvent.setup();
+
+    render(
+      <form action={action}>
+        <SubmitButton>Save</SubmitButton>
+      </form>,
+    );
+    const button = screen.getByRole('button', { name: 'Save' });
+
+    await user.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveTextContent('Save');
+
+    // Let the action settle so the pending state clears inside act().
+    release();
+    await waitFor(() => expect(button).toBeEnabled());
   });
 
   it('applies the supplied className alongside the disabled-state classes', () => {

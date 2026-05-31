@@ -437,6 +437,8 @@ async fn test_get_nonexistent_user_returns_404() {
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::NOT_FOUND);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "not_found");
 }
 
 #[tokio::test]
@@ -454,6 +456,8 @@ async fn test_update_user_race_setup_all_or_nothing() {
         }))
         .await;
     res.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "bad_request");
 }
 
 #[tokio::test]
@@ -495,6 +499,11 @@ async fn test_update_user_invalid_fk_returns_400() {
         }))
         .await;
     res.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    // The FK check (not a type-parse failure) is what rejects: the code is the
+    // generic bad_request, and the message names the offending entity.
+    let body: Value = res.json();
+    assert_eq!(body["code"], "bad_request");
+    assert!(body["error"].as_str().unwrap().contains("character"));
 }
 
 #[tokio::test]
@@ -514,6 +523,9 @@ async fn test_update_other_users_profile_returns_403() {
         }))
         .await;
     res.assert_status(axum::http::StatusCode::FORBIDDEN);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "forbidden");
+    assert!(body["error"].as_str().unwrap().contains("your own"));
 }
 
 #[tokio::test]
@@ -676,6 +688,9 @@ async fn test_create_drink_type_empty_name_returns_400() {
         .json(&json!({ "name": "  ", "alcoholic": false }))
         .await;
     res.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "bad_request");
+    assert!(body["error"].as_str().unwrap().contains("Drink type name"));
 }
 
 #[tokio::test]
@@ -715,6 +730,8 @@ async fn test_get_nonexistent_drink_type_returns_404() {
         .add_header(AUTH_HEADER, auth_value(&token))
         .await;
     res.assert_status(axum::http::StatusCode::NOT_FOUND);
+    let body: Value = res.json();
+    assert_eq!(body["code"], "not_found");
 }
 
 #[tokio::test]

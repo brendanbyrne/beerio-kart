@@ -112,7 +112,7 @@ async fn test_register_success_returns_201_with_access_token_and_refresh_cookie(
     assert_eq!(body["user"]["username"], "alice");
     assert!(body["user"]["id"].is_string());
     let id = body["user"]["id"].as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    Uuid::parse_str(id).unwrap();
 
     // Should set a refresh cookie
     let cookie = extract_refresh_cookie(&response);
@@ -168,9 +168,25 @@ async fn test_refresh_with_valid_cookie_returns_new_access_token_and_rotated_coo
         "should return new access_token"
     );
 
-    // Should also rotate the refresh cookie
-    let new_cookie = extract_refresh_cookie(&refresh_response);
-    assert!(new_cookie.is_some(), "should set rotated refresh cookie");
+    // Should also rotate the refresh cookie. We deliberately do NOT assert the
+    // value *differs* from the original: refresh tokens carry no unique
+    // component (no `jti`) and the refresh path reuses the same version, so a
+    // token minted in the same wall-clock second as the original is
+    // byte-identical — an `assert_ne!` would be flaky. Assert the functional
+    // property instead: the rotated cookie is itself a working refresh token.
+    let new_cookie =
+        extract_refresh_cookie(&refresh_response).expect("should set rotated refresh cookie");
+
+    let second_refresh = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &new_cookie))
+        .await;
+    second_refresh.assert_status(StatusCode::OK);
+    let body2: Value = second_refresh.json();
+    assert!(
+        body2["access_token"].is_string(),
+        "the rotated cookie must itself be usable to refresh"
+    );
 }
 
 #[tokio::test]
@@ -311,10 +327,17 @@ async fn test_password_change_increments_version_and_returns_new_tokens() {
 }
 
 #[tokio::test]
-async fn test_refresh_token_in_authorization_header_rejected_by_middleware() {
+async fn test_refresh_token_used_as_access_token_rejected_by_middleware() {
+    // A refresh token is a valid JWT signed with the same key, but it carries
+    // `refresh_token_version` instead of `username`, so it can't deserialize as
+    // `AccessClaims` — the middleware rejects it as `token_invalid` at decode,
+    // before the explicit `token_type` guard is even reached. The security
+    // property under test is that a refresh token never authenticates as an
+    // access token. (Merged from the former byte-identical
+    // `test_refresh_token_in_authorization_header_rejected_by_middleware` +
+    // `test_access_token_with_type_refresh_rejected_by_middleware`.)
     let server = setup_test_app().await;
 
-    // Create a refresh token directly
     let config = test_config();
     let refresh_jwt = beerio_kart::services::auth::create_refresh_token(
         &beerio_kart::domain::UserId::new_v4(),
@@ -323,35 +346,19 @@ async fn test_refresh_token_in_authorization_header_rejected_by_middleware() {
     )
     .unwrap();
 
-    // Try to use it as a Bearer token on a protected endpoint
+    // Try to use it as a Bearer token on a protected endpoint.
     let response = server
         .get("/api/v1/protected")
         .add_header("Authorization", format!("Bearer {refresh_jwt}"))
         .await;
 
     response.assert_status(StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn test_access_token_with_type_refresh_rejected_by_middleware() {
-    let server = setup_test_app().await;
-
-    // Create a refresh token and try to pass it off as an access token.
-    // The middleware should check token_type and reject it.
-    let config = test_config();
-    let refresh_jwt = beerio_kart::services::auth::create_refresh_token(
-        &beerio_kart::domain::UserId::new_v4(),
-        0,
-        &config,
-    )
-    .unwrap();
-
-    let response = server
-        .get("/api/v1/protected")
-        .add_header("Authorization", format!("Bearer {refresh_jwt}"))
-        .await;
-
-    response.assert_status(StatusCode::UNAUTHORIZED);
+    // Rejected as `token_invalid` ("Invalid token") — the refresh token is
+    // well-formed and correctly signed, so this is the claim-shape mismatch
+    // being caught, not a signature failure.
+    let body: Value = response.json();
+    assert_eq!(body["code"], "token_invalid");
+    assert!(body["error"].as_str().unwrap().contains("Invalid token"));
 }
 
 #[tokio::test]
@@ -385,6 +392,10 @@ async fn test_expired_access_token_rejected_by_middleware() {
         .await;
 
     response.assert_status(StatusCode::UNAUTHORIZED);
+    // Expired (not malformed): the middleware must surface `token_expired` so
+    // the frontend can refresh rather than re-prompting for credentials.
+    let body: Value = response.json();
+    assert_eq!(body["code"], "token_expired");
 }
 
 // ── Preserved existing tests (updated for new API) ──────────────────
@@ -416,6 +427,9 @@ async fn test_register_username_too_long_returns_400() {
         .await;
 
     response.assert_status(StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "bad_request");
+    assert!(body["error"].as_str().unwrap().contains("Username"));
 }
 
 #[tokio::test]
@@ -428,6 +442,9 @@ async fn test_register_empty_username_returns_400() {
         .await;
 
     response.assert_status(StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "bad_request");
+    assert!(body["error"].as_str().unwrap().contains("Username"));
 }
 
 #[tokio::test]
@@ -440,6 +457,9 @@ async fn test_register_short_password_returns_400() {
         .await;
 
     response.assert_status(StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "bad_request");
+    assert!(body["error"].as_str().unwrap().contains("Password"));
 }
 
 #[tokio::test]
@@ -453,6 +473,9 @@ async fn test_register_long_password_returns_400() {
         .await;
 
     response.assert_status(StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "bad_request");
+    assert!(body["error"].as_str().unwrap().contains("Password"));
 }
 
 #[tokio::test]
