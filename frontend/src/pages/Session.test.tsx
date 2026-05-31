@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { server } from '../mocks/server';
 import { Session } from './Session';
+import { formatTime } from '../utils/time';
 
 // PR-C2 (Issue #186): the membership/state mutations must invalidate the keys
 // they make stale — join/leave touch ['my-session'], ['sessions'] and the
@@ -207,5 +208,58 @@ describe('Session', () => {
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['session', 's1'] });
     });
+  });
+
+  // Returns hostSession with u1's submission on the current race, in the
+  // given DQ state. Drives the "Your Time" card (the hasSubmitted branch),
+  // which replaces the Submit-Time button once you've logged a run.
+  function sessionWithMySubmission(disqualified: boolean) {
+    return {
+      ...hostSession,
+      current_race: {
+        ...currentRace,
+        submissions: [
+          {
+            user_id: 'u1',
+            username: 'alice',
+            track_time: 83456,
+            disqualified,
+          },
+        ],
+      },
+    };
+  }
+
+  it('shows your finished time when you have a non-DQ submission', async () => {
+    server.use(
+      http.get('/api/v1/sessions/s1', () =>
+        HttpResponse.json(sessionWithMySubmission(false)),
+      ),
+      http.get('/api/v1/sessions/mine', () =>
+        HttpResponse.json({ session_id: 's1' }),
+      ),
+    );
+    renderSession();
+
+    // Non-DQ branch: the plain "Your Time" label (not "Your Time (DQ)") and
+    // the formatted track time, rendered with the success styling.
+    expect(await screen.findByText('Your Time')).toBeInTheDocument();
+    expect(screen.getByText(formatTime(83456))).toBeInTheDocument();
+  });
+
+  it('shows a DQ treatment when your submission is disqualified', async () => {
+    server.use(
+      http.get('/api/v1/sessions/s1', () =>
+        HttpResponse.json(sessionWithMySubmission(true)),
+      ),
+      http.get('/api/v1/sessions/mine', () =>
+        HttpResponse.json({ session_id: 's1' }),
+      ),
+    );
+    renderSession();
+
+    // DQ branch: the "(DQ)" label variant and the struck-through time.
+    expect(await screen.findByText('Your Time (DQ)')).toBeInTheDocument();
+    expect(screen.getByText(formatTime(83456))).toBeInTheDocument();
   });
 });

@@ -105,4 +105,15 @@ describe('DrinkTypeSelector add-drink flow', () => {
     expect(await screen.findByText('Name is required')).toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  it('marks the matching item as selected when a selectedId is supplied', async () => {
+    // The check mark renders only on the item whose id equals selectedId — the
+    // selected branch of the item styling. The other tests render with no
+    // selectedId (every item unselected), so this exercises the other side.
+    mockList();
+    renderWithClient(<DrinkTypeSelector selectedId="d1" onSelect={vi.fn()} />);
+
+    // '✓' is the check shown next to the selected drink (Water = d1).
+    expect(await screen.findByText('✓')).toBeInTheDocument();
+  });
 });
