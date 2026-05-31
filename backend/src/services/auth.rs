@@ -449,12 +449,23 @@ mod tests {
             rate_limit_per_minute: 60,
         });
 
-        validate_access_token(&token, &wrong_config).unwrap_err();
+        let err = validate_access_token(&token, &wrong_config).unwrap_err();
+        // Pin the kind: a token signed with a different secret must fail
+        // *signature* verification, not some other parse error (testing.md § 1).
+        assert!(matches!(
+            err.kind(),
+            jsonwebtoken::errors::ErrorKind::InvalidSignature
+        ));
     }
 
     #[test]
     fn test_validate_token_garbage_input() {
         let config = test_config();
+        // Single-failure-mode case (testing.md § 1's exception): any malformed
+        // token is rejected, and the exact jsonwebtoken ErrorKind here is an
+        // artifact of this particular string (a Base64 decode error on the `.`),
+        // not a behavioral contract worth pinning — unlike the wrong-secret test
+        // above, where InvalidSignature is the stable, name-matching cause.
         validate_access_token("not.a.valid.jwt", &config).unwrap_err();
     }
 
