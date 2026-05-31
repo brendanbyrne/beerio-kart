@@ -275,7 +275,7 @@ The PRs below address every line item.
 
 ### PR-G1: Tailwind `@theme` tokens + `clsx` adoption
 
-**Issue:** [#183](https://github.com/brendanbyrne/beerio-kart/issues/183)
+**Issue:** [#183](https://github.com/brendanbyrne/beerio-kart/issues/183) · **Merged PR:** [#219](https://github.com/brendanbyrne/beerio-kart/pull/219)
 
 - **Scope:**
   - Add a `@theme` block to `frontend/src/index.css` defining brand colors (currently scattered as `blue-600` etc.), `--spacing-touch: 2.75rem`, semantic colors (`--color-success`, `--color-danger`).
@@ -286,7 +286,7 @@ The PRs below address every line item.
 - **Dependencies:** None hard.
 - **Risk:** Low. Pure styling.
 - **Verification:** Visual diff vs main looks identical. Brand color change (try changing `--color-brand-primary`) propagates everywhere.
-- **Sign-off:** [ ]
+- **Sign-off:** [x]
 
 ### PR-G2: Accessibility sweep — touch targets, focus, modals
 
@@ -377,7 +377,7 @@ All Issues live under [Milestone 9 — Hardening: Frontend standards compliance]
 | 11 | E1 | Form migration to useActionState | B2, H2 | [#182](https://github.com/brendanbyrne/beerio-kart/issues/182) | [x] |
 | 12 | E2 | Ref-as-prop, Doc Metadata, Compiler | A1, C2 | [#180](https://github.com/brendanbyrne/beerio-kart/issues/180) | [x] |
 | 13 | F1 | Router upgrade + boundaries + lazy | D1, H2 | [#190](https://github.com/brendanbyrne/beerio-kart/issues/190) | [x] |
-| 14 | G1 | Tailwind `@theme` + `clsx` | — | [#183](https://github.com/brendanbyrne/beerio-kart/issues/183) | [ ] |
+| 14 | G1 | Tailwind `@theme` + `clsx` | — | [#183](https://github.com/brendanbyrne/beerio-kart/issues/183) | [x] |
 | 15 | G2 | Accessibility sweep | G1 | [#184](https://github.com/brendanbyrne/beerio-kart/issues/184) | [ ] |
 | 16 | H1 | Lint cleanup + drift-check CI + test-coverage backfill | All | [#185](https://github.com/brendanbyrne/beerio-kart/issues/185) | [ ] |
 
@@ -402,3 +402,4 @@ ADRs produced: TBD (none anticipated unless a decision lands during the rollout 
 - 2026-05-27 — PR-E1 scope: clarified that `Onboarding.tsx`'s "two-phase form" doesn't render its own `<form>` — both phases delegate to picker children that dispatch already-typed payloads via callback, so the Zod-at-submit rule applies only to the four real forms (Login, Register, Profile password, DrinkTypeSelector add-form). Surfaced during [#211](https://github.com/brendanbyrne/beerio-kart/pull/211) review when "Zod schema at submit time for each form" prompted "does Onboarding need one?" — answered in the scope text rather than relitigated by future reviewers.
 - 2026-05-29 — E-stream sign-off bookkeeping. PR-E1 ([#182](https://github.com/brendanbyrne/beerio-kart/issues/182)) merged as [#211](https://github.com/brendanbyrne/beerio-kart/pull/211) and PR-E2 ([#180](https://github.com/brendanbyrne/beerio-kart/issues/180)) signed off via [#214](https://github.com/brendanbyrne/beerio-kart/pull/214). Flipped both per-section sign-offs `[ ]` → `[x]`, table rows 11 and 12, and added the **Merged PR** links. Note: E2 was signed off at Brendan's request while #214 had review approval but hadn't yet landed on `main` — the box reflects sign-off rather than a confirmed merge.
 - 2026-05-31 — PR-F1 ([#190](https://github.com/brendanbyrne/beerio-kart/issues/190)) merged as [#218](https://github.com/brendanbyrne/beerio-kart/pull/218). Flipped its per-section sign-off `[ ]` → `[x]` and the row-13 table checkbox to match, and added the **Merged PR** link alongside the Issue link. F1 closes Stream F; the remaining open items are G1 ([#183](https://github.com/brendanbyrne/beerio-kart/issues/183)), G2 ([#184](https://github.com/brendanbyrne/beerio-kart/issues/184)), and H1 ([#185](https://github.com/brendanbyrne/beerio-kart/issues/185)), with G1 next in the pickup order.
+- 2026-05-31 — PR-G1 ([#183](https://github.com/brendanbyrne/beerio-kart/issues/183)) merged as [#219](https://github.com/brendanbyrne/beerio-kart/pull/219). Flipped its per-section sign-off `[ ]` → `[x]` and the row-14 table checkbox, and added the **Merged PR** link. Scope deltas worth recording (all decided in PR review): (1) token values are the *exact* OKLCH of the palette shades they replace, not the sRGB hex — v4's palette is OKLCH and hex would drift on P3 displays, breaking the visual no-op; (2) the darker brand token is named `--color-brand-primary-strong` (role-neutral), not `-hover`, because it's also a resting fill; (3) `App.tsx` and `Profile.tsx` were in the scope's clsx list but had no template-literal concat post-F1 — App untouched, Profile got only the color-token swap; (4) the `clsx` reflow surfaced two untested ternary branches (selected drink, submitted-run display) that dropped patch coverage, so behavior tests were added for both; (5) `tailwind.md` § 3 was corrected in-PR (its example mislabeled `blue-600` as the current primary — it's `blue-500` — and now shows OKLCH, with a new exact-OKLCH-for-migrated-shades rule). G1 closes Stream G's first item; the remaining open items are G2 ([#184](https://github.com/brendanbyrne/beerio-kart/issues/184)) — which depends on G1's `--spacing-touch` token — and H1 ([#185](https://github.com/brendanbyrne/beerio-kart/issues/185)), with G2 next in the pickup order.
