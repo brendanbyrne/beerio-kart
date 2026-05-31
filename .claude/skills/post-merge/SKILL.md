@@ -2,7 +2,9 @@
 name: post-merge
 description: >
   Clean up after a PR has been merged. Determines the branch to delete, checks out
-  main, pulls the latest changes, and deletes the merged branch locally and remotely.
+  main, pulls the latest changes, and deletes the merged branch locally and remotely,
+  then checks whether the merge now makes any follow-up documentation updates necessary
+  (e.g. design-record or compliance-plan sign-off) and commits those directly to main.
   Use when the user says a PR has been merged, or asks to clean up after a merge.
 ---
 
@@ -46,6 +48,30 @@ and exits non-zero on an unmerged-work refusal instead of escalating.
    -D` on your own. Ask the user whether the PR was actually merged (e.g., via
    a different merge strategy locally) and get explicit approval before using
    `-D`.
+
+5. **Check for follow-up documentation the merge now makes necessary.** The
+   branch is gone, but merging can leave docs that referenced the work as *in
+   flight* now stale. Look for updates the merge — not the PR's own diff —
+   requires:
+
+   - **Design-record / compliance-plan sign-off** — if the PR implemented an
+     item in a `docs/designs/*` record, tick its checkbox/row, add the
+     merged-PR link, and append a `## Document history` entry. If that record
+     is now fully signed off *and* all its PRs are merged, it may be
+     archive-eligible (`docs/CLAUDE.md` § Design records → Archive).
+   - **Roadmap** — if the merge completes a milestone or phase item tracked in
+     `docs/roadmap.md`.
+   - **Cross-references** — docs that named the branch or PR as planned or
+     pending and should now read as done.
+
+   If any apply, make a **documentation-only** commit and push it **directly to
+   `main`** — docs-only changes skip the PR flow by project rule (root
+   `.claude/CLAUDE.md` § Git workflow). If nothing applies, say so and stop;
+   don't manufacture churn.
+
+   **Guardrail — docs only.** This direct-to-`main` commit may touch only
+   documentation. Any code, test, schema, or config change still requires a
+   PR; never fold one into this commit.
 
 ## Notes
 
