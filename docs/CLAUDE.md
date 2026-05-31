@@ -134,16 +134,25 @@ When generating multiple structurally-similar docs (ADRs from a list of bullets,
 
 This applies to bulk operations only. One-off ADRs or Issues don't need the tier-down — just write them.
 
-## Document history rule (carve-outs)
+## Document history rule
 
-The root `CLAUDE.md` requires `docs/` files to maintain a `## Document history` section. Carve-outs:
+In-scope `docs/` files carry a `## Document history` section, but it is a **decision log, not a changelog** — git already records every diff with the full author/date/PR trail, so the history section earns its keep only by preserving what git *doesn't* surface on its own:
 
-- ADRs (`decisions/`) — frontmatter has `date`; the ADR is intrinsically historical.
-- `roadmap.md` — task tracking; history lives in Issues / Project board.
+- **A decision and its why** — a rule changed, a default flipped, two docs reconciled, a section moved out.
+- **Provenance** — "sourced from ADR 0039," "companion to the docs restructure," "promoted from `research/X`."
+- **A cross-file consequence** a future editor would otherwise miss.
 
-The rule applies to in-scope files in `docs/`: `design.md`, `data-model.md`, `user-workflows.md`, `api-contract.md`, `project-workflow.md`, `coding-standards/*`, `designs/*` records, and `research/*` files. CLAUDE.md files (root `.claude/CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`, and this file) are not in scope — they describe current behavior, not its history. Initial-creation history sections are fine but not required for ongoing edits.
+Do **not** add an entry for changes git captures completely on its own: renames, moved or renumbered sections, link and typo fixes, wording tweaks. **Test:** if the line you'd write just restates the diff, skip it — the diff is already in git.
 
-If you're unsure whether a doc is in scope, check for an existing `## Document history` section — if one exists, the file is in scope and the rule applies. The listing above is descriptive (files we know maintain history), not exhaustive; any active `docs/` file with a maintained history section gets the same treatment.
+Keep entries terse — one line, dated `YYYY-MM-DD`, decision first. Prefer a pointer to the ADR or design record that holds the reasoning over re-narrating it inline. When a file's log has already grown into a per-PR changelog, collapse the mechanical entries and point the durable rationale at its ADR/record — `design.md`'s history is the worked example.
+
+**Carve-outs — no history section required:**
+
+- ADRs (`decisions/`) — frontmatter has `date`; intrinsically historical.
+- `roadmap.md` — task tracking; history lives in Issues / the Project board.
+- CLAUDE.md files (root `.claude/CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`, and this file) — they describe current behavior, not its history. Some carry a history section by habit; that's allowed, not required, and the decisions-only bar above applies there too.
+
+**Scope.** In-scope `docs/` content: `design.md`, `data-model.md`, `user-workflows.md`, `api-contract.md`, `project-workflow.md`, `coding-standards/*`, `designs/*` records, and `research/*` files. If unsure, check for an existing `## Document history` section — if one exists, the file is in scope. The listing is descriptive, not exhaustive.
 
 ## Document history
 
@@ -152,3 +161,4 @@ If you're unsure whether a doc is in scope, check for an existing `## Document h
 - 2026-05-06 — Updated the document-history rule's file list: `workflows.md` → `user-workflows.md` (renamed in PR 4 due to grep collision with operational `workflow.md`).
 - 2026-05-08 — Updated the "Where does this content go?" table: project-workflow row now points at `project-workflow.md` (operational doc renamed from `workflow.md` for clarity now that `user-workflows.md` is its sibling).
 - 2026-05-08 — Updated handoff path in the "Where does this content go?" table (`docs/handoffs/...` → `.agents/handoffs/...`). Updated the Document history rule scope to clarify that CLAUDE.md files (root, nested backend/frontend, and this file itself) are out of scope; rule applies to `docs/` content files only. Companions to the AI-state reorg in [#79](https://github.com/brendanbyrne/beerio-kart/issues/79) and the nested CLAUDE.md introduction in [#38](https://github.com/brendanbyrne/beerio-kart/issues/38).
+- 2026-05-31 — Reframed the Document history rule from "maintain a history section on every in-scope file" to "history is a **decision log, not a changelog**": entries record decisions, provenance, and cross-file consequences; mechanical changes git already captures (renames, link fixes, renumbers, wording) are dropped. Motivated by the always-loaded context cost — `design.md`'s history had grown to ~25% of a file read every session. Companion: `design.md`'s history collapsed from a 20-entry per-PR changelog to three decision-level entries plus a pointer to the archived restructure record.
