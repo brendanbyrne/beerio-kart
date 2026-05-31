@@ -2,7 +2,7 @@
 
 How work moves through the project — Issues, Milestones, PRs, and the handoffs between Cowork (Claude Desktop) and Claude Code (WSL2 CLI).
 
-This file is the operational guide. For high-level role split see `.claude/CLAUDE.md`; for cached project-board IDs see [`project-field-ids.md`](./project-field-ids.md); for handoff-file mechanics see [`.agents/handoffs/README.md`](../.agents/handoffs/README.md); for the cup-name milestone convention see the archived design record at [`docs/designs/archive/2026-05-04-design-doc-restructure.md`](./designs/archive/2026-05-04-design-doc-restructure.md) §12 (cup mapping also lives in `docs/roadmap.md`).
+This file is the operational guide and the canonical home for the Cowork ↔ Claude Code role split and GitHub-access model (see § Multi-assistant coordination). For cached project-board IDs see [`project-field-ids.md`](./project-field-ids.md); for handoff-file mechanics see [`.agents/handoffs/README.md`](../.agents/handoffs/README.md); for the cup-name milestone convention see the archived design record at [`docs/designs/archive/2026-05-04-design-doc-restructure.md`](./designs/archive/2026-05-04-design-doc-restructure.md) §12 (cup mapping also lives in `docs/roadmap.md`).
 
 ## Decision tree: where does this thing belong?
 
@@ -237,6 +237,52 @@ Brendan approves / adjusts in batch. Promotion to Ready happens during the sessi
 
 ## Multi-assistant coordination
 
+### The two environments
+
+- **Cowork (Claude Desktop)** — design, architecture, documentation, research, review. Accesses the repo via the Windows mount (`C:\Users\obiva\beerio-kart`); cannot access the WSL2 filesystem and **cannot run git** — the sandbox mounts the repo with `unlink()` blocked at the mount layer (every delete returns `EPERM`, even on files Cowork just created), and git relies on creating/removing `.git/index.lock` and temp objects, so any git invocation either fails outright or leaves a stale lock that breaks the next attempt. Cowork edits files only.
+- **Claude Code (WSL2 CLI)** — coding, building, testing, and git operations. Accesses the same checkout via `/mnt/c/Users/obiva/beerio-kart/`; WSL2's `/mnt/c` (9P/DrvFs) supports `unlink`, so git works fine there.
+
+Both work on the **same checkout** — no push/pull needed to see each other's changes. When Cowork wants something committed, it edits the working tree and notes the intended commit in `.agents/handoffs/claude-code.md` or chat; Claude Code (or Brendan) then stages, commits, and pushes. Claude Code pushes after making changes so the remote stays current. Both check `git status` before starting to avoid clobbering the other's uncommitted work; if both need to edit the same file, coordinate through Brendan.
+
+### GitHub access — what each assistant can do
+
+Cowork reads and writes GitHub data — issues, pull requests, project items, milestones — through Composio's GitHub MCP connector, authenticated as the GitHub user `brendanbyrne`. Everything Cowork does via the MCP appears in the GitHub UI under that account.
+
+**Via the MCP, Cowork can:**
+
+- File, label, assign, triage, and close issues; add comments.
+- Read PR diffs, conversation threads, and review state. (Creating commits or PRs still requires Claude Code — that's a git operation, not an API operation.)
+- Add items to the project board, move them between Status columns, set custom field values, attach milestones.
+- Create and manage milestones.
+- Run arbitrary GraphQL against `api.github.com/graphql` when no purpose-built tool exists.
+
+**What the MCP cannot do, regardless of caller:**
+
+- **Run `git`.** API only — branch creation, commits, pushes, and merges remain Claude Code's job.
+- **Create or modify the project's built-in workflows** (auto-add, auto-close, auto-archive) — Settings-UI-only, not exposed by the API.
+- Custom fields, single-select option lists, and views *can* be created/edited via API — see [`project-field-ids.md`](./project-field-ids.md) for which path (GraphQL vs. Composio REST shim) works for which field type, and known REST-shim 500s.
+- **Set Assignees, Labels, Milestone, or Repository via the project field mutation** — those are properties of the underlying issue/PR; use the issue/PR mutations instead.
+
+**Claude Code via `gh`:** see § Claude Code's autonomy in moving Issue status (below) for the token scopes, the `updateProjectV2ItemFieldValue` mutation, and the `INSUFFICIENT_SCOPES` recovery. Project field IDs are cached in [`project-field-ids.md`](./project-field-ids.md) — consult it before any board write (both the MCP and `gh api graphql` require IDs, not names).
+
+**When to use which:** anything ending in a commit, push, or merge → Claude Code. Anything staying inside GitHub's API surface (issue triage, board updates, PR comments, milestone management) → either; pick whoever's already in the conversation. Cowork is often faster for chat-driven triage; Claude Code is the natural choice when the GitHub action is part of a code-bearing PR (e.g., move-Issue-on-pickup at branch start).
+
+### Who does what
+
+| Task | Tool |
+|------|------|
+| Architecture & design docs | Cowork |
+| Code implementation | Claude Code |
+| Building & testing | Claude Code |
+| Git commits | Claude Code or Brendan (Cowork cannot run git) |
+| Git pushes | Claude Code (or Brendan) |
+| Code review & research | Either |
+| Project board / issue triage | Either (Cowork via MCP, Claude Code via `gh`) |
+| Deployment config | Claude Code (with Cowork for planning) |
+| Browser-based tasks | Cowork |
+| Design records | Cowork (writes to `docs/designs/`) |
+| PR reviews | Claude Code (posts as PR comment via `gh pr comment` or MCP) |
+
 ### Cowork's autonomy in filing Issues
 
 - **Direct-file (no review gate):** single Issue, acceptance criteria unambiguous, Brendan in the conversation that surfaced it. Same as the implicit-stamp rule for Backlog → Ready.
@@ -313,3 +359,4 @@ Same pattern as the handoff-as-tag for filed Issues above: the handoff is a tag 
 - 2026-05-15 — Updated the intro paragraph's reference for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
 - 2026-05-17 — § PR template structure item 4 (How to verify): added the rule that verification command blocks must be self-contained — capture values a later step needs (auth tokens, resource IDs) into shell variables, e.g. via `jq`, rather than asking the reviewer to substitute placeholders by hand. Mirrored in the `.github/pull_request_template.md` "How to verify" comment. Surfaced by PR [#165](https://github.com/brendanbyrne/beerio-kart/pull/165) review feedback.
 - 2026-05-27 — Added `### Pre-push checks` subsection under `## PR conventions`. Lefthook's pre-push hook covers tests/lint/typecheck but not coverage; Codecov's 80% patch gate is blocking and has failed initial pushes on PR [#210](https://github.com/brendanbyrne/beerio-kart/pull/210) (D3) and PR [#211](https://github.com/brendanbyrne/beerio-kart/pull/211) (E1) — the new subsection names the local commands (`bun run test:coverage`, `cargo llvm-cov --workspace`) and the two recurring failure modes (mocked-dependency blind spot, unreachable-defensive-guard blind spot). Threshold itself stays in `codecov.yml`; this doc points at it.
+- 2026-05-31 — Became the canonical home for the Cowork ↔ Claude Code role split and GitHub-access model (#220). Added three subsections at the top of `## Multi-assistant coordination` — `### The two environments` (the git/`unlink` constraint, same-checkout coordination), `### GitHub access — what each assistant can do` (the Composio-MCP capability matrix and `gh` pointer), and `### Who does what` (the role table) — all hollowed out of the root `.claude/CLAUDE.md`, which now keeps a compact two-assistant summary plus the load-bearing git rules and points here. Intro reworded accordingly (the old "for high-level role split see `.claude/CLAUDE.md`" pointer was now circular).
