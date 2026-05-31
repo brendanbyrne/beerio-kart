@@ -42,14 +42,13 @@ React handles the UI, Vite serves it and proxies API calls, Axum handles the API
 ## Repo Location
 - **Single checkout:** `C:\Users\obiva\beerio-kart` (Windows), accessible from WSL2 at `/mnt/c/Users/obiva/beerio-kart`.
 - Both Cowork (Claude Desktop) and Claude Code (WSL2 CLI) work on this same checkout. No syncing needed.
-- Backend-specific WSL2 build-performance tip is in [`backend/CLAUDE.md`](../backend/CLAUDE.md).
 
 ## Conventions (cross-cutting)
 - Use LF (`\n`) line endings, not CRLF (`\r\n`).
 - Keep `.gitattributes` in the repo root. Only add nested ones if a subdirectory needs genuinely distinct Git behavior (e.g., LFS for large assets).
 - Drafts in `docs/drafts/` are gitignored except for `WIP_*.md` files. Aggressive cleanup commands (`git clean -fdx`) will wipe them — check `docs/drafts/` before running them.
 
-Backend-specific conventions (database naming, Rust style, schema-changes-prelaunch, testing) live in [`backend/CLAUDE.md`](../backend/CLAUDE.md). Frontend-specific conventions (stack, UI reference device, browser support) live in [`frontend/CLAUDE.md`](../frontend/CLAUDE.md). Doc-area conventions live in [`docs/CLAUDE.md`](../docs/CLAUDE.md), which also owns the Document history rule.
+Backend-specific conventions (database naming, Rust style, testing) live in [`backend/CLAUDE.md`](../backend/CLAUDE.md). Frontend-specific conventions (stack, UI reference device, browser support) live in [`frontend/CLAUDE.md`](../frontend/CLAUDE.md). Doc-area conventions live in [`docs/CLAUDE.md`](../docs/CLAUDE.md), which also owns the Document history rule.
 
 ## Development Workflow
 

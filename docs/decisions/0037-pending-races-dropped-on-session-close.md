@@ -65,7 +65,7 @@ The notification surface that tells users about drops is captured separately in 
 
 ## Schema and code changes
 
-**Schema** (single edit to the consolidated initial migration, per `backend/CLAUDE.md` § schema-changes-prelaunch):
+**Schema** (single edit to the consolidated initial migration, per `docs/coding-standards/seaorm.md` § 5 (Migrations)):
 
 - `session_race_participations` table: add a nullable `dropped_at: TIMESTAMP` column. PK and existing indexes unchanged.
 
@@ -155,7 +155,7 @@ Mutually exclusive in practice. `unraced` is the current "pending" state; rename
 
 ## Migration
 
-Pre-launch schema change. Per `backend/CLAUDE.md` § schema-changes-prelaunch, edit the consolidated initial migration directly. No data migration needed.
+Pre-launch schema change. Per `docs/coding-standards/seaorm.md` § 5 (Migrations), edit the consolidated initial migration directly. No data migration needed.
 
 Suggested PR split:
 
