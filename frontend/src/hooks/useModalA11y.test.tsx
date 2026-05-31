@@ -87,6 +87,43 @@ describe('useModalA11y', () => {
     expect(third).toHaveFocus();
   });
 
+  it('pulls focus back into the dialog when Tab is pressed from outside it', () => {
+    render(
+      <>
+        <button>outside</button>
+        <Dialog onClose={vi.fn()} />
+      </>,
+    );
+    const outside = screen.getByRole('button', { name: 'outside' });
+    const first = screen.getByRole('button', { name: 'first' });
+    const third = screen.getByRole('button', { name: 'third' });
+
+    // Focus escaped the dialog (e.g. browser quirk) — Tab forward re-enters at
+    // the first control, Shift+Tab re-enters at the last.
+    outside.focus();
+    fireEvent.keyDown(outside, { key: 'Tab' });
+    expect(first).toHaveFocus();
+
+    outside.focus();
+    fireEvent.keyDown(outside, { key: 'Tab', shiftKey: true });
+    expect(third).toHaveFocus();
+  });
+
+  it('leaves mid-list Tab to the browser and only wraps at the edges', () => {
+    render(<Dialog onClose={vi.fn()} />);
+    const second = screen.getByRole('button', { name: 'second' });
+
+    // From a middle control, neither Tab nor Shift+Tab is an edge, so the trap
+    // does nothing — focus is left for the browser's native Tab handling (which
+    // jsdom doesn't advance, so it stays put).
+    second.focus();
+    fireEvent.keyDown(second, { key: 'Tab' });
+    expect(second).toHaveFocus();
+
+    fireEvent.keyDown(second, { key: 'Tab', shiftKey: true });
+    expect(second).toHaveFocus();
+  });
+
   it('closes on Escape', () => {
     const onClose = vi.fn();
     render(<Dialog onClose={onClose} />);
