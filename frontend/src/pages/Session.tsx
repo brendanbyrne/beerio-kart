@@ -268,7 +268,7 @@ function SessionView({ id }: { id: SessionId }) {
               <button
                 onClick={handleNextTrack}
                 disabled={pickingTrack}
-                className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-hover transition-colors"
+                className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-strong transition-colors"
               >
                 {pickingTrack ? 'Picking track...' : 'Next Track'}
               </button>
@@ -322,7 +322,7 @@ function SessionView({ id }: { id: SessionId }) {
             ) : (
               <button
                 onClick={() => setShowRunEntry(true)}
-                className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl active:bg-brand-primary-hover transition-colors"
+                className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl active:bg-brand-primary-strong transition-colors"
               >
                 Submit Time
               </button>
@@ -443,7 +443,7 @@ function SessionView({ id }: { id: SessionId }) {
             <button
               onClick={handleJoin}
               disabled={joiningSession}
-              className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-hover transition-colors"
+              className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-strong transition-colors"
             >
               {joiningSession ? 'Joining...' : 'Join Session'}
             </button>

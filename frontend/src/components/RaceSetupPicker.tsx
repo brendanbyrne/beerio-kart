@@ -133,7 +133,7 @@ export function RaceSetupPicker({
               s === step
                 ? 'bg-brand-primary text-white'
                 : selectedForStep[s] !== null
-                  ? 'bg-blue-100 text-brand-primary-hover'
+                  ? 'bg-blue-100 text-brand-primary-strong'
                   : 'bg-gray-100 text-gray-400',
             )}
           >
@@ -204,7 +204,7 @@ export function RaceSetupPicker({
           className={clsx(
             'flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors',
             setup
-              ? 'bg-brand-primary text-white hover:bg-brand-primary-hover'
+              ? 'bg-brand-primary text-white hover:bg-brand-primary-strong'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed',
           )}
         >

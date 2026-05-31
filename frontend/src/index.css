@@ -12,21 +12,30 @@
  * "visual diff vs main identical".) The payoff is that re-branding becomes a
  * few edits here instead of a repo-wide find-replace.
  *
- * Lighter incidental tints and the status-color ramps (the red DQ display, the
- * green success-pill bg) deliberately stay as stock Tailwind utilities per § 3
- * — promoting every shade to a token is the over-tokenizing § 3 warns against.
+ * What a re-hue actually covers: each token is the *single canonical shade*,
+ * not a ramp. `--color-brand-primary` propagates everywhere — every primary
+ * surface uses it. But `--color-danger`, `--color-success`, and
+ * `--color-brand-tint` retint only their one shade; the lighter/darker steps
+ * around them stay stock Tailwind (the red DQ card `red-50`/`red-600`, green
+ * success pills `green-50`/`green-700`, the "my session" `border-blue-200`)
+ * and will NOT move until that ramp is tokenized (deferred). This is deliberate
+ * per § 3 — tokenizing every shade is the over-tokenizing § 3 warns against —
+ * but don't assume danger/success/tint re-hue the way brand-primary does.
  *
- * Note: the standards doc's § 3 example labels blue-600 as "current primary";
- * the code's actual primary is blue-500, and these tokens match the code.
+ * `--color-brand-primary-strong` is named for *intensity*, not a state: it is
+ * the darker brand shade used both as the hover/active target AND as a resting
+ * fill (Submit-Run button, completed-step pill), so a state-based name like
+ * `-hover` would mislead anyone later retuning hover. (Pairs as the "strong"
+ * end of the implicit brand-tint → brand-primary → strong tier.)
  */
 @theme {
   /* Brand */
   --color-brand-primary: oklch(
     62.3% 0.214 259.815
   ); /* blue-500 #3b82f6 — primary buttons, links, active nav */
-  --color-brand-primary-hover: oklch(
+  --color-brand-primary-strong: oklch(
     54.6% 0.245 262.881
-  ); /* blue-600 #2563eb — hover/active, and the Submit-Run resting fill */
+  ); /* blue-600 #2563eb — darker brand shade (hover/active + resting fills) */
   --color-brand-tint: oklch(
     97% 0.014 254.604
   ); /* blue-50 #eff6ff — selected-row fill behind brand-primary borders */
