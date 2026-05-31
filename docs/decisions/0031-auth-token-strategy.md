@@ -54,6 +54,8 @@ Opaque random tokens require a server-side lookup table per token. JWT signed wi
 
 Each successful refresh issues a brand-new refresh JWT with a fresh expiry. The version is **not** bumped on rotation — rotation extends the session window, not revokes existing sessions. Bumping on rotation would invalidate the just-issued token immediately.
 
+> **Superseded in part by [ADR 0040](0040-refresh-token-reuse-detection.md).** Rotation now also changes the token *value* and detects reuse: each refresh mints a successor token (unique `jti`) within a token *family* and invalidates its predecessor; reuse of a superseded token revokes the family. The "no version bump on rotation" detail still holds — `refresh_token_version` remains the global revoke-all, while per-family rows carry rotation and reuse detection.
+
 ### Revocation: `refresh_token_version` column on `users`
 
 Bumped on logout and on password change. Checked **only on the refresh path** — the access-token path is unchanged (no DB hit per request). A bumped version invalidates every existing refresh token for that user; the next refresh attempt is rejected and the user is bounced to login.
@@ -78,7 +80,7 @@ API responses with status 401 trigger a silent refresh: the frontend POSTs to `/
 ### Negative consequences / trade-offs
 
 - **Two-token complexity vs. one.** The frontend handles 401 → refresh → retry; the backend has two token validators. Acceptable: this is the standard pattern, and the security/UX gains pay for it.
-- **Per-device revocation isn't possible** without a per-token table. Deferred until there's a feature that needs it (e.g., a "log out other devices" UI).
+- **Per-device revocation isn't possible** without a per-token table. Deferred until there's a feature that needs it (e.g., a "log out other devices" UI). _(Update: the per-token table arrived with [ADR 0040](0040-refresh-token-reuse-detection.md) for refresh-token reuse detection; its token-family rows are the substrate a future per-device-revocation UI would build on.)_
 - **HTTPS required in production** for the Secure attribute. Cloudflare Tunnel (ADR 0033) provides this; not a constraint in practice.
 
 ## Links

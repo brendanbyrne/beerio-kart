@@ -56,6 +56,7 @@ See `template.md` for the starting point. Files are named `NNNN-kebab-case-title
 | [0037](0037-pending-races-dropped-on-session-close.md) | Pending races dropped on session close | accepted | 2026-05-16 |
 | [0038](0038-notifications-system.md) | Notifications system | accepted | 2026-05-16 |
 | [0039](0039-api-client-generation.md) | API client generation: hand-rolled with Zod, codegen at threshold | accepted | 2026-05-21 |
+| [0040](0040-refresh-token-reuse-detection.md) | Refresh-token rotation with reuse detection (token families + `jti`) | accepted | 2026-05-31 |
 
 ## Adding a new ADR
 
