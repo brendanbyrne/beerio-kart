@@ -30,7 +30,7 @@ export function AppErrorFallback({ error }: FallbackProps) {
         onClick={() => {
           window.location.reload();
         }}
-        className="min-h-touch px-6 py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors"
+        className="min-h-touch px-6 py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-strong transition-colors"
       >
         Reload
       </button>

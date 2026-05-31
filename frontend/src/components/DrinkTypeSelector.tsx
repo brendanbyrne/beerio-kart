@@ -71,7 +71,7 @@ export function DrinkTypeSelector({
       {!showAddForm ? (
         <button
           onClick={() => setShowAddForm(true)}
-          className="text-sm text-brand-primary font-medium py-2 hover:text-brand-primary-hover transition-colors"
+          className="text-sm text-brand-primary font-medium py-2 hover:text-brand-primary-strong transition-colors"
         >
           + Not listed? Add new
         </button>

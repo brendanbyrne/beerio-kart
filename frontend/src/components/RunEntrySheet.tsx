@@ -391,7 +391,7 @@ export function RunEntrySheet({
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="w-full py-4 bg-brand-primary-hover text-white font-semibold rounded-2xl text-[15px] shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
+            className="w-full py-4 bg-brand-primary-strong text-white font-semibold rounded-2xl text-[15px] shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
           >
             {submitting ? 'Submitting...' : 'Submit Run'}
           </button>

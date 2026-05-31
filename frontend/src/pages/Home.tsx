@@ -80,7 +80,7 @@ export function Home() {
         {/* Start / Jump to session button */}
         <button
           onClick={handleStartButton}
-          className="w-full py-4 bg-brand-primary text-white rounded-xl text-sm font-semibold active:bg-brand-primary-hover transition-colors"
+          className="w-full py-4 bg-brand-primary text-white rounded-xl text-sm font-semibold active:bg-brand-primary-strong transition-colors"
         >
           {mySessionId ? 'Jump to Current Session' : 'Start a Session'}
         </button>
@@ -104,7 +104,7 @@ export function Home() {
               <button
                 onClick={handleCreate}
                 disabled={creating}
-                className="w-full py-3 bg-brand-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50 active:bg-brand-primary-hover transition-colors"
+                className="w-full py-3 bg-brand-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50 active:bg-brand-primary-strong transition-colors"
               >
                 {creating ? 'Creating...' : 'Random'}
               </button>

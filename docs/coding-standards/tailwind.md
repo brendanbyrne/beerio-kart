@@ -57,10 +57,13 @@ Tailwind v4 (4.x) moved configuration from `tailwind.config.js` into CSS via `@t
     @import 'tailwindcss';
 
     @theme {
-      --color-brand-primary: #2563eb;       /* blue-600, current primary */
-      --color-brand-primary-hover: #1d4ed8; /* blue-700 */
-      --color-success: #16a34a;             /* green-600 */
-      --color-danger: #dc2626;              /* red-600 */
+      /* Values are the *exact* OKLCH of the palette shade each token
+         replaces (see the OKLCH rule below on why not hex). */
+      --color-brand-primary: oklch(62.3% 0.214 259.815);        /* blue-500 — current primary */
+      --color-brand-primary-strong: oklch(54.6% 0.245 262.881); /* blue-600 — darker shade: hover/active + resting fills */
+      --color-brand-tint: oklch(97% 0.014 254.604);             /* blue-50 — selected-row fill */
+      --color-success: oklch(62.7% 0.194 149.214);              /* green-600 */
+      --color-danger: oklch(63.7% 0.237 25.331);                /* red-500 */
 
       --font-display: 'Inter', ui-sans-serif, system-ui;
 
@@ -74,6 +77,10 @@ Tailwind v4 (4.x) moved configuration from `tailwind.config.js` into CSS via `@t
     ```
     Tokens become utilities automatically: `bg-brand-primary`, `text-success`, `min-h-touch`.
   - **Source:** <https://tailwindcss.com/docs/upgrade-guide#changes-from-v3> · <https://tailwindcss.com/docs/theme>
+
+- **Rule:** When a token *replaces* an existing palette shade — the common case of promoting scattered `blue-500` / `green-600` usages into a named token — give it that shade's **exact OKLCH** value, copied from Tailwind's default theme (`node_modules/tailwindcss/**/theme.css`), not the sRGB hex.
+  - **Why:** v4 ships its palette in OKLCH. `#3b82f6` only *approximates* `blue-500` and renders more saturated on wide-gamut (P3) displays, so a hex token silently turns a "visual no-op" migration into a color shift. Aliasing via `var(--color-blue-500)` doesn't work either: v4 tree-shakes unused palette variables, so once the last literal `blue-500` utility is migrated away that variable is no longer emitted and the `var()` resolves to nothing. Pin the literal OKLCH, and verify by building and grepping the bundled CSS for the token's emitted value. (Established in PR-G1; the example above uses this.)
+  - **Source:** <https://tailwindcss.com/docs/colors> · <https://tailwindcss.com/docs/theme>
 
 - **Rule:** Add a token to `@theme` rather than scattering literal hex/rgb values when (a) the color/spacing/font has a semantic name (brand, success, danger), or (b) the value appears in more than two places. Continue to use stock Tailwind utilities (`bg-gray-50`, `text-gray-900`) for incidental UI.
   - **Why:** Semantic tokens mean a brand-color change is one CSS edit. Promoting *every* color to a token is overhead; the audit shows incidental grays are fine as stock palette values.
@@ -184,3 +191,4 @@ Tailwind v4 (4.x) moved configuration from `tailwind.config.js` into CSS via `@t
 ## Document history
 
 - 2026-05-16 — Initial creation. Sourced from Tailwind v4 documentation, project audit conducted 2026-05-16, and design principles in `docs/design.md`. Companion files: `typescript.md`, `react.md`, both created same day. Reference device (Pixel 9 Pro) and Firefox constraint sourced from `frontend/CLAUDE.md` and `docs/design.md` § Technical Constraints respectively.
+- 2026-05-31 — § 3 corrections from PR-G1 review ([#219](https://github.com/brendanbyrne/beerio-kart/pull/219)): fixed the `@theme` example (it mislabeled `blue-600` as the current primary — it's `blue-500`), switched the example to OKLCH, and added a rule requiring the **exact OKLCH** of a replaced palette shade (not the sRGB hex) so token migrations stay a true no-op on wide-gamut displays, with a note that `var()`-aliasing tree-shaken palette vars doesn't work. The example's darker-shade token is named `-strong` (role-neutral) rather than `-hover`, since in practice that shade is also used at rest.
