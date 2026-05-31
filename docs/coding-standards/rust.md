@@ -221,8 +221,14 @@ The principle is *parse, don't validate*: turn raw strings/integers from the wir
   - **Why:** Inline tests can reach private items; integration tests live in their own crate and exercise the public API. Keeping them separate keeps clear what's being tested.
   - **Source:** <https://doc.rust-lang.org/book/ch11-03-test-organization.html>
 
+- **Rule:** Verification tests guard *structural invariants between layers*, not feature behavior. They live in `tests/` like integration tests, but their contract is "two layers must stay in sync," not "this endpoint returns the right value." Add one whenever a class of cross-layer drift is hard to catch by review alone.
+  - **Example:** [`tests/schema_drift.rs`](../../backend/tests/schema_drift.rs) verifies every entity in `backend/src/entities/` can `SELECT` its declared columns from the freshly-migrated schema — catching migration/entity drift the compiler can't.
+
+- **Rule:** Not everything needs a test. Skip hand-written entities (column-shape declarations — the schema-drift verification test covers migration/entity mismatches), `mod.rs` re-exports, one-time startup code (seeding, the migration runner), and simple config loading. If it has logic, it needs a test.
+  - **Why:** Tests over logic-free declarations are noise that rots — they re-assert the compiler's job and break on every benign rename.
+
 - **Rule:** Test names are sentences: `test_login_with_wrong_password_returns_401`, not `test_login2`. The test name *is* the behavioral spec — read the test list and the requirement coverage should be visible.
-  - **Source:** Existing project convention (CLAUDE.md).
+  - **Source:** Project convention.
 
 - **Rule:** Use `rstest` for table-driven cases when the same logic runs over half-a-dozen inputs. Use a plain `for` loop for two or three.
   - **Example:**
@@ -537,3 +543,4 @@ Anyone modifying Rust code in this repo should have read at least the first thre
 - 2026-05-13 — § 10: added a rule covering cardinality of attacker-controlled span fields on pre-auth handlers (`/login`, `/register`, `/refresh`). Recording `username` etc. is correct — it's the only correlator before `user_id` exists — but flagged the log-aggregator cost trap and the standard mitigation (per-event field-drop on failed-auth, not handler-wide). Surfaced as a 🔵 Suggestion during PR #144 (PR-F5) review.
 - 2026-05-14 — § 13: refreshed the example-split to match the shape that actually landed in PR [#150](https://github.com/brendanbyrne/beerio-kart/pull/150) (PR-G4). The prior example named two submodules that don't exist (`rulesets.rs`, `cleanup.rs`) and omitted the four that do (`lifecycle.rs`, `detail.rs`, `races.rs`, `types.rs`). The revision also calls out the `types.rs` layer as the cycle-breaker — without a shared-DTO sibling, the read aggregator and the race mutations form a `detail ↔ races` cycle on the shared race DTO. Surfaced as a 🔵 Suggestion during PR #150 review.
 - 2026-05-15 — Updated the Companions list: dropped the `../compliance-plan.md` companion (now archived at `../designs/archive/compliance-plan.md`) and called it out explicitly on its own line as an archived companion. Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
+- 2026-05-31 — § 7: absorbed two testing conventions that were sole-owned by `backend/CLAUDE.md` § Testing — verification tests (cross-layer drift checks, e.g. `schema_drift.rs`) and the "what doesn't need a test" exemption list. The rest of that CLAUDE.md section already duplicated § 7, so it was reduced to a pointer here. Also dropped the now-stale `(CLAUDE.md)` citation on the test-naming rule. Part of the "CLAUDE.md references standards, doesn't own them" cleanup.

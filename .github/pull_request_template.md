@@ -33,7 +33,7 @@
 <!-- Author confirms before requesting review. -->
 
 - [ ] Linked to an Issue under "Linked work" above (or explicitly noted as skipped per workflow conventions for chore-PRs).
-- [ ] Tests added or updated for new logic (per `CLAUDE.md`).
+- [ ] Tests added or updated for new logic (per `docs/coding-standards/` — rust.md § 7, typescript.md § 12).
 - [ ] Docs updated if applicable (`Document history` entry per `CLAUDE.md` carve-outs for files in scope).
 - [ ] Schema changes: consolidated migration edited; local DB reset to verify.
 - [ ] Tested locally end-to-end.
