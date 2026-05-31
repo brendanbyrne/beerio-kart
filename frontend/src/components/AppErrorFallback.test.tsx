@@ -10,6 +10,7 @@ import { AppErrorFallback } from './AppErrorFallback';
 const originalLocation = window.location;
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: originalLocation,
@@ -28,6 +29,20 @@ describe('AppErrorFallback', () => {
     expect(
       screen.getByRole('heading', { name: /something went wrong/i }),
     ).toBeInTheDocument();
+  });
+
+  it('renders a non-Error thrown value without crashing', () => {
+    // react-error-boundary types `error` as unknown — code can throw a string,
+    // object, anything. The fallback must stringify it, not assume `.message`.
+    vi.stubEnv('DEV', true);
+    render(
+      <AppErrorFallback
+        error="boom as a string"
+        resetErrorBoundary={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/boom as a string/)).toBeInTheDocument();
   });
 
   it('reloads the page when Reload is pressed', async () => {

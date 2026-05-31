@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { RouteErrorFallback } from './RouteErrorFallback';
 
@@ -10,10 +11,15 @@ import { RouteErrorFallback } from './RouteErrorFallback';
 // react-router logs caught route errors to console.error; silence the expected
 // noise so the suite output stays readable.
 const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+const originalLocation = window.location;
 
 afterEach(() => {
   errorSpy.mockClear();
   vi.unstubAllEnvs();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: originalLocation,
+  });
 });
 
 describe('RouteErrorFallback', () => {
@@ -37,6 +43,30 @@ describe('RouteErrorFallback', () => {
       'href',
       '/',
     );
+  });
+
+  it('hard-reloads the page when Reload is pressed', async () => {
+    // Reload is the primary recovery for the chunk-load-after-redeploy case: a
+    // full reload re-fetches index.html + a fresh manifest, unlike the "Go
+    // home" client-side nav.
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { reload },
+    });
+    function Boom(): never {
+      throw new Error('Failed to fetch dynamically imported module');
+    }
+    const router = createMemoryRouter(
+      [{ path: '/', element: <Boom />, errorElement: <RouteErrorFallback /> }],
+      { initialEntries: ['/'] },
+    );
+    const user = userEvent.setup();
+
+    render(<RouterProvider router={router} />);
+    await user.click(await screen.findByRole('button', { name: /reload/i }));
+
+    expect(reload).toHaveBeenCalledOnce();
   });
 
   it('surfaces the status when a route throws an error Response', async () => {
