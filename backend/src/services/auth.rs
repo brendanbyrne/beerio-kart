@@ -449,13 +449,13 @@ mod tests {
             rate_limit_per_minute: 60,
         });
 
-        assert!(validate_access_token(&token, &wrong_config).is_err());
+        validate_access_token(&token, &wrong_config).unwrap_err();
     }
 
     #[test]
     fn test_validate_token_garbage_input() {
         let config = test_config();
-        assert!(validate_access_token("not.a.valid.jwt", &config).is_err());
+        validate_access_token("not.a.valid.jwt", &config).unwrap_err();
     }
 
     #[test]

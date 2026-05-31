@@ -250,27 +250,31 @@ mod tests {
     use crate::test_helpers::{create_user, setup_db};
 
     #[test]
-    fn test_pending_races_dropped_round_trips_through_json() {
+    fn test_pending_races_dropped_json_shape_and_round_trip() {
+        // Merged from the former `_carries_kind_tag` + `_round_trips_through_json`
+        // pair: the round-trip alone was invariant under a wire-shape change
+        // and the shape check alone never proved deserialization. Together in
+        // one test they pin the `kind` tag, the payload fields the frontend
+        // reads (including `session_id`), and the full serialize→deserialize
+        // round-trip.
         let session_id = SessionId::new_v4();
         let payload = NotificationPayload::PendingRacesDropped {
             session_id,
-            dropped_count: 3,
-        };
-        let json = serde_json::to_string(&payload).expect("serialize");
-        let back: NotificationPayload = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(payload, back);
-    }
-
-    #[test]
-    fn test_pending_races_dropped_json_carries_kind_tag() {
-        let payload = NotificationPayload::PendingRacesDropped {
-            session_id: SessionId::new_v4(),
             dropped_count: 2,
         };
+
+        // Wire shape: the discriminant tag plus the fields the frontend reads.
         let value: serde_json::Value = serde_json::to_value(&payload).expect("serialize to value");
         assert_eq!(value["kind"], "pending_races_dropped");
         assert_eq!(value["dropped_count"], 2);
+        assert_eq!(value["session_id"], session_id.to_string());
         assert_eq!(payload.kind_str(), "pending_races_dropped");
+
+        // Full round-trip: deserialization reconstructs the same payload,
+        // `session_id` and all.
+        let json = serde_json::to_string(&payload).expect("serialize");
+        let back: NotificationPayload = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(payload, back);
     }
 
     #[tokio::test]

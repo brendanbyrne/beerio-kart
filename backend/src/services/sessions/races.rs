@@ -63,9 +63,10 @@ struct PendingRaceRow {
 ///
 /// **Lazy check note:** pending accessibility is a read-time derivation from
 /// `(session_race_participations, session_races, runs)`. The only writer of
-/// `dropped_at` is the session-close transaction (ADR-0037); no periodic
-/// task ages a row out on its own clock. Resolved rows (`skipped`, `raced`,
-/// `dropped`) remain in the DB indefinitely as historical state.
+/// `dropped_at` is the session-close transaction (`close_session`, ADR-0037),
+/// which runs inline on the last leave or via the stale-session sweeper; no
+/// periodic task ages a row out on its own clock. Resolved rows (`skipped`,
+/// `raced`, `dropped`) remain in the DB indefinitely as historical state.
 ///
 /// **`submissions` is intentionally empty.** Pending races report only the
 /// race shell here; per-race submissions belong to the current/history views,
@@ -450,6 +451,7 @@ mod tests {
     use super::*;
     use crate::{
         domain::enums::SessionStatus,
+        error::ErrorCode,
         services::sessions::{create_session, join_session, leave_session},
         test_helpers::{
             create_user, insert_participant, insert_race_participation, insert_session,
@@ -527,8 +529,10 @@ mod tests {
         let session = create_session(&db, &host_id, "random").await.unwrap();
         join_session(&db, &session.id, &user_id).await.unwrap();
 
-        let result = next_track(&db, &session.id, &user_id).await;
-        assert!(result.is_err());
+        match next_track(&db, &session.id, &user_id).await {
+            Err(e) => assert_eq!(e.code(), ErrorCode::Forbidden),
+            Ok(_) => panic!("non-host next_track must be Forbidden, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -541,8 +545,10 @@ mod tests {
         // Close by having host leave
         leave_session(&db, &session.id, &host_id).await.unwrap();
 
-        let result = next_track(&db, &session.id, &host_id).await;
-        assert!(result.is_err());
+        match next_track(&db, &session.id, &host_id).await {
+            Err(e) => assert_eq!(e.code(), ErrorCode::SessionClosed),
+            Ok(_) => panic!("next_track on closed session must be SessionClosed, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -611,8 +617,13 @@ mod tests {
         let host_id = create_user(&db, "host").await;
         let session = create_session(&db, &host_id, "random").await.unwrap();
 
-        let result = skip_turn(&db, &session.id, &host_id).await;
-        assert!(result.is_err());
+        match skip_turn(&db, &session.id, &host_id).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::BadRequest);
+                assert!(e.to_string().contains("No track to skip"), "got: {e}");
+            }
+            Ok(_) => panic!("skip_turn with no race must be BadRequest, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -626,9 +637,7 @@ mod tests {
         let original = next_track(&db, &session.id, &host_id).await.unwrap();
 
         // Non-host participant should be able to skip
-        let result = skip_turn(&db, &session.id, &user_id).await;
-        assert!(result.is_ok());
-        let rerolled = result.unwrap();
+        let rerolled = skip_turn(&db, &session.id, &user_id).await.unwrap();
         assert_ne!(rerolled.track_id, original.track_id);
     }
 
@@ -733,7 +742,7 @@ mod tests {
         .expect("race insert succeeds");
 
         // FK violation: user_id "ghost" doesn't exist in users.
-        let bad = session_race_participations::ActiveModel {
+        session_race_participations::ActiveModel {
             session_race_id: Set(race_id.clone()),
             user_id: Set("ghost".to_string()),
             created_at: NotSet,
@@ -741,8 +750,8 @@ mod tests {
             dropped_at: Set(None),
         }
         .insert(&txn)
-        .await;
-        assert!(bad.is_err(), "FK violation must surface as Err");
+        .await
+        .expect_err("FK violation must surface as Err");
 
         txn.rollback().await.unwrap();
 
@@ -1009,18 +1018,6 @@ mod tests {
             1,
             "a left user still sees their unexpired pending race"
         );
-    }
-
-    /// Documents intent: pending accessibility is a read-time derivation from
-    /// `(session_race_participations, session_races, runs)` — see
-    /// `get_pending_races`. No periodic timer ages a row out on its own
-    /// clock. The one writer of `dropped_at` is the session-close transaction
-    /// (`close_session`, ADR-0037), which runs inline on the last leave or via
-    /// the stale-session sweeper. Resolved rows (`skipped`, `raced`,
-    /// `dropped`) remain in the DB indefinitely as historical state.
-    #[tokio::test]
-    async fn test_lazy_check_assertion() {
-        // No-op test by design — this comment IS the assertion.
     }
 
     #[tokio::test]

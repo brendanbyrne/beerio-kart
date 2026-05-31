@@ -230,20 +230,23 @@ mod tests {
         // boundary deserializer parses; a non-UUID payload must fail.
         let json = "\"not-a-uuid\"";
         let result: Result<UserId, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "non-UUID string must fail deserialization");
+        result.expect_err("non-UUID string must fail deserialization");
     }
 
     #[test]
-    fn test_distinct_id_types_do_not_unify() {
-        // Documented compile-time property: `UserId` and `SessionId` share
-        // the same inner type (`Uuid`) but are distinct types — passing one
-        // where the other is expected is a compile error. The runtime
-        // check below confirms `Self::new` exists per type and rejects
-        // cross-construction without an explicit detour through the inner.
+    fn test_id_types_construction_smoke() {
+        // Construction smoke test — NOT a test of the type-distinctness
+        // property. `UserId` and `SessionId` share an inner type (`Uuid`) but
+        // are distinct *types*; that one can't be passed where the other is
+        // expected is enforced by the compiler, not by this runtime test (a
+        // `trybuild` compile-fail case is the way to assert that mechanically).
+        // What this pins: each type's `new` / `as_ref` round-trips the inner
+        // UUID, and crossing types requires an explicit detour through it.
         let raw = Uuid::new_v4();
         let user_id = UserId::new(raw);
         let session_id = SessionId::new(*user_id.as_ref());
-        assert_eq!(user_id.as_ref(), session_id.as_ref());
+        assert_eq!(*user_id.as_ref(), raw);
+        assert_eq!(*session_id.as_ref(), raw);
     }
 
     #[test]

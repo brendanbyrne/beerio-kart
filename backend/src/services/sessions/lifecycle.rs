@@ -787,6 +787,7 @@ mod tests {
     use crate::{
         domain::SessionRaceId,
         entities::{notifications as notifications_entity, session_race_participations},
+        error::ErrorCode,
         services::sessions::{next_track, skip_pending_race},
         test_helpers::{
             backdate_participant, backdate_session, create_user, insert_participant,
@@ -910,8 +911,8 @@ mod tests {
         let session = create_session(&db, &host_id, "random").await.unwrap();
         leave_session(&db, &session.id, &host_id).await.unwrap();
 
-        let result = join_session(&db, &session.id, &user2_id).await;
-        assert!(result.is_err());
+        let err = join_session(&db, &session.id, &user2_id).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::SessionClosed);
     }
 
     #[tokio::test]
@@ -923,8 +924,9 @@ mod tests {
         let session = create_session(&db, &host_id, "random").await.unwrap();
         join_session(&db, &session.id, &user2_id).await.unwrap();
 
-        let result = join_session(&db, &session.id, &user2_id).await;
-        assert!(result.is_err());
+        let err = join_session(&db, &session.id, &user2_id).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Conflict);
+        assert!(err.to_string().contains("Already in session"), "got: {err}");
     }
 
     #[tokio::test]
@@ -937,8 +939,7 @@ mod tests {
         join_session(&db, &session.id, &user2_id).await.unwrap();
         leave_session(&db, &session.id, &user2_id).await.unwrap();
 
-        let result = join_session(&db, &session.id, &user2_id).await;
-        assert!(result.is_ok());
+        join_session(&db, &session.id, &user2_id).await.unwrap();
     }
 
     #[tokio::test]
@@ -982,8 +983,11 @@ mod tests {
         let db = setup_db().await;
         let host_id = create_user(&db, "host").await;
 
-        let result = create_session(&db, &host_id, "invalid_ruleset").await;
-        assert!(result.is_err());
+        let Err(err) = create_session(&db, &host_id, "invalid_ruleset").await else {
+            panic!("expected BadRequest for invalid ruleset, got Ok(_)");
+        };
+        assert_eq!(err.code(), ErrorCode::BadRequest);
+        assert!(err.to_string().contains("Invalid ruleset"), "got: {err}");
     }
 
     #[tokio::test]
@@ -1054,8 +1058,9 @@ mod tests {
         join_session(&db, &s1.id, &user_id).await.unwrap();
 
         // Should fail — already active in s1
-        let result = join_session(&db, &s2.id, &user_id).await;
-        assert!(result.is_err());
+        let err = join_session(&db, &s2.id, &user_id).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Conflict);
+        assert!(err.to_string().contains("Already in session"), "got: {err}");
     }
 
     #[tokio::test]
@@ -1068,8 +1073,11 @@ mod tests {
         join_session(&db, &session.id, &user_id).await.unwrap();
 
         // Should fail — user is already active in a session
-        let result = create_session(&db, &user_id, "random").await;
-        assert!(result.is_err());
+        let Err(err) = create_session(&db, &user_id, "random").await else {
+            panic!("expected Conflict for create-while-active, got Ok(_)");
+        };
+        assert_eq!(err.code(), ErrorCode::Conflict);
+        assert!(err.to_string().contains("Already in session"), "got: {err}");
     }
 
     #[tokio::test]
@@ -1086,8 +1094,7 @@ mod tests {
         leave_session(&db, &s1.id, &user_id).await.unwrap();
 
         // Should succeed — left s1, now free to join s2
-        let result = join_session(&db, &s2.id, &user_id).await;
-        assert!(result.is_ok());
+        join_session(&db, &s2.id, &user_id).await.unwrap();
     }
 
     // ── close_stale_sessions (race-derived sweeper, ADR-0035) ────────────

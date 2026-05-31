@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { server } from '../mocks/server';
 import { Home } from './Home';
 
@@ -40,8 +40,15 @@ const createdSession = {
   races: [],
 };
 
+// Minimal stand-in for the session route, so the create flow's navigation is
+// observable and we can read back the id it navigated to.
+function SessionRouteProbe() {
+  const { id } = useParams();
+  return <div>session route: {id}</div>;
+}
+
 describe('Home', () => {
-  it('invalidates the membership and session-list queries after creating a session', async () => {
+  it('navigates to the new session and refreshes membership/list after creating one', async () => {
     server.use(
       http.get('/api/v1/users/u1', () => HttpResponse.json(profile)),
       http.get('/api/v1/characters', () => HttpResponse.json([])),
@@ -60,8 +67,11 @@ describe('Home', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <Home />
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/session/:id" element={<SessionRouteProbe />} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -72,9 +82,13 @@ describe('Home', () => {
     );
     await user.click(screen.getByRole('button', { name: /^random$/i }));
 
-    await waitFor(() => {
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['my-session'] });
-    });
+    // Observable outcome: a successful create navigates to the new session's
+    // page — not merely "invalidateQueries was called".
+    expect(await screen.findByText('session route: s1')).toBeInTheDocument();
+    // It also invalidated the membership + session-list keys so the bottom-nav
+    // and Home list refresh on return instead of waiting for the next poll —
+    // the documented purpose of the invalidation (#186).
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['my-session'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['sessions'] });
   });
 

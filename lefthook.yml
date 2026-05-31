@@ -8,7 +8,10 @@ pre-commit:
     rust-clippy:
       root: backend/
       glob: "*.rs"
-      run: cargo clippy -- -D warnings
+      # --all-targets so clippy compiles (and lints) test code too: the
+      # #![warn(clippy::assertions_on_result_states)] in lib.rs only bites
+      # if the #[cfg(test)] modules are actually compiled (#217).
+      run: cargo clippy --all-targets -- -D warnings
     frontend-lint:
       root: frontend/
       glob: "*.{ts,tsx}"

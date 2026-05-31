@@ -64,6 +64,7 @@ pub struct CreateRunRequest {
 /// up with the API contract's `track_time` / `lap{1,2,3}_time` and the
 /// entity columns of the same name.
 #[allow(clippy::struct_field_names)]
+#[derive(Debug)]
 struct ValidatedRunTimes {
     track_time: RaceTimeMs,
     lap1_time: LapTimeMs,
@@ -352,6 +353,7 @@ mod tests {
     use crate::{
         domain::enums::SessionStatus,
         entities::sessions as sessions_entity,
+        error::ErrorCode,
         services::sessions,
         test_helpers::{create_user, seed_game_data, setup_db},
     };
@@ -380,21 +382,21 @@ mod tests {
 
     #[test]
     fn test_validate_time_fields_accepts_valid_times() {
-        assert!(validate_time_fields(&valid_time_request()).is_ok());
+        validate_time_fields(&valid_time_request()).unwrap();
     }
 
     #[test]
     fn test_validate_time_fields_rejects_zero_track_time() {
         let mut req = valid_time_request();
         req.track_time = 0;
-        assert!(validate_time_fields(&req).is_err());
+        validate_time_fields(&req).unwrap_err();
     }
 
     #[test]
     fn test_validate_time_fields_rejects_negative_track_time() {
         let mut req = valid_time_request();
         req.track_time = -1;
-        assert!(validate_time_fields(&req).is_err());
+        validate_time_fields(&req).unwrap_err();
     }
 
     #[test]
@@ -404,28 +406,28 @@ mod tests {
         req.lap1_time = 200_001;
         req.lap2_time = 200_000;
         req.lap3_time = 200_000;
-        assert!(validate_time_fields(&req).is_err());
+        validate_time_fields(&req).unwrap_err();
     }
 
     #[test]
     fn test_validate_time_fields_rejects_zero_lap_time() {
         let mut req = valid_time_request();
         req.lap2_time = 0;
-        assert!(validate_time_fields(&req).is_err());
+        validate_time_fields(&req).unwrap_err();
     }
 
     #[test]
     fn test_validate_time_fields_rejects_negative_lap_time() {
         let mut req = valid_time_request();
         req.lap3_time = -5;
-        assert!(validate_time_fields(&req).is_err());
+        validate_time_fields(&req).unwrap_err();
     }
 
     #[test]
     fn test_validate_time_fields_rejects_lap_time_over_max() {
         let mut req = valid_time_request();
         req.lap1_time = MAX_TIME_MS + 1;
-        assert!(validate_time_fields(&req).is_err());
+        validate_time_fields(&req).unwrap_err();
     }
 
     #[test]
@@ -435,7 +437,7 @@ mod tests {
         req.lap2_time = 20_000;
         req.lap3_time = 20_000;
         // laps sum to 60_000 but track_time is 120_000
-        assert!(validate_time_fields(&req).is_err());
+        validate_time_fields(&req).unwrap_err();
     }
 
     fn valid_run_request(session_race_id: &SessionRaceId) -> CreateRunRequest {
@@ -495,8 +497,13 @@ mod tests {
         let outsider_id = create_user(&db, "outsider").await;
         let (_, race_id) = setup_session_with_race(&db, &host_id).await;
 
-        let result = create_run(&db, &outsider_id, valid_run_request(&race_id)).await;
-        assert!(result.is_err());
+        match create_run(&db, &outsider_id, valid_run_request(&race_id)).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::Forbidden);
+                assert!(e.to_string().contains("Not a participant"), "got: {e}");
+            }
+            Ok(_) => panic!("expected Forbidden for non-participant, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -509,8 +516,13 @@ mod tests {
         create_run(&db, &host_id, valid_run_request(&race_id))
             .await
             .unwrap();
-        let result = create_run(&db, &host_id, valid_run_request(&race_id)).await;
-        assert!(result.is_err());
+        match create_run(&db, &host_id, valid_run_request(&race_id)).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::Conflict);
+                assert!(e.to_string().contains("Already submitted"), "got: {e}");
+            }
+            Ok(_) => panic!("expected Conflict for duplicate submission, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -525,8 +537,10 @@ mod tests {
             .await
             .unwrap();
 
-        let result = create_run(&db, &host_id, valid_run_request(&race_id)).await;
-        assert!(result.is_err());
+        match create_run(&db, &host_id, valid_run_request(&race_id)).await {
+            Err(e) => assert_eq!(e.code(), ErrorCode::SessionClosed),
+            Ok(_) => panic!("expected SessionClosed, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -539,7 +553,13 @@ mod tests {
         // Negative time
         let mut req = valid_run_request(&race_id);
         req.track_time = -1;
-        assert!(create_run(&db, &host_id, req).await.is_err());
+        match create_run(&db, &host_id, req).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::BadRequest);
+                assert!(e.to_string().contains("track_time"), "got: {e}");
+            }
+            Ok(_) => panic!("expected BadRequest for negative track_time, got Ok"),
+        }
 
         // Over 10 minutes (also adjust laps to match so we test track_time cap, not lap sum)
         let mut req = valid_run_request(&race_id);
@@ -547,7 +567,13 @@ mod tests {
         req.lap1_time = 200_000;
         req.lap2_time = 200_000;
         req.lap3_time = 200_001;
-        assert!(create_run(&db, &host_id, req).await.is_err());
+        match create_run(&db, &host_id, req).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::BadRequest);
+                assert!(e.to_string().contains("track_time"), "got: {e}");
+            }
+            Ok(_) => panic!("expected BadRequest for track_time over max, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -562,7 +588,10 @@ mod tests {
         req.lap1_time = 20_000;
         req.lap2_time = 20_000;
         req.lap3_time = 20_000;
-        assert!(create_run(&db, &host_id, req).await.is_err());
+        match create_run(&db, &host_id, req).await {
+            Err(e) => assert_eq!(e.code(), ErrorCode::LapTimesMismatch),
+            Ok(_) => panic!("expected LapTimesMismatch, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -574,7 +603,13 @@ mod tests {
 
         let mut req = valid_run_request(&race_id);
         req.lap1_time = 600_001;
-        assert!(create_run(&db, &host_id, req).await.is_err());
+        match create_run(&db, &host_id, req).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::BadRequest);
+                assert!(e.to_string().contains("lap1_time"), "got: {e}");
+            }
+            Ok(_) => panic!("expected BadRequest for lap time over max, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -586,7 +621,13 @@ mod tests {
 
         let mut req = valid_run_request(&race_id);
         req.character_id = CharacterId::new(999);
-        assert!(create_run(&db, &host_id, req).await.is_err());
+        match create_run(&db, &host_id, req).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::BadRequest);
+                assert!(e.to_string().contains("character"), "got: {e}");
+            }
+            Ok(_) => panic!("expected BadRequest for invalid character_id, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -600,7 +641,13 @@ mod tests {
         // Valid UUID shape but no matching row — exercises the FK check, not
         // the type-level parse (which a non-UUID string would short-circuit).
         req.drink_type_id = DrinkTypeId::new_v4();
-        assert!(create_run(&db, &host_id, req).await.is_err());
+        match create_run(&db, &host_id, req).await {
+            Err(e) => {
+                assert_eq!(e.code(), ErrorCode::BadRequest);
+                assert!(e.to_string().contains("drink_type"), "got: {e}");
+            }
+            Ok(_) => panic!("expected BadRequest for invalid drink_type_id, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -613,10 +660,13 @@ mod tests {
         let run = create_run(&db, &host_id, valid_run_request(&race_id))
             .await
             .unwrap();
-        assert!(delete_run(&db, &run.id, &host_id).await.is_ok());
+        delete_run(&db, &run.id, &host_id).await.unwrap();
 
         // Verify it's gone
-        assert!(get_run(&db, &run.id).await.is_err());
+        match get_run(&db, &run.id).await {
+            Err(e) => assert_eq!(e.code(), ErrorCode::NotFound),
+            Ok(_) => panic!("deleted run should not be found"),
+        }
     }
 
     #[tokio::test]
@@ -633,8 +683,8 @@ mod tests {
         let run = create_run(&db, &host_id, valid_run_request(&race_id))
             .await
             .unwrap();
-        let result = delete_run(&db, &run.id, &user_id).await;
-        assert!(result.is_err());
+        let err = delete_run(&db, &run.id, &user_id).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Forbidden);
     }
 
     #[tokio::test]
@@ -671,8 +721,8 @@ mod tests {
             active.update(&db).await.unwrap();
         }
 
-        let result = delete_run(&db, &run.id, &host_id).await;
-        assert!(result.is_err());
+        let err = delete_run(&db, &run.id, &host_id).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::SessionClosed);
     }
 
     #[tokio::test]

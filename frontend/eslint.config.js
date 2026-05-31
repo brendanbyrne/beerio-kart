@@ -6,6 +6,8 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
+import vitest from '@vitest/eslint-plugin';
+import testingLibrary from 'eslint-plugin-testing-library';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 // ESLint flat config — see docs/coding-standards/typescript.md § 9.
@@ -154,6 +156,39 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
+  {
+    // --- Vitest lint preset (#217) ---
+    // Locks in the test-quality state the suite already satisfies: vitest's
+    // `recommended` turns on valid-expect, valid-expect-in-promise,
+    // no-standalone-expect, expect-expect, no-focused-tests, and
+    // no-disabled-tests in one move. Scoped to test files. See
+    // docs/coding-standards/testing.md.
+    ...vitest.configs.recommended,
+    files: ['**/*.test.{ts,tsx}', 'src/__tests__/**/*.{ts,tsx}'],
+    rules: {
+      ...vitest.configs.recommended.rules,
+      // Started at `warn`, not `error`, per this file's preamble: it fires on
+      // the legitimate `try { …; expect.unreachable() } catch { expect(err) }`
+      // shape used to assert on a thrown error's nested fields (result.test.ts,
+      // runs.test.ts). Flip to `error` if those convert to `.rejects`.
+      'vitest/no-conditional-expect': 'warn',
+    },
+  },
+  {
+    // --- Testing Library (React) lint preset (#217) ---
+    // Adds await-async-queries / await-async-utils and the query-hygiene rules
+    // (prefer-screen-queries, …). Scoped to test files.
+    ...testingLibrary.configs['flat/react'],
+    files: ['**/*.test.{ts,tsx}', 'src/__tests__/**/*.{ts,tsx}'],
+    rules: {
+      ...testingLibrary.configs['flat/react'].rules,
+      // Started at `warn`, not `error`, per this file's preamble: it fires on
+      // the unavoidable raw-node drag simulation for the custom div-based DQ
+      // slider (RunEntrySheet.test.tsx), which has no Testing Library query.
+      // Flip to `error` if that drag is reworked or the rule disabled inline.
+      'testing-library/no-node-access': 'warn',
     },
   },
   {

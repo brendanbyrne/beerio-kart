@@ -11,6 +11,13 @@
 
 // Tests legitimately want to panic — per rust.md § 8.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+// A test named for a specific failure must pin that failure, not just "it
+// errored": `assert!(r.is_ok())` / `assert!(r.is_err())` discard both the value
+// and the error, so a wrong-but-Ok value or a failure for the wrong reason
+// passes. Forbid them in favour of `.unwrap()` / `.unwrap_err()` (or matching
+// the specific `Error` variant / `code`). Opt-in (clippy `restriction` group),
+// so it must be declared here. See `docs/coding-standards/testing.md`. (#217)
+#![warn(clippy::assertions_on_result_states)]
 
 /// Loaded server configuration (JWT secrets, cookie flags, request limits).
 pub mod config;

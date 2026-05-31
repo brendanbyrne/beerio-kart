@@ -169,6 +169,14 @@ mod tests {
             let parsed = SessionStatus::try_from_value(&value).expect("round-trip");
             assert_eq!(parsed, status);
         }
+
+        // Pin the literal DB-stored strings. The round-trip above is invariant
+        // under a *symmetric* typo (e.g. `Active => "actve"` on both the
+        // `string_value` and the parse), so it can't catch a wire-format drift
+        // on its own. `status` rides the live write path, so the exact bytes
+        // are a contract.
+        assert_eq!(SessionStatus::Active.to_value(), "active");
+        assert_eq!(SessionStatus::Closed.to_value(), "closed");
     }
 
     #[test]
@@ -218,6 +226,13 @@ mod tests {
             let parsed = SessionRuleset::try_from_value(&value).expect("round-trip");
             assert_eq!(parsed, ruleset);
         }
+
+        // Pin the literal DB-stored strings — `ruleset` is written by
+        // `create_session`. Spell out the multi-word variants in particular,
+        // where a typo would silently break the column's wire contract.
+        assert_eq!(SessionRuleset::Random.to_value(), "random");
+        assert_eq!(SessionRuleset::LeastPlayed.to_value(), "least_played");
+        assert_eq!(SessionRuleset::RoundRobin.to_value(), "round_robin");
     }
 
     #[test]
@@ -248,11 +263,13 @@ mod tests {
             assert_eq!(recovered, category);
         }
 
-        // Spot-check the snake_case spelling the schema commits to.
+        // Spot-check the snake_case spelling the schema commits to — both the
+        // serde wire form and the sea_orm DB-stored form.
         assert_eq!(
             serde_json::to_string(&DrinkCategory::NonAlcoholic).unwrap(),
             "\"non_alcoholic\"",
         );
+        assert_eq!(DrinkCategory::NonAlcoholic.to_value(), "non_alcoholic");
     }
 
     #[test]
@@ -268,10 +285,15 @@ mod tests {
         }
 
         // Verify the auto-generated variant's spelling — the only multi-word
-        // reason where a typo would silently break a future feature.
+        // reason where a typo would silently break a future feature. Pin both
+        // the serde wire form and the sea_orm DB-stored form.
         assert_eq!(
             serde_json::to_string(&RunFlagReason::RecordRequiresPhotoVerification).unwrap(),
             "\"record_requires_photo_verification\"",
+        );
+        assert_eq!(
+            RunFlagReason::RecordRequiresPhotoVerification.to_value(),
+            "record_requires_photo_verification",
         );
     }
 }
