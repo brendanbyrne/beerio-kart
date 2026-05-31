@@ -50,13 +50,7 @@ When we exit prelaunch (decided when we have real user data we don't want to los
 
 ## Testing
 
-**Tests are a deliverable, not optional.** Every PR that adds business logic must include tests. PRs should not be opened without them.
-
-- **Unit tests:** Use `#[cfg(test)] mod tests { }` in the same file as the code being tested. Cover business logic: validation rules, service functions, data transformations, error cases.
-- **Integration tests:** Use `tests/` directory or Axum's test utilities to test HTTP endpoints end-to-end. Cover the happy path and key error cases (bad input, auth failures, not found, conflicts).
-- **Verification tests:** Drift checks that exercise structural invariants between layers, not feature behavior. They live in `tests/` like integration tests but their contract is "two layers must stay in sync," not "this endpoint returns the right value." First instance: [`tests/schema_drift.rs`](./tests/schema_drift.rs) — verifies every entity in `backend/src/entities/` can `SELECT` its declared columns from the freshly-migrated schema. Add a verification test whenever a class of cross-layer drift is hard to catch by review alone.
-- **What doesn't need tests:** Hand-written entities (declarations of column shape — no testable logic to unit-test; the schema-drift verification test covers mismatches between migration and entity), `mod.rs` re-exports, one-time startup code (seeding, migration runner), and simple config loading. Use judgment — if it has logic, it needs tests.
-- **Test naming:** Descriptive names that read as sentences: `test_login_with_wrong_password_returns_401`, not `test_login_2`.
+The full testing policy — unit / integration / verification tests, the "what doesn't need a test" exemptions, and naming — lives in [`docs/coding-standards/rust.md`](../docs/coding-standards/rust.md) § 7. Tests are a required PR deliverable, enforced by the [PR template](../.github/pull_request_template.md) author checklist.
 
 ## Errors
 
@@ -80,3 +74,4 @@ Cargo discovers `.cargo/config.toml` by walking up from the directory the comman
 
 - 2026-05-08 — Initial creation as part of PR 6 / Issue [#79](https://github.com/brendanbyrne/beerio-kart/issues/79). Sourced from root `.claude/CLAUDE.md` § Schema changes (prelaunch), § Testing, § Conventions (Rust style + naming), and § Repo Location (WSL2 build tip). Errors section pointer added with reference to [#84](https://github.com/brendanbyrne/beerio-kart/issues/84). Pointers to coding-standards/, data-model.md, api-contract.md, compliance-plan.md added.
 - 2026-05-17 — WSL2 perf snippet path updated for workspace-root move (Issue [#169](https://github.com/brendanbyrne/beerio-kart/issues/169)): `backend/.cargo/config.toml` → `.cargo/config.toml` at the repo root, with a note that Cargo discovers the config by walking up from the invocation directory.
+- 2026-05-31 — § Testing reduced to a pointer at `docs/coding-standards/rust.md` § 7. The two items that were sole-owned here — verification tests and the "what doesn't need a test" exemption list — were promoted into rust.md § 7; the rest already duplicated it. Part of the "CLAUDE.md references standards, doesn't own them" cleanup.
