@@ -65,7 +65,7 @@ and [`db_timeout.rs`](../../backend/tests/db_timeout.rs) are the model — they
 assert variant **+** code **+** body.
 
 **Source:** clippy [`assertions_on_result_states`][clippy-res]; A. Eagle,
-[Change-Detector Tests Considered Harmful][eagle]; Issue [#217][issue].
+[Change-Detector Tests Considered Harmful][eagle]; the [test audit][audit].
 
 ## 2. Assert the observable outcome, not the choreography
 
@@ -109,7 +109,7 @@ round-trips cleanly but corrupts the column. The literal pin
 (`assert_eq!(SessionStatus::Active.to_value(), "active")`) is what catches it.
 
 **Source:** serde [unit-testing][serde] (`assert_tokens` pins the wire form);
-Issue [#217][issue].
+the [test audit][audit].
 
 ## Tooling
 
@@ -137,12 +137,12 @@ These rules are partly enforced so they can't silently reappear:
   test-assertion gaps a backend+frontend audit surfaced — assert the specific
   error/`code`, assert the observable outcome (not a spy), pin the wire literal —
   and records the lints adopted to hold them (`clippy::assertions_on_result_states`
-  + lefthook `--all-targets`; vitest/testing-library eslint presets). Audit
-  findings live in the issue; promote the working draft to `research/` if a
-  durable in-repo link is wanted.
+  + lefthook `--all-targets`; vitest/testing-library eslint presets). The full
+  audit — taxonomy, per-file findings, and the cleared false-positives — lives in
+  [`../research/unit-test-audit.md`](../research/unit-test-audit.md).
 
 [clippy-res]: https://rust-lang.github.io/rust-clippy/master/index.html#assertions_on_result_states
 [eagle]: https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html
 [fowler]: https://martinfowler.com/articles/mocksArentStubs.html
 [serde]: https://serde.rs/unit-testing.html
-[issue]: https://github.com/brendanbyrne/beerio-kart/issues/217
+[audit]: ../research/unit-test-audit.md
