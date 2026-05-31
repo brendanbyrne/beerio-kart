@@ -9,10 +9,11 @@ import { server } from '../mocks/server';
 import { BottomNav } from './BottomNav';
 
 // PR-C2 (Issue #186) replaced BottomNav's re-fetch-on-navigation useEffect with
-// a useQuery on the shared ['my-session'] key. Per react.md § 13 the test mocks
-// the endpoint with MSW and asserts the user-visible behavior: whether the
-// Session tab is reachable, and that tapping it navigates to the active
-// session.
+// a useQuery on the shared ['my-session'] key. PR-F1 (Issue #190) then swapped
+// the <button onClick={navigate}> tabs for <NavLink> (react.md § 11): an
+// enabled tab is now a real link (role "link"), while the Session tab stays a
+// disabled <button> when there's no session to reach. Per react.md § 13 the
+// test mocks the endpoint with MSW and asserts the user-visible behavior.
 
 function renderNav(node: ReactNode, initialPath = '/') {
   const queryClient = new QueryClient({
@@ -35,12 +36,12 @@ describe('BottomNav', () => {
 
     renderNav(<BottomNav />);
 
-    const sessionTab = screen.getByRole('button', { name: /session/i });
-    // Disabled on first render (query still pending), enabled once it resolves.
-    expect(sessionTab).toBeDisabled();
-    await waitFor(() => {
-      expect(sessionTab).toBeEnabled();
-    });
+    // While the query is pending there's no session to reach, so the tab is a
+    // disabled <button>; once it resolves the tab becomes a real <NavLink>.
+    expect(screen.getByRole('button', { name: /session/i })).toBeDisabled();
+    expect(
+      await screen.findByRole('link', { name: /session/i }),
+    ).toBeInTheDocument();
   });
 
   it('leaves the Session tab disabled when there is no active session', async () => {
@@ -57,7 +58,12 @@ describe('BottomNav', () => {
     await waitFor(() => {
       expect(calls).toBe(1);
     });
+    // No session ever arrives, so the tab stays a disabled button (never a
+    // link the user could follow).
     expect(screen.getByRole('button', { name: /session/i })).toBeDisabled();
+    expect(
+      screen.queryByRole('link', { name: /session/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('navigates to the active session when the Session tab is tapped', async () => {
@@ -75,12 +81,34 @@ describe('BottomNav', () => {
       </Routes>,
     );
 
-    const sessionTab = screen.getByRole('button', { name: /session/i });
-    await waitFor(() => {
-      expect(sessionTab).toBeEnabled();
-    });
+    const sessionTab = await screen.findByRole('link', { name: /session/i });
     await user.click(sessionTab);
 
     expect(await screen.findByText('Session s1 page')).toBeInTheDocument();
+  });
+
+  it('marks the current route tab with aria-current="page"', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/v1/sessions/mine', () => {
+        calls += 1;
+        return HttpResponse.json({ session_id: null });
+      }),
+    );
+
+    renderNav(<BottomNav />, '/profile');
+
+    // Let the my-session query settle so no state update lands after the test.
+    await waitFor(() => {
+      expect(calls).toBe(1);
+    });
+    expect(screen.getByRole('link', { name: /profile/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    // The Home tab uses `end`, so "/" must NOT match the "/profile" prefix.
+    expect(screen.getByRole('link', { name: /home/i })).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 });
