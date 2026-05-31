@@ -122,10 +122,52 @@ async fn test_auth_user_refresh_token_as_access_returns_401() {
         .add_header("Authorization", format!("Bearer {refresh}"))
         .await;
     response.assert_status(StatusCode::UNAUTHORIZED);
-    // Refresh tokens are valid JWTs signed with the same key; the 401 must be
-    // because the token *type* is wrong, not a generic rejection.
+    // A real refresh token is a valid JWT signed with the same key, but it lacks
+    // the `username` claim, so it fails at `decode::<AccessClaims>` one gate
+    // *before* the token_type guard — the message is "Invalid token", not
+    // "Invalid token type". The guard itself is covered by the crafted-token
+    // test below.
     let body: Value = response.json();
     assert_eq!(body["code"], "token_invalid");
+    assert_eq!(body["error"], "Invalid token");
+}
+
+#[tokio::test]
+async fn test_auth_user_access_shaped_token_wrong_type_hits_guard() {
+    use beerio_kart::services::auth::AccessClaims;
+    use jsonwebtoken::{EncodingKey, Header, encode};
+
+    let server = setup_server(None).await;
+    let user_id = UserId::new_v4();
+    // The shape `create_access_token` mints, but with token_type "refresh" — a
+    // token the app never produces. A real refresh token can't reach the guard
+    // (it carries no `username` claim, so it dies at decode); forging the access
+    // shape is the only way to exercise the token_type check at all.
+    let claims = AccessClaims {
+        sub: user_id.to_string(),
+        username: "alice".to_string(),
+        exp: 4_102_444_800, // 2100-01-01 — comfortably unexpired
+        iat: 1_700_000_000,
+        token_type: "refresh".to_string(),
+    };
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_SECRET.as_bytes()),
+    )
+    .unwrap();
+
+    let response = server
+        .get("/auth-only")
+        .add_header("Authorization", format!("Bearer {token}"))
+        .await;
+
+    response.assert_status(StatusCode::UNAUTHORIZED);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "token_invalid");
+    // "Invalid token type" (the guard) — not "Invalid token" (decode failure):
+    // this is the assertion that proves the token_type check actually fired.
+    assert_eq!(body["error"], "Invalid token type");
 }
 
 #[tokio::test]
