@@ -163,5 +163,4 @@ Option C threads the needle:
 - Closed Issues: [#146](https://github.com/brendanbyrne/beerio-kart/issues/146)
   (typed-Path-extractor 400s, subsumed by #157), [#157](https://github.com/brendanbyrne/beerio-kart/issues/157).
 - Standards refs: [`api-contract.md` § 2](../api-contract.md#2-error-response-contract),
-  [§ 7](../api-contract.md#7-error-code-registry),
-  [`design.md` Error response pattern](../design.md#error-response-pattern).
+  [§ 7](../api-contract.md#7-error-code-registry).
