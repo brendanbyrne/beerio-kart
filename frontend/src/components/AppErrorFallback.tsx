@@ -21,7 +21,7 @@ export function AppErrorFallback({ error }: FallbackProps) {
         The app hit an unexpected error. Reloading usually fixes it.
       </p>
       {import.meta.env.DEV && (
-        <pre className="max-w-full overflow-auto text-xs text-red-500">
+        <pre className="max-w-full overflow-auto text-xs text-danger">
           {detail}
         </pre>
       )}
@@ -30,7 +30,7 @@ export function AppErrorFallback({ error }: FallbackProps) {
         onClick={() => {
           window.location.reload();
         }}
-        className="min-h-[44px] px-6 py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors"
+        className="min-h-touch px-6 py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors"
       >
         Reload
       </button>

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, useLocation } from 'react-router-dom';
+import { clsx } from 'clsx';
 import { getMySession } from '../api/sessions';
 
 const TAB_BASE =
@@ -8,9 +9,10 @@ const TAB_BASE =
 // NavLink drives the active styling and sets aria-current="page" itself
 // (react.md § 11); this only supplies the colors per active state.
 function tabClass(isActive: boolean): string {
-  return `${TAB_BASE} ${
-    isActive ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600'
-  }`;
+  return clsx(
+    TAB_BASE,
+    isActive ? 'text-brand-primary' : 'text-gray-400 hover:text-gray-600',
+  );
 }
 
 export function BottomNav() {
@@ -63,7 +65,7 @@ export function BottomNav() {
           <button
             type="button"
             disabled
-            className={`${TAB_BASE} text-gray-300 cursor-not-allowed`}
+            className={clsx(TAB_BASE, 'text-gray-300 cursor-not-allowed')}
           >
             <span className="text-xl leading-none">{'🎮'}</span>
             <span className="text-[10px] font-medium mt-0.5">Session</span>

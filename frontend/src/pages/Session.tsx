@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { clsx } from 'clsx';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -144,7 +145,7 @@ function SessionView({ id }: { id: SessionId }) {
         <p className="text-base font-semibold text-gray-900">Session ended</p>
         <button
           onClick={() => navigate('/')}
-          className="px-6 py-2 bg-blue-500 text-white rounded-xl text-sm font-semibold"
+          className="px-6 py-2 bg-brand-primary text-white rounded-xl text-sm font-semibold"
         >
           Back to Home
         </button>
@@ -175,7 +176,7 @@ function SessionView({ id }: { id: SessionId }) {
           className="w-full px-4 py-3 flex items-center justify-between"
         >
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+            <span className="text-[10px] font-medium text-brand-primary bg-brand-tint px-2 py-0.5 rounded-full">
               {session.ruleset}
             </span>
             <span className="text-sm font-semibold text-gray-900">
@@ -233,7 +234,7 @@ function SessionView({ id }: { id: SessionId }) {
                 <h2 className="text-lg font-bold text-gray-900">
                   {currentRace.track_name}
                 </h2>
-                <span className="text-[10px] font-semibold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-semibold text-brand-primary bg-brand-tint px-2 py-0.5 rounded-full">
                   Race {currentRace.race_number}
                 </span>
               </div>
@@ -267,7 +268,7 @@ function SessionView({ id }: { id: SessionId }) {
               <button
                 onClick={handleNextTrack}
                 disabled={pickingTrack}
-                className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl disabled:opacity-50 active:bg-blue-600 transition-colors"
+                className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-hover transition-colors"
               >
                 {pickingTrack ? 'Picking track...' : 'Next Track'}
               </button>
@@ -282,7 +283,7 @@ function SessionView({ id }: { id: SessionId }) {
               </button>
             )}
             {trackError && (
-              <p className="text-xs text-red-500 text-center">{trackError}</p>
+              <p className="text-xs text-danger text-center">{trackError}</p>
             )}
           </div>
         )}
@@ -292,27 +293,28 @@ function SessionView({ id }: { id: SessionId }) {
           <>
             {hasSubmitted ? (
               <div
-                className={`rounded-xl border p-4 text-center ${
+                className={clsx(
+                  'rounded-xl border p-4 text-center',
                   mySubmission.disqualified
                     ? 'bg-red-50 border-red-200'
-                    : 'bg-green-50 border-green-200'
-                }`}
+                    : 'bg-green-50 border-green-200',
+                )}
               >
                 <p
-                  className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
-                    mySubmission.disqualified
-                      ? 'text-red-500'
-                      : 'text-green-600'
-                  }`}
+                  className={clsx(
+                    'text-xs font-semibold uppercase tracking-wider mb-1',
+                    mySubmission.disqualified ? 'text-danger' : 'text-success',
+                  )}
                 >
                   {mySubmission.disqualified ? 'Your Time (DQ)' : 'Your Time'}
                 </p>
                 <p
-                  className={`text-2xl font-mono font-bold ${
+                  className={clsx(
+                    'text-2xl font-mono font-bold',
                     mySubmission.disqualified
                       ? 'text-red-600 line-through'
-                      : 'text-green-700'
-                  }`}
+                      : 'text-green-700',
+                  )}
                 >
                   {formatTime(mySubmission.track_time)}
                 </p>
@@ -320,7 +322,7 @@ function SessionView({ id }: { id: SessionId }) {
             ) : (
               <button
                 onClick={() => setShowRunEntry(true)}
-                className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl active:bg-blue-600 transition-colors"
+                className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl active:bg-brand-primary-hover transition-colors"
               >
                 Submit Time
               </button>
@@ -352,11 +354,11 @@ function SessionView({ id }: { id: SessionId }) {
                   {currentRace ? (
                     sub ? (
                       sub.disqualified ? (
-                        <span className="text-xs font-medium text-red-500">
+                        <span className="text-xs font-medium text-danger">
                           DQ {formatTime(sub.track_time)}
                         </span>
                       ) : (
-                        <span className="text-xs font-medium text-green-600">
+                        <span className="text-xs font-medium text-success">
                           {'\u2705'} {formatTime(sub.track_time)}
                         </span>
                       )
@@ -432,7 +434,7 @@ function SessionView({ id }: { id: SessionId }) {
           <button
             onClick={handleLeave}
             disabled={leaving}
-            className="w-full py-3 text-sm font-medium text-red-500 bg-white border border-red-200 rounded-xl disabled:opacity-50 active:bg-red-50 transition-colors"
+            className="w-full py-3 text-sm font-medium text-danger bg-white border border-red-200 rounded-xl disabled:opacity-50 active:bg-red-50 transition-colors"
           >
             {leaving ? 'Leaving...' : 'Leave Session'}
           </button>
@@ -441,12 +443,12 @@ function SessionView({ id }: { id: SessionId }) {
             <button
               onClick={handleJoin}
               disabled={joiningSession}
-              className="w-full py-3 text-sm font-semibold text-white bg-blue-500 rounded-xl disabled:opacity-50 active:bg-blue-600 transition-colors"
+              className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-hover transition-colors"
             >
               {joiningSession ? 'Joining...' : 'Join Session'}
             </button>
             {joinError && (
-              <p className="text-xs text-red-500 text-center">{joinError}</p>
+              <p className="text-xs text-danger text-center">{joinError}</p>
             )}
           </div>
         )}

@@ -46,7 +46,7 @@ export function Register() {
         </h1>
 
         {state.error && (
-          <p className="text-red-500 text-sm text-center">{state.error}</p>
+          <p className="text-danger text-sm text-center">{state.error}</p>
         )}
 
         <div>
@@ -88,7 +88,7 @@ export function Register() {
         </div>
 
         <SubmitButton
-          className="w-full py-2.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors"
+          className="w-full py-2.5 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors"
           pendingLabel="Creating account..."
         >
           Register
@@ -98,7 +98,7 @@ export function Register() {
           Already have an account?{' '}
           <Link
             to="/login"
-            className="text-blue-500 hover:underline font-medium"
+            className="text-brand-primary hover:underline font-medium"
           >
             Log In
           </Link>

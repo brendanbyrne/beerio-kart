@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -79,7 +80,7 @@ export function Home() {
         {/* Start / Jump to session button */}
         <button
           onClick={handleStartButton}
-          className="w-full py-4 bg-blue-500 text-white rounded-xl text-sm font-semibold active:bg-blue-600 transition-colors"
+          className="w-full py-4 bg-brand-primary text-white rounded-xl text-sm font-semibold active:bg-brand-primary-hover transition-colors"
         >
           {mySessionId ? 'Jump to Current Session' : 'Start a Session'}
         </button>
@@ -103,7 +104,7 @@ export function Home() {
               <button
                 onClick={handleCreate}
                 disabled={creating}
-                className="w-full py-3 bg-blue-500 text-white rounded-xl text-sm font-semibold disabled:opacity-50 active:bg-blue-600 transition-colors"
+                className="w-full py-3 bg-brand-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50 active:bg-brand-primary-hover transition-colors"
               >
                 {creating ? 'Creating...' : 'Random'}
               </button>
@@ -111,7 +112,7 @@ export function Home() {
                 Tracks are chosen randomly each round
               </p>
               {error && (
-                <p className="text-xs text-red-500 text-center">{error}</p>
+                <p className="text-xs text-danger text-center">{error}</p>
               )}
               <button
                 onClick={() => {
@@ -142,11 +143,12 @@ export function Home() {
                 <button
                   key={s.id}
                   onClick={() => navigate(`/session/${s.id}`)}
-                  className={`w-full rounded-xl border p-4 text-left active:bg-gray-50 transition-colors ${
+                  className={clsx(
+                    'w-full rounded-xl border p-4 text-left active:bg-gray-50 transition-colors',
                     isMySession
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-white border-gray-200'
-                  }`}
+                      ? 'bg-brand-tint border-blue-200'
+                      : 'bg-white border-gray-200',
+                  )}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -155,7 +157,7 @@ export function Home() {
                           {s.host_username}&apos;s session
                         </p>
                         {isMySession && (
-                          <span className="text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
+                          <span className="text-[10px] font-medium text-success bg-green-50 px-1.5 py-0.5 rounded-full">
                             Joined
                           </span>
                         )}
@@ -170,7 +172,7 @@ export function Home() {
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-medium text-brand-primary bg-brand-tint px-2 py-0.5 rounded-full">
                       {s.ruleset}
                     </span>
                   </div>
@@ -189,7 +191,7 @@ export function Home() {
         )}
 
         {error && !showCreate && (
-          <p className="text-xs text-red-500 text-center">{error}</p>
+          <p className="text-xs text-danger text-center">{error}</p>
         )}
       </div>
 

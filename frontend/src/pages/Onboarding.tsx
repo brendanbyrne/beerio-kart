@@ -86,7 +86,7 @@ export function Onboarding() {
             ? 'Choose your go-to character, kart body, wheels, and glider. You can change these later.'
             : "What's your drink of choice? You can always change this later too."}
         </p>
-        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+        {error && <p className="text-danger text-sm mt-2">{error}</p>}
       </div>
 
       {/* Content */}

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { clsx } from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import type {
   SessionRaceInfo,
@@ -204,8 +205,7 @@ export function RunEntrySheet({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       <div
-        className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col"
-        style={{ maxHeight: '92%' }}
+        className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[92%]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center pt-2.5 pb-1">
@@ -385,13 +385,13 @@ export function RunEntrySheet({
           </div>
 
           {error && (
-            <p className="text-xs text-red-500 text-center mb-3">{error}</p>
+            <p className="text-xs text-danger text-center mb-3">{error}</p>
           )}
 
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="w-full py-4 bg-blue-600 text-white font-semibold rounded-2xl text-[15px] shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
+            className="w-full py-4 bg-brand-primary-hover text-white font-semibold rounded-2xl text-[15px] shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
           >
             {submitting ? 'Submitting...' : 'Submit Run'}
           </button>
@@ -403,7 +403,7 @@ export function RunEntrySheet({
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <button
               onClick={() => setShowDrinkPicker(false)}
-              className="text-sm text-blue-500"
+              className="text-sm text-brand-primary"
             >
               Back
             </button>
@@ -430,7 +430,7 @@ export function RunEntrySheet({
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <button
               onClick={() => setShowSetupPicker(false)}
-              className="text-sm text-blue-500"
+              className="text-sm text-brand-primary"
             >
               Back
             </button>
@@ -532,7 +532,7 @@ function TimeInputGroup({
     <div className="flex items-center gap-1.5 justify-center">
       <input
         ref={resolvedMRef}
-        className={`${inputClass} ${large ? 'w-14' : 'w-10'}`}
+        className={clsx(inputClass, large ? 'w-14' : 'w-10')}
         value={fields.m}
         onChange={handleChange('m', 1)}
         onKeyDown={handleKeyDown('m', 1)}
@@ -544,7 +544,7 @@ function TimeInputGroup({
       <span className={sepClass}>:</span>
       <input
         ref={ssRef}
-        className={`${inputClass} ${large ? 'w-16' : 'w-12'}`}
+        className={clsx(inputClass, large ? 'w-16' : 'w-12')}
         value={fields.ss}
         onChange={handleChange('ss', 2)}
         onKeyDown={handleKeyDown('ss', 2)}
@@ -556,7 +556,7 @@ function TimeInputGroup({
       <span className={sepClass}>.</span>
       <input
         ref={resolvedMmmRef}
-        className={`${inputClass} ${large ? 'w-[72px]' : 'w-14'}`}
+        className={clsx(inputClass, large ? 'w-[72px]' : 'w-14')}
         value={fields.mmm}
         onChange={handleChange('mmm', 3)}
         onKeyDown={handleKeyDown('mmm', 3)}
@@ -665,7 +665,7 @@ function SlideToConfirm({
         </span>
       </div>
       <div
-        className="absolute top-1 h-10 rounded-lg bg-red-500 shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing"
+        className="absolute top-1 h-10 rounded-lg bg-danger shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing"
         style={{
           width: thumbW,
           left: offsetX + 4,

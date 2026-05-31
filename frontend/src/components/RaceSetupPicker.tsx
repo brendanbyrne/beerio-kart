@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { clsx } from 'clsx';
 import {
   useCharacters,
   useBodies,
@@ -127,13 +128,14 @@ export function RaceSetupPicker({
           <button
             key={s}
             onClick={() => setStep(s)}
-            className={`flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors ${
+            className={clsx(
+              'flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors',
               s === step
-                ? 'bg-blue-500 text-white'
+                ? 'bg-brand-primary text-white'
                 : selectedForStep[s] !== null
-                  ? 'bg-blue-100 text-blue-600'
-                  : 'bg-gray-100 text-gray-400'
-            }`}
+                  ? 'bg-blue-100 text-brand-primary-hover'
+                  : 'bg-gray-100 text-gray-400',
+            )}
           >
             {STEP_LABELS[s]}
             {selectedForStep[s] !== null && s !== step && ' \u2713'}
@@ -149,7 +151,7 @@ export function RaceSetupPicker({
         {currentStepIndex > 0 && (
           <button
             onClick={handleBack}
-            className="text-xs text-blue-500 font-medium"
+            className="text-xs text-brand-primary font-medium"
           >
             &larr; Back
           </button>
@@ -163,11 +165,12 @@ export function RaceSetupPicker({
             <button
               key={item.id}
               onClick={() => handleSelect(item.id)}
-              className={`flex flex-col items-center p-1.5 rounded-xl border-2 transition-all ${
+              className={clsx(
+                'flex flex-col items-center p-1.5 rounded-xl border-2 transition-all',
                 selected === item.id
-                  ? 'border-blue-500 bg-blue-50 shadow-sm'
-                  : 'border-transparent bg-white hover:border-gray-200'
-              }`}
+                  ? 'border-brand-primary bg-brand-tint shadow-sm'
+                  : 'border-transparent bg-white hover:border-gray-200',
+              )}
             >
               <img
                 src={`/${item.image_path}`}
@@ -198,11 +201,12 @@ export function RaceSetupPicker({
             if (setup) onComplete(setup);
           }}
           disabled={!setup}
-          className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors ${
+          className={clsx(
+            'flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors',
             setup
-              ? 'bg-blue-500 text-white hover:bg-blue-600'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
+              ? 'bg-brand-primary text-white hover:bg-brand-primary-hover'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed',
+          )}
         >
           {submitLabel}
         </button>

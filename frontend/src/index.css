@@ -1,5 +1,49 @@
 @import 'tailwindcss';
 
+/*
+ * Design tokens (Tailwind v4 CSS-first config; tailwind.md § 3). Each token
+ * becomes a utility automatically — `--color-brand-primary` → `bg-brand-primary`
+ * / `text-brand-primary`, `--spacing-touch` → `min-h-touch`, etc.
+ *
+ * The color values are the *exact* OKLCH of the `blue-*` / `green-600` /
+ * `red-500` palette shades they replace (copied from Tailwind's default theme),
+ * so adopting them is a true visual no-op — identical even on wide-gamut (P3)
+ * displays, where the sRGB hex equivalents would drift. (PR-G1 verification:
+ * "visual diff vs main identical".) The payoff is that re-branding becomes a
+ * few edits here instead of a repo-wide find-replace.
+ *
+ * Lighter incidental tints and the status-color ramps (the red DQ display, the
+ * green success-pill bg) deliberately stay as stock Tailwind utilities per § 3
+ * — promoting every shade to a token is the over-tokenizing § 3 warns against.
+ *
+ * Note: the standards doc's § 3 example labels blue-600 as "current primary";
+ * the code's actual primary is blue-500, and these tokens match the code.
+ */
+@theme {
+  /* Brand */
+  --color-brand-primary: oklch(
+    62.3% 0.214 259.815
+  ); /* blue-500 #3b82f6 — primary buttons, links, active nav */
+  --color-brand-primary-hover: oklch(
+    54.6% 0.245 262.881
+  ); /* blue-600 #2563eb — hover/active, and the Submit-Run resting fill */
+  --color-brand-tint: oklch(
+    97% 0.014 254.604
+  ); /* blue-50 #eff6ff — selected-row fill behind brand-primary borders */
+
+  /* Semantic status */
+  --color-success: oklch(
+    62.7% 0.194 149.214
+  ); /* green-600 #16a34a — confirmations, finished times */
+  --color-danger: oklch(
+    63.7% 0.237 25.331
+  ); /* red-500 #ef4444 — form errors, DQ accent */
+
+  /* Spacing — minimum touch target, WCAG 2.1 AA 2.5.5 (tailwind.md § 5).
+     Consumed as `min-h-touch`; PR-G2 migrates the remaining sub-44px buttons. */
+  --spacing-touch: 2.75rem; /* 44px */
+}
+
 /* Safe area padding for bottom nav on notched phones */
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0px);

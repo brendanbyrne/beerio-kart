@@ -41,11 +41,12 @@ export function DrinkTypeSelector({
           <button
             key={dt.id}
             onClick={() => onSelect(dt)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all text-left ${
+            className={clsx(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all text-left',
               selectedId === dt.id
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-transparent bg-white hover:border-gray-200'
-            }`}
+                ? 'border-brand-primary bg-brand-tint'
+                : 'border-transparent bg-white hover:border-gray-200',
+            )}
           >
             <span className="text-lg">
               {dt.alcoholic ? '\uD83C\uDF7A' : '\uD83E\uDDCA'}
@@ -59,7 +60,7 @@ export function DrinkTypeSelector({
               </div>
             </div>
             {selectedId === dt.id && (
-              <span className="text-blue-500 text-sm font-bold">
+              <span className="text-brand-primary text-sm font-bold">
                 {'\u2713'}
               </span>
             )}
@@ -70,7 +71,7 @@ export function DrinkTypeSelector({
       {!showAddForm ? (
         <button
           onClick={() => setShowAddForm(true)}
-          className="text-sm text-blue-500 font-medium py-2 hover:text-blue-600 transition-colors"
+          className="text-sm text-brand-primary font-medium py-2 hover:text-brand-primary-hover transition-colors"
         >
           + Not listed? Add new
         </button>
@@ -171,7 +172,7 @@ function AddDrinkTypeForm({
             onClick={() => setAlcoholic(!alcoholic)}
             className={clsx(
               'w-11 h-6 flex-shrink-0 rounded-full transition-colors relative',
-              alcoholic ? 'bg-blue-500' : 'bg-gray-300',
+              alcoholic ? 'bg-brand-primary' : 'bg-gray-300',
             )}
             aria-label="Toggle alcoholic"
             aria-pressed={alcoholic}
@@ -186,7 +187,7 @@ function AddDrinkTypeForm({
           {alcoholic ? 'Alcoholic' : 'Non-alcoholic'}
         </label>
       </div>
-      {state.error && <p className="text-red-500 text-xs">{state.error}</p>}
+      {state.error && <p className="text-danger text-xs">{state.error}</p>}
       <div className="flex gap-2">
         <button
           type="button"
@@ -196,7 +197,7 @@ function AddDrinkTypeForm({
           Cancel
         </button>
         <SubmitButton
-          className="flex-1 py-2 text-xs font-semibold text-white bg-blue-500 rounded-lg"
+          className="flex-1 py-2 text-xs font-semibold text-white bg-brand-primary rounded-lg"
           pendingLabel="Adding..."
         >
           Add
