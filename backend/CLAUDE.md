@@ -30,16 +30,7 @@ Rust style: standard `rustfmt` (nightly options) + `clippy` defaults. Lefthook r
 
 ## Schema changes (prelaunch)
 
-While the project is prelaunch, **all schema lives in a single consolidated migration file**. New schema work edits that file rather than appending a new one. Rationale: pre-launch we don't preserve dev data, so the append-only history that migrations normally provide isn't earning its keep — it's just N files where 1 would do.
-
-Operating rules:
-
-- **Edit, don't append.** Adding a table, column, index, or constraint means modifying the consolidated migration file (currently `backend/migration/src/m20260101_000001_initial_schema.rs`). Do not create a new migration file.
-- **Reset the dev DB after schema edits.** Delete the local SQLite file (or run the project's `dev-reset` task if/when one exists) before booting. SeaORM will recreate the schema from the consolidated migration on next startup.
-- **No data preservation between schema versions.** If you have meaningful local test data, recreate it via seed or test fixtures after the reset, not by hand.
-- **Code that depends on schema must change in the same PR as the migration edit.** Entities, services, tests — all in one atomic commit.
-
-When we exit prelaunch (decided when we have real user data we don't want to lose), this convention flips back to standard append-only migrations: every schema change becomes a new file, and the consolidated initial migration becomes the immutable starting point. This file will be updated at that time.
+The prelaunch schema-change policy — single consolidated migration, edit-don't-append, reset the dev DB, no data preservation, schema-dependent code in the same PR, and the post-launch flip to append-only — lives in [`docs/coding-standards/seaorm.md`](../docs/coding-standards/seaorm.md) § 5 Migrations.
 
 ## Testing
 
@@ -51,21 +42,10 @@ All route handlers return `Result<impl IntoResponse, error::Error>` where `error
 
 Open follow-up: [#84](https://github.com/brendanbyrne/beerio-kart/issues/84) tracks sanitizing driver-string leakage from `From<DbErr>` (Conflict/BadRequest paths leak schema details). Worth reading before touching `error.rs`.
 
-## WSL2 build performance
-
-WSL2 accessing `/mnt/c/` is slower than the native Linux filesystem, especially for `cargo build`. If build times become painful, configure Cargo to put build artifacts on the Linux filesystem while keeping source on Windows:
-
-```toml
-# .cargo/config.toml (at the repo root)
-[build]
-target-dir = "/home/bbyrne/.cargo-target/beerio-kart"
-```
-
-Cargo discovers `.cargo/config.toml` by walking up from the directory the command is invoked in, so placing it at the workspace root (the repo root) makes it apply to every `cargo` invocation regardless of where in the tree you run it.
-
 ## Document history
 
 - 2026-05-08 — Initial creation as part of PR 6 / Issue [#79](https://github.com/brendanbyrne/beerio-kart/issues/79). Sourced from root `.claude/CLAUDE.md` § Schema changes (prelaunch), § Testing, § Conventions (Rust style + naming), and § Repo Location (WSL2 build tip). Errors section pointer added with reference to [#84](https://github.com/brendanbyrne/beerio-kart/issues/84). Pointers to coding-standards/, data-model.md, api-contract.md, compliance-plan.md added.
 - 2026-05-17 — WSL2 perf snippet path updated for workspace-root move (Issue [#169](https://github.com/brendanbyrne/beerio-kart/issues/169)): `backend/.cargo/config.toml` → `.cargo/config.toml` at the repo root, with a note that Cargo discovers the config by walking up from the invocation directory.
 - 2026-05-31 — § Testing reduced to a pointer at `docs/coding-standards/rust.md` § 7. The two items that were sole-owned here — verification tests and the "what doesn't need a test" exemption list — were promoted into rust.md § 7; the rest already duplicated it. Part of the "CLAUDE.md references standards, doesn't own them" cleanup.
 - 2026-05-31 — §§ Stack and Key reading reduced to pointers (#220). The stack bullet list duplicated `docs/design.md` § Tech Stack and `README.md` § Tech, so § Stack now points there and keeps only the backend decision cross-refs (ADRs 0023/0002/0031, observability). § Key reading duplicated `README.md` § Required reading, so it now points there; the `data-model.md` entry it uniquely carried was added to that README list.
+- 2026-05-31 — § Schema changes (prelaunch) reduced to a pointer at `docs/coding-standards/seaorm.md` § 5 Migrations, which absorbed this section's operating detail and is now the canonical home; the three ADRs that cited this section (0035, 0037, 0038) were repointed there too. Removed § WSL2 build performance — user-level machine config (a repo-root `.cargo/config.toml` Brendan maintains himself); a one-line advisory now lives in root README Setup and the root `.claude/CLAUDE.md` pointer to it was dropped. (#220)

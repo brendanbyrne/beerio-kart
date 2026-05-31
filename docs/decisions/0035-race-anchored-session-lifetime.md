@@ -95,7 +95,7 @@ With that decoupling in place, the sweeper becomes purely DB hygiene: it keeps `
 
 ## Schema and code changes
 
-**Schema** (single edit to the consolidated initial migration, per `backend/CLAUDE.md` § schema-changes-prelaunch):
+**Schema** (single edit to the consolidated initial migration, per `docs/coding-standards/seaorm.md` § 5 (Migrations)):
 
 - `sessions` table: drop the `last_activity_at` column.
 
@@ -160,7 +160,7 @@ Specific tests change; the full list will live in the implementing PR descriptio
 
 ## Migration
 
-Pre-launch schema change. Per `backend/CLAUDE.md` § schema-changes-prelaunch, edit the consolidated initial migration (`backend/migration/src/m20260101_000001_initial_schema.rs`) directly. No data migration needed.
+Pre-launch schema change. Per `docs/coding-standards/seaorm.md` § 5 (Migrations), edit the consolidated initial migration (`backend/migration/src/m20260101_000001_initial_schema.rs`) directly. No data migration needed.
 
 Suggested PR split:
 

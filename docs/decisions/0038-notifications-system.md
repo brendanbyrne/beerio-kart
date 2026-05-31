@@ -229,7 +229,7 @@ Each future kind is a localized addition: one enum variant, one trigger site, on
 
 ## Migration
 
-Pre-launch schema change. Per `backend/CLAUDE.md` § schema-changes-prelaunch, edit the consolidated initial migration directly. No data migration.
+Pre-launch schema change. Per `docs/coding-standards/seaorm.md` § 5 (Migrations), edit the consolidated initial migration directly. No data migration.
 
 Suggested PR shape:
 
