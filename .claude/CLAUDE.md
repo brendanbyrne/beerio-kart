@@ -5,22 +5,14 @@ Read `docs/design.md` at the start of every session. It is the single source of 
 
 ### Handoff files
 
-Two handoff channels enable async task passing between assistants. The writer creates the file; the reader deletes it when done — the file's existence is the signal.
+Async task-passing between the two assistants lives in `.agents/handoffs/`, named for the **recipient** (Cowork writes the file Claude Code reads, and vice versa); the file's existence is the signal, and the reader deletes it when done. Format, lifecycle, and dated-variant naming: [`.agents/handoffs/README.md`](../.agents/handoffs/README.md). The two inboxes:
 
-Handoff files live under `.agents/handoffs/`. The directory is gitignored except for `.agents/handoffs/README.md`, which documents the format and lifecycle for humans browsing the repo.
+- **`.agents/handoffs/claude-code.md`** — Claude Code's inbox (Cowork writes). **Check it before starting work.**
+- **`.agents/handoffs/cowork.md`** — Cowork's inbox (Claude Code writes). Cowork can't delete files (sandbox blocks `unlink()`), so Brendan or the next Claude Code session clears it after Cowork acks in chat.
 
-Files are named for the **recipient**, not the writer. So Cowork writes the file Claude Code reads, and vice versa.
+**Anything the other assistant must act on — task specs, review findings, bug reports, design decisions, answers — MUST go in the handoff file, not just chat.** If you're composing a substantive response the other assistant needs, stop and write it there. **Don't use handoffs for your own session notes** — they're one-way action channels (file exists ⇒ work to do); Cowork keeps self-notes in `.agents/memory/cowork.md`, Claude Code uses its native cross-session memory.
 
-- **`.agents/handoffs/claude-code.md`** — for Claude Code (Cowork writes). Check before starting work. Contains task instructions from the architecture/design assistant. Claude Code deletes after completing the work.
-- **`.agents/handoffs/cowork.md`** — for Cowork (Claude Code writes). Write this when you have questions, research requests, or design decisions for Cowork. Brendan or the next Claude Code session deletes after Cowork acknowledges in chat — Cowork's sandbox blocks `unlink()` repo-wide, so Cowork can't clean up its own inbox.
-
-For task-specific handoffs that shouldn't collide with the canonical filenames, use a dated variant: `claude-code-<YYYY-MM-DD>-<slug>.md` or `cowork-<YYYY-MM-DD>-<slug>.md`.
-
-**Anything intended for the other assistant to act on — task specs, code review findings, bug reports, design decisions, answers to their questions — MUST be written to the appropriate handoff file.** Delivering it only in chat means the other assistant won't see it. If you find yourself composing a substantive response that the other assistant needs, stop and write it to the handoff file instead.
-
-**Do not use handoff files for your own session notes.** The handoff files are one-way channels between assistants — if the file exists, the recipient assumes there's work to do. For self-notes or session state you want to preserve across your own sessions, Cowork uses `.agents/memory/cowork.md` (gitignored — per-checkout state, not a durable artifact). Claude Code has its own native cross-session memory and does not use an in-repo file.
-
-**Why `.agents/` and not `.claude/`:** `.claude/` is for low-churn project conventions read every session (this file, skills, settings). `.agents/` is for high-churn per-agent state and inter-agent comms. Splitting them by lifecycle keeps the every-session reading surface small. Mechanically, Cowork's `Write`/`Edit` tools refuse `.claude/` writes (a tool-layer protection against silent self-modification of context); `.agents/` is outside that protection, so handoffs and memory work with the normal file tools.
+**Why `.agents/` and not `.claude/`:** `.claude/` is low-churn, every-session conventions (this file, skills, settings); `.agents/` is high-churn per-agent state and comms. Splitting by lifecycle keeps the always-read surface small. Cowork's `Write`/`Edit` also refuse `.claude/` writes (anti-self-modification guard), so handoffs/memory must live outside it.
 
 ## Project Phase
 Star — Sessions & Run Recording (core gameplay loop). See [`docs/roadmap.md`](../docs/roadmap.md) for the cup-by-cup narrative and the full list of milestones.
@@ -52,70 +44,16 @@ Backend-specific conventions (database naming, Rust style, testing) live in [`ba
 
 ## Development Workflow
 
-### Two-assistant setup
+Two assistants share this checkout:
 
-This project uses two AI environments:
+- **Cowork (Claude Desktop)** — design, architecture, docs, research, review. Edits files only; **cannot run git** (its sandbox blocks `unlink()`, which git needs). Reads/writes GitHub via the Composio MCP, as `brendanbyrne`.
+- **Claude Code (WSL2 CLI)** — coding, building, testing, and all git operations. Reads/writes GitHub via `gh`.
 
-- **Cowork (Claude Desktop):** Design, architecture, documentation, research, review. Accesses the repo via a Windows mount (`C:\Users\obiva\beerio-kart`). Cannot access WSL2 filesystem and **cannot run git commands** — the Cowork sandbox mounts the repo via virtiofs with `unlink()` blocked at the mount layer (every file delete returns `EPERM`, including files Cowork just created). Git relies on creating and removing `.git/index.lock` and temp objects, so any git invocation from Cowork either fails outright or leaves a stale lock that breaks the next attempt. Cowork edits files only. For GitHub API operations (issues, PRs, project board) see § GitHub access below.
-- **Claude Code (WSL2 CLI):** Coding, building, testing, git operations. Accesses the same checkout via `/mnt/c/Users/obiva/beerio-kart/`. WSL2's `/mnt/c` (9P/DrvFs) supports unlink, so git works fine there.
+The full operational guide — the two environments and their constraints, the GitHub-MCP capability matrix, the who-does-what table, Issue lifecycle, branch/commit conventions, milestones, triage, and handoff patterns — is [`docs/project-workflow.md`](../docs/project-workflow.md). Project-board field IDs are cached in [`docs/project-field-ids.md`](../docs/project-field-ids.md).
 
-### GitHub access
-
-Cowork can read and write GitHub data — issues, pull requests, project board items, milestones — through Composio's GitHub MCP connector. The connection authenticates as the GitHub user `brendanbyrne`. Anything Cowork does via the MCP appears in the GitHub UI under that account.
-
-**What Cowork can do via the MCP:**
-
-- File, label, assign, triage, and close issues; add comments.
-- Read PR diffs, conversation threads, and review state. (Creating commits or PRs still requires Claude Code — that's a git operation, not an API operation.)
-- Add items to the project board, move them between Status columns, set custom field values, attach milestones.
-- Create and manage milestones.
-- Run arbitrary GraphQL queries against `api.github.com/graphql` when no purpose-built tool exists.
-
-**What the MCP cannot do, regardless of which assistant calls it:**
-
-- **Run `git`.** The MCP only talks to GitHub's API. Branch creation, commits, pushes, and merges remain Claude Code's job.
-- **Create or modify the project's built-in workflows** (auto-add, auto-close, auto-archive). GitHub's API does not expose these — they are Settings-UI-only.
-- Custom fields, single-select option lists, and views *can* be created/edited via API — see [`docs/project-field-ids.md`](../docs/project-field-ids.md) for which path (GraphQL vs. Composio REST shim) works for which field type, and known REST-shim 500s.
-- **Set Assignees, Labels, Milestone, or Repository via the project field mutation.** Those are properties of the underlying issue/PR; use the issue/PR mutations instead.
-
-**What Claude Code can do via `gh`:** see [`docs/project-workflow.md`](../docs/project-workflow.md) § Claude Code's autonomy in moving Issue status for the token scopes, the `updateProjectV2ItemFieldValue` mutation, and the `INSUFFICIENT_SCOPES` recovery.
-
-**Field IDs reference:** [`docs/project-field-ids.md`](../docs/project-field-ids.md) caches the project's field IDs and Status option IDs. Consult that file before issuing project-board write calls — both Composio MCP and `gh api graphql` require IDs, not names. Update the file if anyone changes the project's fields in the GitHub UI.
-
-**Milestone naming:** Two milestone types — *product cups* (Mario Kart 8 Deluxe cup names: Mushroom, Flower, Star, Special, Shell, Banana, Leaf, Lightning, etc.) for user-facing feature work-chunks, and *workstreams* (topical prefixes: `Hardening:`, `Docs:`, etc.) for cross-cutting infrastructure that runs concurrent with product cups. Product cups use title format `<CupName>: <Description>` (e.g., `Star: Sessions & Run Recording`); workstreams use `<Topic>: <Description>`. Full convention is in [`docs/project-workflow.md`](../docs/project-workflow.md) § Milestone lifecycle; current mapping lives in [`docs/roadmap.md`](../docs/roadmap.md).
-
-**When to use Cowork vs. Claude Code for GitHub work:** anything that ends in a commit, push, or merge → Claude Code. Anything that stays inside GitHub's API surface (issue triage, project board updates, PR comments, milestone management) → either works; pick whichever assistant is already in the conversation. Cowork is often faster for chat-driven triage; Claude Code is the natural choice when the GitHub action is part of a code-bearing PR (e.g., move-Issue-on-pickup at the start of a branch).
-
-### Git workflow
-
-For Issue lifecycle, branch naming (`<issue_number>/<short-slug>`), commit message format (`<issue_number>: <summary>`), PR template, and triage cadence, see [`docs/project-workflow.md`](../docs/project-workflow.md). It's the canonical operational guide; this file's role is the high-level role split, not the workflow details.
-
-**Rules summary** (cross-references to project-workflow.md for detail):
+**Load-bearing git rules** (canonical detail in `project-workflow.md` § PR conventions → Review and merge):
 
 - **Never push directly to `main`.** All code changes require a PR.
 - **Never merge your own PR.** Only Brendan merges.
-- Documentation-only changes (this file, `docs/design.md`) can be committed to `main` directly — they don't need code review.
-
-**Coordination between assistants:**
-
-- Both assistants work on the same checkout — no push/pull needed to see each other's changes.
-- **Cowork** cannot run git at all (its sandbox mount blocks `unlink`). When Cowork wants a change committed, it edits the working tree and notes the intended commit in `.agents/handoffs/claude-code.md` or chat; Brendan or Claude Code then stages, commits, and pushes.
-- **Claude Code** must `git push` after making changes so the remote stays current.
-- Both should check `git status` before starting work to avoid conflicts.
-- If both need to edit the same file, coordinate through the user (Brendan).
-
-### Who does what
-
-| Task | Tool |
-|------|------|
-| Architecture & design docs | Cowork |
-| Code implementation | Claude Code |
-| Building & testing | Claude Code |
-| Git commits | Claude Code or Brendan (Cowork cannot run git) |
-| Git pushes | Claude Code (or Brendan) |
-| Code review & research | Either |
-| Project board / issue triage | Either (Cowork via MCP, Claude Code via `gh`) |
-| Deployment config | Claude Code (with Cowork for planning) |
-| Browser-based tasks | Cowork |
-| Design records | Cowork (writes to `docs/designs/`) |
-| PR reviews | Claude Code (posts as PR comment via `gh pr comment` or MCP) |
+- Documentation-only changes (CLAUDE.md files, `docs/` content) can be committed to `main` directly — no code review needed.
+- Claude Code **pushes** after making changes so the remote stays current; both assistants **check `git status` before starting**, since the shared checkout may carry the other's uncommitted work.
