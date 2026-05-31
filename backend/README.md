@@ -51,6 +51,7 @@ Before opening a PR that touches the backend, skim these:
   - **[`rust.md`](../docs/coding-standards/rust.md)** — Errors, types, modules, testing, lints, docs, formatting, deps, config.
   - **[`seaorm.md`](../docs/coding-standards/seaorm.md)** — `ActiveModel` vs `Model`, queries, transactions, migrations, error handling, pool tuning.
   - **[`tokio.md`](../docs/coding-standards/tokio.md)** — Runtime, blocking, locks across `.await`, channels, cancellation, shutdown.
+- **[`../docs/data-model.md`](../docs/data-model.md)** — Database schema, table definitions, FK conventions.
 - **[`../docs/api-contract.md`](../docs/api-contract.md)** — Wire-format decisions (error codes, ETag polling, idempotency keys, time format).
 - **[`../docs/designs/archive/compliance-plan.md`](../docs/designs/archive/compliance-plan.md)** — Archived. Sequenced PRs that brought the existing code to the standard; all signed off 2026-05-15.
 
