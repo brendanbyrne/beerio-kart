@@ -12,6 +12,13 @@
 - **Database encryption** via SQLCipher is possible but deferred past v1.
 - **No separate `created_by` column on sessions.** `host_id` carries the original creator until host transfers on leave. No current product feature uses the original-creator information. If needed later, re-adding the column is one append-only migration.
 
+### Naming Conventions
+
+- **Table names:** plural, snake_case (`drink_types`, `characters`).
+- **Column names:** snake_case (`track_time`, `created_at`).
+- **Foreign keys:** `{referenced_table_singular}_id` (`character_id`, `cup_id`).
+- **Primary keys:** `id`.
+
 ### Users
 
 User-modifiable: yes (own profile, preferred race setup).
@@ -406,3 +413,4 @@ Each session uses one ruleset that determines how tracks are selected. The rules
 - 2026-05-15 — Updated the 2026-05-05 history entry's path reference for the design-doc-restructure record (now archived under `designs/archive/`). Companion to PR [#160](https://github.com/brendanbyrne/beerio-kart/pull/160) / Issue [#159](https://github.com/brendanbyrne/beerio-kart/issues/159).
 - 2026-05-16 — ADR-0037 + ADR-0038. `session_race_participations` gains a nullable `dropped_at` column and the four-state per-(race, user) status enum (`unraced` / `raced` / `skipped` / `dropped`). Pending Race Tracking derivation simplified to four clauses — the per-race 1-hour timer and the `sessions.status` filter are gone; the session is the deadline. Session liveness note rewritten: the stale-session sweeper now uses a five-signal activity predicate, and closing a session drops its unresolved pending races + records notifications. Session Participants rejoin rule updated to "rejoin while the session is alive." New `notifications` table section added (ADR-0038 inbox). Issues [#51](https://github.com/brendanbyrne/beerio-kart/issues/51), [#58](https://github.com/brendanbyrne/beerio-kart/issues/58), [#164](https://github.com/brendanbyrne/beerio-kart/issues/164).
 - 2026-05-28 — § Drink Types: a drink's identity is now `(uppercased name, alcoholic)`, not name alone. The derived UUID hashes `"{uppercase(name)}\x1f{alcoholic}"`, the standalone `UNIQUE(name)` constraint became composite `UNIQUE(name, alcoholic)`, and the dedup note now distinguishes a same-`(name, alcoholic)` collision (returns existing) from the same name with the other flag (distinct drink). Companion to PR [#213](https://github.com/brendanbyrne/beerio-kart/pull/213) / Issue [#212](https://github.com/brendanbyrne/beerio-kart/issues/212). Review feedback from PR #213.
+- 2026-05-31 — Added a `### Naming Conventions` subsection (table/column/FK/PK snake_case rules), making this file the canonical home (#220/#223). The rules previously lived in `design.md` § Naming Conventions (now removed) and were duplicated in `backend/CLAUDE.md` § Naming (now a pointer here).
