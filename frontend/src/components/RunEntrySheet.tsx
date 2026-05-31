@@ -8,8 +8,8 @@ import type {
 } from '../api/types';
 import { createRun, getRunDefaults } from '../api/runs';
 import { parseTimeFields } from '../utils/time';
-import { useDrinkTypes } from '../hooks/useGameData';
 import {
+  useDrinkTypes,
   useCharacters,
   useBodies,
   useWheels,
