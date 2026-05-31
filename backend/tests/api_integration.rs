@@ -503,7 +503,12 @@ async fn test_update_user_invalid_fk_returns_400() {
     // generic bad_request, and the message names the offending entity.
     let body: Value = res.json();
     assert_eq!(body["code"], "bad_request");
-    assert!(body["error"].as_str().unwrap().contains("character"));
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid character_id")
+    );
 }
 
 #[tokio::test]
