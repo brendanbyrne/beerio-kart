@@ -105,12 +105,16 @@ export default defineConfig([
       '@typescript-eslint/no-deprecated': 'warn',
       '@typescript-eslint/prefer-regexp-exec': 'warn',
 
-      // --- Warn-down: jsx-a11y rules that fire on existing code.
-      // PR-G2 (the accessibility sweep) fixes these and restores error. ---
-      'jsx-a11y/no-static-element-interactions': 'warn',
-      'jsx-a11y/click-events-have-key-events': 'warn',
-      'jsx-a11y/label-has-associated-control': 'warn',
-      'jsx-a11y/no-autofocus': 'warn',
+      // --- jsx-a11y rules restored to error by PR-G2 (the accessibility
+      // sweep). All offenders are fixed: sub-44px touch targets bumped to
+      // min-h-touch, the add-drink autoFocus removed, the Home/RunEntrySheet
+      // modals given focus traps + keyboard-accessible backdrop buttons, the
+      // DQ slider made keyboard-operable, and the section <label>s that wrapped
+      // no control converted to <span>. ---
+      'jsx-a11y/no-static-element-interactions': 'error',
+      'jsx-a11y/click-events-have-key-events': 'error',
+      'jsx-a11y/label-has-associated-control': 'error',
+      'jsx-a11y/no-autofocus': 'error',
 
       // --- Off: eslint-plugin-import's module-resolution rules. These
       // duplicate what `tsc --noEmit` already verifies, and without a

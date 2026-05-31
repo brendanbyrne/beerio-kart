@@ -129,7 +129,7 @@ export function RaceSetupPicker({
             key={s}
             onClick={() => setStep(s)}
             className={clsx(
-              'flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors',
+              'flex-1 min-h-touch text-center py-1.5 text-xs font-medium rounded-lg transition-colors',
               s === step
                 ? 'bg-brand-primary text-white'
                 : selectedForStep[s] !== null
@@ -191,7 +191,7 @@ export function RaceSetupPicker({
         {onSkip && (
           <button
             onClick={onSkip}
-            className="flex-1 py-2.5 text-sm font-medium text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            className="flex-1 min-h-touch py-2.5 text-sm font-medium text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
           >
             Skip for now
           </button>
@@ -202,7 +202,7 @@ export function RaceSetupPicker({
           }}
           disabled={!setup}
           className={clsx(
-            'flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors',
+            'flex-1 min-h-touch py-2.5 text-sm font-semibold rounded-xl transition-colors',
             setup
               ? 'bg-brand-primary text-white hover:bg-brand-primary-strong'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed',

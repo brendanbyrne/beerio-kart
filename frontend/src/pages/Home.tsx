@@ -8,6 +8,7 @@ import { useCharacters } from '../hooks/useGameData';
 import { useSessions } from '../hooks/useSessions';
 import { createSession } from '../api/sessions';
 import { BottomNav } from '../components/BottomNav';
+import { useModalA11y } from '../hooks/useModalA11y';
 
 export function Home() {
   const { user } = useAuth();
@@ -87,44 +88,15 @@ export function Home() {
 
         {/* Create session modal */}
         {showCreate && (
-          <div
-            className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center"
-            onClick={() => {
+          <CreateSessionModal
+            creating={creating}
+            error={error}
+            onCreate={handleCreate}
+            onClose={() => {
               setShowCreate(false);
               setError(null);
             }}
-          >
-            <div
-              className="bg-white w-full max-w-lg rounded-t-2xl p-5 space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="text-base font-bold text-gray-900">
-                Pick a Ruleset
-              </h2>
-              <button
-                onClick={handleCreate}
-                disabled={creating}
-                className="w-full py-3 bg-brand-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50 active:bg-brand-primary-strong transition-colors"
-              >
-                {creating ? 'Creating...' : 'Random'}
-              </button>
-              <p className="text-xs text-gray-400 text-center">
-                Tracks are chosen randomly each round
-              </p>
-              {error && (
-                <p className="text-xs text-danger text-center">{error}</p>
-              )}
-              <button
-                onClick={() => {
-                  setShowCreate(false);
-                  setError(null);
-                }}
-                className="w-full py-2 text-sm text-gray-500"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          />
         )}
 
         {/* Active sessions list */}
@@ -196,6 +168,67 @@ export function Home() {
       </div>
 
       <BottomNav />
+    </div>
+  );
+}
+
+// Bottom-sheet modal for picking a ruleset. Extracted so useModalA11y's
+// mount/unmount lifecycle aligns with the modal's open/close (react.md § 10):
+// focus traps inside the dialog, Escape closes, and focus returns to the
+// "Start a Session" trigger on close. The backdrop is a real (focus-excluded)
+// button so the click-to-dismiss affordance is keyboard-accessible.
+function CreateSessionModal({
+  creating,
+  error,
+  onCreate,
+  onClose,
+}: {
+  creating: boolean;
+  error: string | null;
+  onCreate: () => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useModalA11y(onClose);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <button
+        type="button"
+        aria-label="Close"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-session-title"
+        className="relative bg-white w-full max-w-lg rounded-t-2xl p-5 space-y-4"
+      >
+        <h2
+          id="create-session-title"
+          className="text-base font-bold text-gray-900"
+        >
+          Pick a Ruleset
+        </h2>
+        <button
+          onClick={onCreate}
+          disabled={creating}
+          className="w-full py-3 bg-brand-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50 active:bg-brand-primary-strong transition-colors"
+        >
+          {creating ? 'Creating...' : 'Random'}
+        </button>
+        <p className="text-xs text-gray-400 text-center">
+          Tracks are chosen randomly each round
+        </p>
+        {error && <p className="text-xs text-danger text-center">{error}</p>}
+        <button
+          onClick={onClose}
+          className="w-full min-h-touch py-2 text-sm text-gray-500"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

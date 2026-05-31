@@ -295,6 +295,34 @@ describe('RunEntrySheet', () => {
     expect(await screen.findByText('Disqualified')).toBeInTheDocument();
   });
 
+  it('disqualifies the run when the slider is dragged past the threshold by touch', async () => {
+    // Touch is the primary input on the mobile reference device, so exercise
+    // the touch drag path too (the mouse path is covered above).
+    mockGameData();
+    server.use(
+      http.get(
+        '/api/v1/runs/defaults',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+    pinSliderGeometry();
+
+    render(
+      <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+
+    const thumb = (await screen.findByText('»')).parentElement;
+    if (!thumb?.parentElement) throw new Error('slider track not found');
+    const track = thumb.parentElement;
+
+    fireEvent.touchStart(thumb);
+    fireEvent.touchMove(track, { touches: [{ clientX: 300 }] });
+    fireEvent.touchEnd(track);
+
+    expect(await screen.findByText('Disqualified')).toBeInTheDocument();
+  });
+
   it('snaps back without disqualifying when released before the threshold', async () => {
     mockGameData();
     server.use(
@@ -320,6 +348,54 @@ describe('RunEntrySheet', () => {
     fireEvent.mouseUp(track);
 
     expect(screen.queryByText('Disqualified')).not.toBeInTheDocument();
+  });
+
+  it('closes the sheet on Escape', async () => {
+    // PR-G2 (Issue #184): the sheet is a modal dialog — Escape calls onClose
+    // (react.md § 10). useModalA11y installs the document-level handler.
+    mockGameData();
+    server.use(
+      http.get(
+        '/api/v1/runs/defaults',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+    const onClose = vi.fn();
+
+    render(
+      <RunEntrySheet race={race} onClose={onClose} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+    // Let the sheet settle before asserting on the key handler.
+    await screen.findByText('Select drink');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disqualifies the run from the keyboard (Enter on the slider)', async () => {
+    // The slide-to-DQ control is a role="button" with an Enter/Space shortcut
+    // so it's operable without a pointer gesture (PR-G2).
+    mockGameData();
+    server.use(
+      http.get(
+        '/api/v1/runs/defaults',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+
+    render(
+      <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+
+    const slider = await screen.findByRole('button', {
+      name: /slide or press enter to disqualify/i,
+    });
+    fireEvent.keyDown(slider, { key: 'Enter' });
+
+    expect(await screen.findByText('Disqualified')).toBeInTheDocument();
   });
 
   it('degrades to blank fields when the run-defaults request fails', async () => {
