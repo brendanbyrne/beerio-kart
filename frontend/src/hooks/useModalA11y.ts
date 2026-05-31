@@ -2,13 +2,14 @@ import { useEffect, useRef } from 'react';
 
 // Tab-order members inside a modal. Mirrors the set browsers treat as
 // sequentially focusable; `[tabindex="-1"]` is programmatically focusable but
-// not part of Tab order, so it's excluded.
+// not part of Tab order, so every clause excludes it (a focusable tag can also
+// carry tabindex="-1" to opt out — e.g. a backdrop button).
 const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'textarea:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
+  'a[href]:not([tabindex="-1"])',
+  'button:not([disabled]):not([tabindex="-1"])',
+  'textarea:not([disabled]):not([tabindex="-1"])',
+  'input:not([disabled]):not([tabindex="-1"])',
+  'select:not([disabled]):not([tabindex="-1"])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 

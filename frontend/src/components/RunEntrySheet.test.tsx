@@ -374,29 +374,35 @@ describe('RunEntrySheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('disqualifies the run from the keyboard (Enter on the slider)', async () => {
-    // The slide-to-DQ control is a role="button" with an Enter/Space shortcut
-    // so it's operable without a pointer gesture (PR-G2).
-    mockGameData();
-    server.use(
-      http.get(
-        '/api/v1/runs/defaults',
-        () => new HttpResponse(null, { status: 500 }),
-      ),
-    );
+  // The slide-to-DQ control is a role="button" with an Enter/Space shortcut so
+  // it's operable without a pointer gesture (PR-G2). Both activation keys count.
+  it.each([
+    { name: 'Enter', key: 'Enter' },
+    { name: 'Space', key: ' ' },
+  ])(
+    'disqualifies the run from the keyboard ($name on the slider)',
+    async ({ key }) => {
+      mockGameData();
+      server.use(
+        http.get(
+          '/api/v1/runs/defaults',
+          () => new HttpResponse(null, { status: 500 }),
+        ),
+      );
 
-    render(
-      <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
-      { wrapper: Wrapper },
-    );
+      render(
+        <RunEntrySheet race={race} onClose={vi.fn()} onSubmitted={vi.fn()} />,
+        { wrapper: Wrapper },
+      );
 
-    const slider = await screen.findByRole('button', {
-      name: /slide or press enter to disqualify/i,
-    });
-    fireEvent.keyDown(slider, { key: 'Enter' });
+      const slider = await screen.findByRole('button', {
+        name: /slide or press enter to disqualify/i,
+      });
+      fireEvent.keyDown(slider, { key });
 
-    expect(await screen.findByText('Disqualified')).toBeInTheDocument();
-  });
+      expect(await screen.findByText('Disqualified')).toBeInTheDocument();
+    },
+  );
 
   it('degrades to blank fields when the run-defaults request fails', async () => {
     mockGameData({ drinkTypes: [] });
