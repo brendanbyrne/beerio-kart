@@ -175,9 +175,11 @@ export default defineConfig([
     rules: {
       ...vitest.configs.recommended.rules,
       // Started at `warn`, not `error`, per this file's preamble: it fires on
-      // the legitimate `try { …; expect.unreachable() } catch { expect(err) }`
-      // shape used to assert on a thrown error's nested fields (result.test.ts,
-      // runs.test.ts). Flip to `error` if those convert to `.rejects`.
+      // two legitimate shapes for asserting on a failure — result.test.ts's
+      // `try { …; expect.unreachable() } catch { expect(err) }`, and
+      // runs.test.ts's discriminated-`Result` narrowing
+      // (`expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code)…`). Flip to
+      // `error` once both are reworked to unconditional assertions (#227).
       'vitest/no-conditional-expect': 'warn',
     },
   },
