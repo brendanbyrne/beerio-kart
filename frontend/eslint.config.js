@@ -21,7 +21,9 @@ import { defineConfig, globalIgnores } from 'eslint/config';
 // owns the fix. See docs/designs/2026-05-16-frontend-compliance-plan.md.
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // `dist` is the build output; `coverage` is the generated Vitest report (both
+  // git-ignored) — linting either just produces noise on generated files.
+  globalIgnores(['dist', 'coverage']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -86,26 +88,29 @@ export default defineConfig([
       // PRs touching those files convert them, then flips to error.
       'import/consistent-type-specifier-style': ['warn', 'prefer-top-level'],
 
-      // --- Warn-down: strictTypeChecked / stylisticTypeChecked rules that
-      // fire on existing code. PR-B2 lands the Zod parses and AbortSignal
-      // plumbing that clear the no-unsafe-*/floating-promise families; the
-      // remaining stylistic rules are cleared by the PR that touches each
-      // file. All flip back to `error` as their offenders are removed. ---
-      '@typescript-eslint/no-unsafe-assignment': 'warn',
-      '@typescript-eslint/no-unsafe-member-access': 'warn',
-      '@typescript-eslint/no-unsafe-argument': 'warn',
-      '@typescript-eslint/no-unsafe-call': 'warn',
-      '@typescript-eslint/no-unsafe-return': 'warn',
+      // --- strictTypeChecked / stylisticTypeChecked rules that once fired on
+      // pre-compliance code. Each flips back to `error` the moment its offender
+      // count reaches zero (the ratchet only ever tightens). PR-B2 landed the
+      // Zod parses + AbortSignal plumbing that cleared the no-unsafe-* family;
+      // the families below are now verified clean, so they are enforced. ---
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      '@typescript-eslint/no-deprecated': 'error',
+      '@typescript-eslint/prefer-regexp-exec': 'error',
+
+      // Still at `warn`: offenders remain, owned by the frontend compliance-plan
+      // PR that touches each file. Flip to `error` as each reaches zero.
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-misused-promises': 'warn',
       '@typescript-eslint/no-unnecessary-condition': 'warn',
       '@typescript-eslint/no-confusing-void-expression': 'warn',
       '@typescript-eslint/prefer-nullish-coalescing': 'warn',
       '@typescript-eslint/no-unnecessary-type-arguments': 'warn',
-      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
       '@typescript-eslint/restrict-template-expressions': 'warn',
-      '@typescript-eslint/no-deprecated': 'warn',
-      '@typescript-eslint/prefer-regexp-exec': 'warn',
 
       // --- jsx-a11y rules restored to error by PR-G2 (the accessibility
       // sweep). All offenders are fixed: sub-44px touch targets bumped to
@@ -139,9 +144,9 @@ export default defineConfig([
     // handler factories and mock return values are also inherently loosely
     // typed. This block turns those rules off for tests; everything else
     // (consistent-type-imports, ban-ts-comment, the enum ban, react-hooks,
-    // jsx-a11y) still applies. The four un-typed-value rules below are at
-    // `warn` today but flip to `error` in PR-F1 / PR-H1 — the override keeps
-    // these example-test patterns valid past those flips.
+    // jsx-a11y) still applies. The un-typed-value rules below are now `error`
+    // in production code (flipped once their offender count hit zero) — this
+    // override keeps the example-test patterns valid past that flip.
     files: [
       '**/*.test.{ts,tsx}',
       'src/__tests__/**/*.{ts,tsx}',
