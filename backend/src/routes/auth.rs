@@ -154,6 +154,12 @@ async fn mint_refresh_in_family<C: ConnectionTrait>(
 /// successor already exists, so we hand back a token for it rather than
 /// revoking the family on a false-positive reuse. No live tip means the family
 /// was revoked — surfaced as `token_invalid`.
+///
+/// Note: the re-minted JWT gets a fresh `exp` (now + TTL) while the tip row's
+/// `expires_at` is unchanged, so a reissued token can briefly outlive its row.
+/// Harmless — the row is authoritative (the refresh path rejects on
+/// `expires_at < now`), so a token whose row was pruned just surfaces as
+/// `token_invalid` instead of `token_expired`. Both are clean 401s.
 async fn reissue_from_family_tip<C: ConnectionTrait>(
     conn: &C,
     user_id: &UserId,
@@ -451,6 +457,19 @@ pub async fn refresh(
             if claim.rows_affected == 0 {
                 // Lost the race: another refresh already rotated this token.
                 // Hand back the family's live successor rather than revoke.
+                //
+                // Engine note: on the current SQLite this 0-rows branch is
+                // effectively the *Postgres* (READ COMMITTED) behavior, where
+                // the losing writer blocks then re-evaluates `WHERE used_at IS
+                // NULL` and matches 0 rows. On SQLite (WAL, deferred BEGIN) the
+                // loser's write instead hits a snapshot conflict and returns
+                // `SQLITE_BUSY_SNAPSHOT` immediately — busy_timeout does not
+                // apply — which surfaces as a 500. The single-winner guarantee
+                // (the conditional UPDATE) is unaffected; only the *graceful*
+                // loser path differs. On SQLite the real backstop for a racing
+                // refresh is the client's retry landing in the grace window
+                // above (it reads `used_at` set → reissue), plus the frontend
+                // single-flight that keeps a client from double-firing at all.
                 reissue_from_family_tip(
                     &txn,
                     &user_id,

@@ -252,6 +252,9 @@ async fn test_refresh_within_grace_window_reissues_instead_of_revoking() {
     // Default grace (10 s): a token presented again right after it rotated is a
     // retry / race, not theft — it reissues the family's live successor.
     let server = setup_test_app().await;
+    // Same secret as the server (TEST_SECRET), so we can decode the cookies it
+    // mints and read their `jti` to pin *which* token comes back.
+    let config = test_config();
 
     let reg = server
         .post("/api/v1/auth/register")
@@ -264,6 +267,11 @@ async fn test_refresh_within_grace_window_reissues_instead_of_revoking() {
         .add_cookie(cookie::Cookie::new("refresh_token", &cookie1))
         .await;
     r1.assert_status(StatusCode::OK);
+    // cookie2 is the live successor minted by the rotation.
+    let cookie2 = extract_refresh_cookie(&r1).unwrap();
+    let successor_jti = beerio_kart::services::auth::validate_refresh_token(&cookie2, &config)
+        .unwrap()
+        .jti;
 
     // Immediately replay cookie1 (well within the 10 s window).
     let retry = server
@@ -271,14 +279,20 @@ async fn test_refresh_within_grace_window_reissues_instead_of_revoking() {
         .add_cookie(cookie::Cookie::new("refresh_token", &cookie1))
         .await;
     retry.assert_status(StatusCode::OK);
-    let retry_body: Value = retry.json();
-    assert!(
-        retry_body["access_token"].is_string(),
-        "a within-grace replay should reissue a working token, not 401"
+
+    // The grace path must reissue the *existing* live successor, not mint a new
+    // token — pin that by asserting the reissued cookie's `jti` equals cookie2's
+    // (a bare "is_string" would only prove *a* tip came back, not *this* one).
+    let reissued = extract_refresh_cookie(&retry).unwrap();
+    let reissued_jti = beerio_kart::services::auth::validate_refresh_token(&reissued, &config)
+        .unwrap()
+        .jti;
+    assert_eq!(
+        reissued_jti, successor_jti,
+        "within-grace reissue must return the family's live successor, not a fresh mint"
     );
 
-    // The reissued cookie is the live tip and still refreshes.
-    let reissued = extract_refresh_cookie(&retry).unwrap();
+    // And that successor is itself live — it still refreshes.
     let again = server
         .post("/api/v1/auth/refresh")
         .add_cookie(cookie::Cookie::new("refresh_token", &reissued))
@@ -326,8 +340,15 @@ async fn test_two_families_coexist_and_reuse_revokes_only_one() {
         .add_cookie(cookie::Cookie::new("refresh_token", &b1))
         .await;
     rb.assert_status(StatusCode::OK);
-    let rb_body: Value = rb.json();
-    assert!(rb_body["access_token"].is_string());
+
+    // B's rotation produced a live successor of its own — chain one more refresh
+    // on it to prove family B is fully intact, not merely that b1 worked once.
+    let b2 = extract_refresh_cookie(&rb).unwrap();
+    server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &b2))
+        .await
+        .assert_status(StatusCode::OK);
 }
 
 #[tokio::test]

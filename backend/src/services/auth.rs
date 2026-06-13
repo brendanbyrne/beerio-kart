@@ -7,7 +7,7 @@ use argon2::{
 };
 use chrono::{TimeDelta, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
@@ -279,12 +279,12 @@ pub fn clear_refresh_cookie(config: &Config) -> String {
 ///
 /// Returns [`Error::Timeout`] if the delete exceeds the query budget, or a
 /// mapped `DbErr` for any other database failure.
-pub async fn prune_refresh_tokens(db: &DatabaseConnection) -> Result<u64, Error> {
+pub async fn prune_refresh_tokens(conn: &impl ConnectionTrait) -> Result<u64, Error> {
     let now = Utc::now().naive_utc();
     let result = db_query(
         refresh_tokens::Entity::delete_many()
             .filter(refresh_tokens::Column::ExpiresAt.lt(now))
-            .exec(db),
+            .exec(conn),
     )
     .await?;
     Ok(result.rows_affected)
