@@ -20,12 +20,21 @@ use uuid::Uuid;
 const TEST_SECRET: &str = "test-secret-for-integration-tests";
 
 fn test_config() -> Arc<Config> {
+    config_with_grace(10)
+}
+
+/// A test config with an explicit refresh-token reuse-detection grace window.
+/// `grace = 0` makes any presentation of an already-used token count as reuse,
+/// which is what the reuse / multi-device tests rely on for determinism; the
+/// default `10` exercises the within-grace reissue path.
+fn config_with_grace(refresh_grace_seconds: i64) -> Arc<Config> {
     Arc::new(Config {
         jwt_secret: TEST_SECRET.to_string(),
         jwt_access_expiry_minutes: 15,
         jwt_refresh_expiry_days: 7,
         admin_user_id: None,
         cookie_secure: false,
+        refresh_grace_seconds,
         request_timeout_seconds: 30,
         request_concurrency_limit: 100,
         max_request_body_bytes: 10 * 1024 * 1024,
@@ -40,6 +49,12 @@ async fn protected_hello(user: beerio_kart::middleware::auth::User) -> axum::Jso
 
 /// Create a fresh in-memory `SQLite` database with all migrations applied.
 async fn setup_test_app() -> TestServer {
+    setup_test_app_with_config(test_config()).await
+}
+
+/// Like [`setup_test_app`] but with a caller-supplied config — used by the
+/// reuse-detection tests to set the grace window (e.g. `config_with_grace(0)`).
+async fn setup_test_app_with_config(config: Arc<Config>) -> TestServer {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", Uuid::new_v4());
     // `db::connect` enables per-pool-connection FKs — see seaorm.md § 8 / #140.
     let db = db::connect(&url)
@@ -50,7 +65,6 @@ async fn setup_test_app() -> TestServer {
         .await
         .expect("Failed to run migrations");
 
-    let config = test_config();
     let state = AppState {
         db,
         config,
@@ -168,15 +182,18 @@ async fn test_refresh_with_valid_cookie_returns_new_access_token_and_rotated_coo
         "should return new access_token"
     );
 
-    // Should also rotate the refresh cookie. We deliberately do NOT assert the
-    // value *differs* from the original: refresh tokens carry no unique
-    // component (no `jti`) and the refresh path reuses the same version, so a
-    // token minted in the same wall-clock second as the original is
-    // byte-identical — an `assert_ne!` would be flaky. Assert the functional
-    // property instead: the rotated cookie is itself a working refresh token.
+    // The rotated cookie's *value* now differs from the original. Each minted
+    // refresh token carries a unique `jti` (ADR-0040), so two tokens are never
+    // byte-identical — the former flaky-`assert_ne!` concern (no `jti`,
+    // second-granular `exp`) is gone.
     let new_cookie =
         extract_refresh_cookie(&refresh_response).expect("should set rotated refresh cookie");
+    assert_ne!(
+        new_cookie, cookie,
+        "the rotated cookie must differ from the original (unique jti)"
+    );
 
+    // And it's functional: the rotated cookie is itself a working refresh token.
     let second_refresh = server
         .post("/api/v1/auth/refresh")
         .add_cookie(cookie::Cookie::new("refresh_token", &new_cookie))
@@ -187,6 +204,130 @@ async fn test_refresh_with_valid_cookie_returns_new_access_token_and_rotated_coo
         body2["access_token"].is_string(),
         "the rotated cookie must itself be usable to refresh"
     );
+}
+
+// ── Refresh-token rotation + reuse detection (ADR-0040) ─────────────
+
+#[tokio::test]
+async fn test_refresh_reuse_detected_revokes_family() {
+    // grace = 0: any presentation of an already-rotated token counts as reuse.
+    let server = setup_test_app_with_config(config_with_grace(0)).await;
+
+    let reg = server
+        .post("/api/v1/auth/register")
+        .json(&json!({ "username": "reuser", "password": "password123" }))
+        .await;
+    let cookie1 = extract_refresh_cookie(&reg).unwrap();
+
+    // First refresh rotates: cookie1 is now used; cookie2 is the live tip.
+    let r1 = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &cookie1))
+        .await;
+    r1.assert_status(StatusCode::OK);
+    let cookie2 = extract_refresh_cookie(&r1).unwrap();
+
+    // Replaying the original (used) cookie past the grace window is reuse.
+    let reuse = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &cookie1))
+        .await;
+    reuse.assert_status(StatusCode::UNAUTHORIZED);
+    let reuse_body: Value = reuse.json();
+    assert_eq!(reuse_body["code"], "token_reuse_detected");
+
+    // Reuse revokes the WHOLE family — even the legitimate live successor is
+    // now rejected, forcing a full re-auth (the RFC 9700 property).
+    let after = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &cookie2))
+        .await;
+    after.assert_status(StatusCode::UNAUTHORIZED);
+    let after_body: Value = after.json();
+    assert_eq!(after_body["code"], "token_invalid");
+}
+
+#[tokio::test]
+async fn test_refresh_within_grace_window_reissues_instead_of_revoking() {
+    // Default grace (10 s): a token presented again right after it rotated is a
+    // retry / race, not theft — it reissues the family's live successor.
+    let server = setup_test_app().await;
+
+    let reg = server
+        .post("/api/v1/auth/register")
+        .json(&json!({ "username": "racer", "password": "password123" }))
+        .await;
+    let cookie1 = extract_refresh_cookie(&reg).unwrap();
+
+    let r1 = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &cookie1))
+        .await;
+    r1.assert_status(StatusCode::OK);
+
+    // Immediately replay cookie1 (well within the 10 s window).
+    let retry = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &cookie1))
+        .await;
+    retry.assert_status(StatusCode::OK);
+    let retry_body: Value = retry.json();
+    assert!(
+        retry_body["access_token"].is_string(),
+        "a within-grace replay should reissue a working token, not 401"
+    );
+
+    // The reissued cookie is the live tip and still refreshes.
+    let reissued = extract_refresh_cookie(&retry).unwrap();
+    let again = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &reissued))
+        .await;
+    again.assert_status(StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_two_families_coexist_and_reuse_revokes_only_one() {
+    // grace = 0 for deterministic reuse. Register (family A) then log in again
+    // (family B) as the SAME user — two independent devices.
+    let server = setup_test_app_with_config(config_with_grace(0)).await;
+
+    let reg = server
+        .post("/api/v1/auth/register")
+        .json(&json!({ "username": "multi", "password": "password123" }))
+        .await;
+    let a1 = extract_refresh_cookie(&reg).unwrap();
+
+    let login = server
+        .post("/api/v1/auth/login")
+        .json(&json!({ "username": "multi", "password": "password123" }))
+        .await;
+    login.assert_status(StatusCode::OK);
+    let b1 = extract_refresh_cookie(&login).unwrap();
+
+    // Rotate + reuse on family A.
+    server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &a1))
+        .await
+        .assert_status(StatusCode::OK);
+    let reuse_a = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &a1))
+        .await;
+    reuse_a.assert_status(StatusCode::UNAUTHORIZED);
+    let reuse_a_body: Value = reuse_a.json();
+    assert_eq!(reuse_a_body["code"], "token_reuse_detected");
+
+    // Family B is untouched — the other device still refreshes. (Reuse revokes
+    // by family, and does not bump the global `refresh_token_version`.)
+    let rb = server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &b1))
+        .await;
+    rb.assert_status(StatusCode::OK);
+    let rb_body: Value = rb.json();
+    assert!(rb_body["access_token"].is_string());
 }
 
 #[tokio::test]
@@ -300,9 +441,15 @@ async fn test_password_change_increments_version_and_returns_new_tokens() {
         "should return new access_token"
     );
 
-    // New refresh cookie should be set
-    let new_refresh = extract_refresh_cookie(&pw_response);
-    assert!(new_refresh.is_some(), "should set new refresh cookie");
+    // New refresh cookie should be set, and it starts a fresh family for the
+    // current session — so it must itself be usable to refresh (ADR-0040: the
+    // family clear runs before this mint, so the new cookie isn't swept away).
+    let new_refresh = extract_refresh_cookie(&pw_response).expect("should set new refresh cookie");
+    server
+        .post("/api/v1/auth/refresh")
+        .add_cookie(cookie::Cookie::new("refresh_token", &new_refresh))
+        .await
+        .assert_status(StatusCode::OK);
 
     // Old refresh token should now fail (version was bumped)
     let old_refresh_response = server
@@ -342,6 +489,8 @@ async fn test_refresh_token_used_as_access_token_rejected_by_middleware() {
     let refresh_jwt = beerio_kart::services::auth::create_refresh_token(
         &beerio_kart::domain::UserId::new_v4(),
         0,
+        &Uuid::new_v4().to_string(),
+        &Uuid::new_v4().to_string(),
         &config,
     )
     .unwrap();

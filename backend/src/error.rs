@@ -44,6 +44,11 @@ pub enum ErrorCode {
     TokenExpired,
     /// Token malformed, missing, signature mismatch, or otherwise rejected.
     TokenInvalid,
+    /// A rotated (already-used) refresh token was presented past the grace
+    /// window — its family is revoked and the session is forced to re-auth
+    /// (ADR-0040). Distinct from `token_invalid` so the frontend can show a
+    /// "signed out for security" message rather than an ordinary re-login.
+    TokenReuseDetected,
     // 403
     /// Authenticated but not authorized for this action.
     Forbidden,
@@ -319,6 +324,16 @@ impl Error {
         Self::Unauthorized {
             msg: msg.into(),
             code: ErrorCode::TokenInvalid,
+        }
+    }
+
+    /// 401 / `token_reuse_detected` — an already-rotated refresh token was
+    /// replayed past the grace window; the family has been revoked (ADR-0040).
+    #[must_use]
+    pub fn token_reuse_detected() -> Self {
+        Self::Unauthorized {
+            msg: "Refresh token reuse detected".to_string(),
+            code: ErrorCode::TokenReuseDetected,
         }
     }
 
@@ -739,6 +754,10 @@ mod tests {
         );
         assert_eq!(Error::token_expired().code(), ErrorCode::TokenExpired);
         assert_eq!(Error::token_invalid("x").code(), ErrorCode::TokenInvalid);
+        assert_eq!(
+            Error::token_reuse_detected().code(),
+            ErrorCode::TokenReuseDetected
+        );
         assert_eq!(Error::admin_required().code(), ErrorCode::AdminRequired);
         assert_eq!(Error::username_taken("x").code(), ErrorCode::UsernameTaken);
         assert_eq!(Error::session_closed("x").code(), ErrorCode::SessionClosed);

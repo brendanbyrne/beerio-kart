@@ -62,7 +62,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use beerio_kart::entities::{
-    bodies, characters, cups, drink_types, gliders, notifications, run_flags, runs,
+    bodies, characters, cups, drink_types, gliders, notifications, refresh_tokens, run_flags, runs,
     session_participants, session_race_participations, session_races, sessions, tracks, users,
     wheels,
 };
@@ -92,6 +92,11 @@ async fn each_entity_can_load_from_a_fresh_migrated_db() {
     drink_types::Entity::find().limit(0).all(&db).await.unwrap();
     gliders::Entity::find().limit(0).all(&db).await.unwrap();
     notifications::Entity::find()
+        .limit(0)
+        .all(&db)
+        .await
+        .unwrap();
+    refresh_tokens::Entity::find()
         .limit(0)
         .all(&db)
         .await

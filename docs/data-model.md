@@ -357,6 +357,33 @@ Notes:
 - `kind` is a snake_case discriminator (`pending_races_dropped`, …) lifted out of the JSON `payload` for indexing. `payload` stores the kind-specific structured body — the serde-tagged `NotificationPayload` enum on the Rust side. JSON-as-TEXT follows [ADR-0028](./decisions/0028-timestamp-storage-as-iso8601-text.md)'s same-shape rule; the DB never queries inside it.
 - Every notification INSERT runs in the same transaction as the triggering write (ADR-0038 § Atomicity) — no worker, no queue. The pending-drops consumer writes one row per affected user inside the session-close transaction.
 
+### Refresh Tokens
+
+One row per issued refresh token (keyed by its `jti`), implementing refresh-token rotation with reuse detection per [ADR-0040](./decisions/0040-refresh-token-reuse-detection.md). Each login starts a *family*; each refresh mints a successor token in the same family and marks its predecessor used. Replaying a used token past the grace window revokes the whole family, forcing re-auth ([RFC 9700](https://datatracker.ietf.org/doc/rfc9700/) § 4.14).
+
+```
+refresh_tokens
+├── id: UUID (primary key — the token's `jti`)
+├── user_id: UUID (foreign key -> users, not null)
+├── family_id: UUID (not null — the chain of tokens descended from one login)
+├── used_at: TIMESTAMP (nullable — null means the live tip; set means rotated away from)
+├── expires_at: TIMESTAMP (not null — mirrors the refresh JWT's expiry)
+└── created_at: TIMESTAMP (not null)
+```
+
+Constraints:
+- Foreign key on `user_id` with **ON DELETE CASCADE** — a deleted user's tokens go with them (no cross-user audit value, like `notifications`).
+- Index `idx_refresh_tokens_family` on `(family_id)` — backs revoke-the-whole-family (reuse) and reissue-from-tip (grace window).
+- Index `idx_refresh_tokens_user` on `(user_id)` — backs logout / password-change family clearing.
+
+Notes:
+- **`jti` makes every token byte-distinct.** Before ADR-0040 the refresh JWT carried no unique component, so two tokens minted in the same wall-clock second were byte-identical. The `jti` (which is also this table's PK) removes that — it's what the refresh path looks the presented token's row up by.
+- **`used_at` is the rotation state.** A live token (`used_at IS NULL`) is its family's current tip. Refreshing it stamps `used_at` and inserts a successor row in the same `family_id` (the rotation). Presenting a token whose `used_at` is already set is either a within-grace retry / race (reissue the live tip, no revocation) or — past the grace window — **reuse**, which deletes every row in the family. The grace window is `refresh_grace_seconds` (config, default 10s) and exists to absorb concurrent / retried refreshes without spuriously logging the user out.
+- **`refresh_token_version` (on `users`) is the orthogonal global revoke-all.** Family revocation kills one compromised chain; the version bump (logout / password change) kills every session at once. The refresh path checks both. Logout and password-change also delete the user's rows here — the matching state cleanup alongside the version bump.
+- **Families coexist independently.** Each login starts its own family, so a user's phone and laptop rotate on separate chains and reuse detected on one does not disturb the other.
+- **Pruned, not kept forever.** A background Tokio task (`prune_refresh_tokens`, hourly) deletes rows past `expires_at` — once a token's JWT has expired it's rejected at decode before its row is ever read, so the row carries no remaining reuse-detection value. (Contrast `notifications`, which are kept forever.)
+- Timestamp-bearing ⇒ **non-STRICT** table (the STRICT rule covers lookup tables only); UUIDs as TEXT ([ADR-0027](./decisions/0027-uuid-storage-as-text-in-sqlite.md)), timestamps as ISO-8601 TEXT ([ADR-0028](./decisions/0028-timestamp-storage-as-iso8601-text.md)).
+
 ### Head-to-Head Derivation
 
 Head-to-head records are derived from session data, not stored separately. A "win" is when two players both submitted non-DQ'd runs for the same `session_race_id` and one had a faster `track_time`. Ties (identical times) count as 0-0 — neither a win nor a loss.
@@ -414,3 +441,4 @@ Each session uses one ruleset that determines how tracks are selected. The rules
 - 2026-05-16 — ADR-0037 + ADR-0038. `session_race_participations` gains a nullable `dropped_at` column and the four-state per-(race, user) status enum (`unraced` / `raced` / `skipped` / `dropped`). Pending Race Tracking derivation simplified to four clauses — the per-race 1-hour timer and the `sessions.status` filter are gone; the session is the deadline. Session liveness note rewritten: the stale-session sweeper now uses a five-signal activity predicate, and closing a session drops its unresolved pending races + records notifications. Session Participants rejoin rule updated to "rejoin while the session is alive." New `notifications` table section added (ADR-0038 inbox). Issues [#51](https://github.com/brendanbyrne/beerio-kart/issues/51), [#58](https://github.com/brendanbyrne/beerio-kart/issues/58), [#164](https://github.com/brendanbyrne/beerio-kart/issues/164).
 - 2026-05-28 — § Drink Types: a drink's identity is now `(uppercased name, alcoholic)`, not name alone. The derived UUID hashes `"{uppercase(name)}\x1f{alcoholic}"`, the standalone `UNIQUE(name)` constraint became composite `UNIQUE(name, alcoholic)`, and the dedup note now distinguishes a same-`(name, alcoholic)` collision (returns existing) from the same name with the other flag (distinct drink). Companion to PR [#213](https://github.com/brendanbyrne/beerio-kart/pull/213) / Issue [#212](https://github.com/brendanbyrne/beerio-kart/issues/212). Review feedback from PR #213.
 - 2026-05-31 — Added a `### Naming Conventions` subsection (table/column/FK/PK snake_case rules), making this file the canonical home (#220/#223). The rules previously lived in `design.md` § Naming Conventions (now removed) and were duplicated in `backend/CLAUDE.md` § Naming (now a pointer here).
+- 2026-06-01 — New `### Refresh Tokens` table for refresh-token rotation with reuse detection ([ADR-0040](./decisions/0040-refresh-token-reuse-detection.md), Issue [#226](https://github.com/brendanbyrne/beerio-kart/issues/226)). Per-token state (`jti` PK, `family_id`, `used_at`) makes the single `users.refresh_token_version` integer no longer the only refresh-revocation primitive: version stays the global revoke-all, families add per-chain reuse detection. Pruned hourly, unlike the keep-forever `notifications`.
