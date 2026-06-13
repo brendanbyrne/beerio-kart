@@ -425,87 +425,83 @@ pub async fn refresh(
         return Err(Error::token_invalid("Refresh token has been revoked"));
     }
 
+    let now = Utc::now().naive_utc();
+    let grace = TimeDelta::seconds(state.config.refresh_grace_seconds);
+
     // ── Token-family rotation + reuse detection (ADR-0040) ──
-    // One transaction: the conditional `used_at` claim below is the atomicity
-    // primitive that lets exactly one of N concurrent refreshes rotate.
+    //
+    // The conditional `used_at` claim below is the atomicity primitive: of N
+    // concurrent refreshes presenting the same token, exactly one flips
+    // `used_at` (rows_affected == 1) and rotates; the losers match 0 rows and
+    // reissue the family's live successor instead of revoking on a false
+    // positive.
+    //
+    // It is deliberately the **first** statement in the transaction. SQLite
+    // then begins the txn by taking the write lock (the `BEGIN IMMEDIATE`
+    // shape), so a losing concurrent refresh *waits* on `busy_timeout` for the
+    // winner to commit and then re-evaluates `WHERE used_at IS NULL` against the
+    // committed state, cleanly matching 0 rows. The natural read-first order (a
+    // deferred read, then an upgrade to write) would instead take a read
+    // snapshot that the winner's commit invalidates, so the loser's write fails
+    // *immediately* with a `SQLITE_BUSY`-family error (busy_timeout does not
+    // retry a snapshot/upgrade conflict) — which would surface as a spurious
+    // 500 and log the user out. Measured: read-first errors on ~98% of losers,
+    // write-first on 0%. See ADR-0040.
     let txn = db_txn(state.db.begin()).await?;
 
+    let claim = db_query(
+        refresh_tokens::Entity::update_many()
+            .col_expr(refresh_tokens::Column::UsedAt, Expr::value(now))
+            .filter(refresh_tokens::Column::Id.eq(&claims.jti))
+            .filter(refresh_tokens::Column::UsedAt.is_null())
+            .exec(&txn),
+    )
+    .await?;
+
+    // With the write lock held, this read is authoritative: our own flip if we
+    // won the claim, or the winner's committed state if we lost it.
     let row = db_query(refresh_tokens::Entity::find_by_id(&claims.jti).one(&txn))
         .await?
         // Missing row = the family was revoked (rows deleted) or an unknown
         // `jti`. Either way the token is no longer usable.
         .ok_or_else(|| Error::token_invalid("Refresh token has been revoked"))?;
 
-    let now = Utc::now().naive_utc();
+    // Expiry guard (defensive — the JWT `exp` check above normally rejects
+    // first; a reissued token can briefly outlive its row). Returning here drops
+    // the txn, rolling back any `used_at` flip we just made on the dead row.
     if row.expires_at < now {
-        // Defensive: the JWT `exp` check above normally rejects first.
         return Err(Error::token_expired());
     }
 
-    let new_refresh = match row.used_at {
-        None => {
-            // Live tip. Atomically claim it — `WHERE used_at IS NULL` means only
-            // one of several concurrent refreshes flips it and rotates.
-            let claim = db_query(
-                refresh_tokens::Entity::update_many()
-                    .col_expr(refresh_tokens::Column::UsedAt, Expr::value(now))
-                    .filter(refresh_tokens::Column::Id.eq(&claims.jti))
-                    .filter(refresh_tokens::Column::UsedAt.is_null())
-                    .exec(&txn),
-            )
-            .await?;
-            if claim.rows_affected == 0 {
-                // Lost the race: another refresh already rotated this token.
-                // Hand back the family's live successor rather than revoke.
-                //
-                // Engine note: on the current SQLite this 0-rows branch is
-                // effectively the *Postgres* (READ COMMITTED) behavior, where
-                // the losing writer blocks then re-evaluates `WHERE used_at IS
-                // NULL` and matches 0 rows. On SQLite (WAL, deferred BEGIN) the
-                // loser's write instead hits a snapshot conflict and returns
-                // `SQLITE_BUSY_SNAPSHOT` immediately — busy_timeout does not
-                // apply — which surfaces as a 500. The single-winner guarantee
-                // (the conditional UPDATE) is unaffected; only the *graceful*
-                // loser path differs. On SQLite the real backstop for a racing
-                // refresh is the client's retry landing in the grace window
-                // above (it reads `used_at` set → reissue), plus the frontend
-                // single-flight that keeps a client from double-firing at all.
+    let new_refresh = if claim.rows_affected >= 1 {
+        // Won the claim: mint the successor in the same family.
+        mint_refresh_in_family(
+            &txn,
+            &user_id,
+            user.refresh_token_version,
+            &row.family_id,
+            &state.config,
+        )
+        .await?
+    } else {
+        // Didn't flip it, so `used_at` is already set — either a retry / racing
+        // refresh (within grace) or genuine reuse (past grace).
+        match row.used_at {
+            Some(used_at) if now.signed_duration_since(used_at) <= grace => {
+                // Within the grace window, or a lost rotation race: a retry or a
+                // racing refresh that read the row after it was marked used.
+                // Reissue the family's live successor rather than revoke.
                 reissue_from_family_tip(
                     &txn,
                     &user_id,
                     user.refresh_token_version,
                     &row.family_id,
                     now,
-                    &state.config,
-                )
-                .await?
-            } else {
-                // We won the claim: mint the successor in the same family.
-                mint_refresh_in_family(
-                    &txn,
-                    &user_id,
-                    user.refresh_token_version,
-                    &row.family_id,
                     &state.config,
                 )
                 .await?
             }
-        }
-        Some(used_at) => {
-            let grace = TimeDelta::seconds(state.config.refresh_grace_seconds);
-            if now.signed_duration_since(used_at) <= grace {
-                // Within the grace window: a retry or a racing refresh that read
-                // the row after it was marked used. Reissue from the live tip.
-                reissue_from_family_tip(
-                    &txn,
-                    &user_id,
-                    user.refresh_token_version,
-                    &row.family_id,
-                    now,
-                    &state.config,
-                )
-                .await?
-            } else {
+            Some(_) => {
                 // Genuine reuse: a token rotated away from, replayed past the
                 // grace window. Revoke the whole family and force re-auth.
                 db_query(
@@ -521,6 +517,12 @@ pub async fn refresh(
                 );
                 db_txn(txn.commit()).await?;
                 return Err(Error::token_reuse_detected());
+            }
+            None => {
+                // Unreachable while holding the write lock: a 0-row claim means
+                // `used_at` is non-null (an unused, unexpired row would have been
+                // claimed above). Defensive — treat as revoked/unknown.
+                return Err(Error::token_invalid("Refresh token has been revoked"));
             }
         }
     };
