@@ -4,14 +4,18 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Login } from './Login';
 
-// Login reads `login` from the auth context. Mock the hook so the test
-// exercises the form's behavior without a real AuthProvider or network.
-// `vi.hoisted` is required because `vi.mock` is hoisted above this file's
-// other statements — a plain `const login = vi.fn()` would not yet exist
-// when the mock factory runs.
-const { login } = vi.hoisted(() => ({ login: vi.fn() }));
+// Login reads `login` and `authNotice` from the auth context. Mock the hook so
+// the test exercises the form's behavior without a real AuthProvider or
+// network. `vi.hoisted` is required because `vi.mock` is hoisted above this
+// file's other statements — a plain `const login = vi.fn()` would not yet exist
+// when the mock factory runs. `authState` is a mutable holder so each test can
+// set the notice the context returns before rendering.
+const { login, authState } = vi.hoisted(() => ({
+  login: vi.fn(),
+  authState: { authNotice: null as string | null },
+}));
 vi.mock('../hooks/useAuth', () => ({
-  useAuth: () => ({ login }),
+  useAuth: () => ({ login, authNotice: authState.authNotice }),
 }));
 
 function renderLogin() {
@@ -27,6 +31,23 @@ function renderLogin() {
 describe('Login', () => {
   beforeEach(() => {
     login.mockReset();
+    authState.authNotice = null;
+  });
+
+  it('shows the security notice from the auth context when present', () => {
+    authState.authNotice =
+      'You were signed out for your security. Please log in again.';
+    renderLogin();
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /signed out for your security/i,
+    );
+  });
+
+  it('shows no notice when authNotice is null', () => {
+    renderLogin();
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('submits the entered username and password', async () => {
