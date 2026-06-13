@@ -36,3 +36,12 @@
 # GitHub Actions IP range gets silently dropped (Cloudflare anti-bot), so
 # lychee times out. Same CI-only-unreachable pattern as nx.dev/docs above.
 ^https?://tanstack\.com/
+
+# DataCamp tutorials: 403 anti-bot on unauthenticated traffic. Referenced
+# from docs/research/unit-test-audit.md.
+^https?://(www\.)?datacamp\.com/
+
+# fabiopereira.me (2010 TTDD blog post, docs/designs/archive): the host
+# answers lychee with 415 Unsupported Media Type rather than serving the
+# page to a bot; the link is live for human readers.
+^https?://(www\.)?fabiopereira\.me/
