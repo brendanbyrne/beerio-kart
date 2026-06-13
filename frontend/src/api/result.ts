@@ -37,6 +37,7 @@ export const API_ERROR_CODES = [
   'invalid_credentials',
   'token_expired',
   'token_invalid',
+  'token_reuse_detected',
   'forbidden',
   'admin_required',
   'not_found',

@@ -11,6 +11,7 @@ import {
   getAccessToken,
   setAccessToken,
   setOnAuthFailure,
+  type AuthFailureReason,
 } from '../api/client';
 import { parseApiError, parseBody } from '../api/result';
 import {
@@ -28,6 +29,10 @@ interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** A user-facing notice for the login screen after an involuntary sign-out
+   *  (e.g. "signed out for security" on reuse detection). `null` when there's
+   *  nothing to show. */
+  authNotice: string | null;
   login: (username: string, password: string) => Promise<string | null>;
   register: (username: string, password: string) => Promise<string | null>;
   changePassword: (
@@ -37,25 +42,43 @@ interface AuthContextValue {
   logout: () => Promise<void>;
 }
 
+/** Notice shown on the login screen after reuse detection forces a sign-out. */
+const SECURITY_LOGOUT_NOTICE =
+  'You were signed out for your security. Please log in again.';
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
 
-  // Kept as useCallback (a react.md § 7 carve-out): clearAuth is both a
-  // dependency of the mount effect below and registered into module scope
+  // Kept as useCallback (a react.md § 7 carve-out): clearAuth is a transitive
+  // dependency of the mount effect below and is registered into module scope
   // via setOnAuthFailure, so it must be referentially stable. exhaustive-deps
   // (a static rule that can't see the Compiler's memoization) enforces this,
   // and react.md § 6 forbids silencing it — so the explicit hook stays.
+  // Clears any stale notice so an ordinary logout doesn't carry a security
+  // message; an involuntary sign-out sets one *after* this via handleAuthFailure.
   const clearAuth = useCallback(() => {
     setAccessToken(null);
     setUser(null);
+    setAuthNotice(null);
   }, []);
+
+  // Invoked by the API client when a refresh terminally fails. `reuse` (theft,
+  // ADR-0040) carries a security notice; an ordinary expiry does not.
+  const handleAuthFailure = useCallback(
+    (reason: AuthFailureReason) => {
+      clearAuth();
+      if (reason === 'reuse') setAuthNotice(SECURITY_LOGOUT_NOTICE);
+    },
+    [clearAuth],
+  );
 
   // On mount: attempt silent refresh to restore session from the HttpOnly cookie.
   useEffect(() => {
-    setOnAuthFailure(clearAuth);
+    setOnAuthFailure(handleAuthFailure);
 
     async function silentRefresh() {
       try {
@@ -83,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     silentRefresh();
-  }, [clearAuth]);
+  }, [handleAuthFailure]);
 
   /** Returns an error message on failure, or null on success. */
   const login = async (username: string, password: string) => {
@@ -98,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await parseBody(AuthSessionSchema, res);
     setAccessToken(data.access_token);
     setUser(data.user);
+    setAuthNotice(null);
     return null;
   };
 
@@ -114,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await parseBody(AuthSessionSchema, res);
     setAccessToken(data.access_token);
     setUser(data.user);
+    setAuthNotice(null);
     return null;
   };
 
@@ -154,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: user !== null,
         isLoading,
+        authNotice,
         login,
         register,
         changePassword,

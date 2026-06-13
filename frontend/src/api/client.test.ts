@@ -1,7 +1,12 @@
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../mocks/server';
-import { apiFetch, setAccessToken, setOnAuthFailure } from './client';
+import {
+  apiFetch,
+  getAccessToken,
+  setAccessToken,
+  setOnAuthFailure,
+} from './client';
 
 // Verifies the access-token + 401-refresh behavior of `apiFetch`. The
 // user-visible promise: an expired access token is refreshed and the request
@@ -132,5 +137,119 @@ describe('apiFetch', () => {
 
     expect(res.status).toBe(401);
     expect(refreshCalls).toBe(0);
+  });
+
+  it('shares one in-flight refresh across concurrent 401s (single-flight)', async () => {
+    // Two requests racing with the same expired token must NOT each fire their
+    // own refresh — parallel refreshes would race the backend's token rotation
+    // and risk a false-positive reuse detection (ADR-0040). The shared refresh
+    // resolves once; both requests retry with the fresh token.
+    setAccessToken('expired');
+    let refreshCalls = 0;
+    server.use(
+      http.get('/api/v1/me', ({ request }) =>
+        request.headers.get('Authorization') === 'Bearer fresh'
+          ? HttpResponse.json({ ok: true })
+          : new HttpResponse(null, { status: 401 }),
+      ),
+      http.post('/api/v1/auth/refresh', async () => {
+        refreshCalls += 1;
+        // Hold the refresh open so the second caller joins the in-flight one.
+        await delay(10);
+        return HttpResponse.json({ access_token: 'fresh' });
+      }),
+    );
+
+    const [a, b] = await Promise.all([
+      apiFetch('/api/v1/me'),
+      apiFetch('/api/v1/me'),
+    ]);
+
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(refreshCalls).toBe(1);
+  });
+
+  it('keeps the session on a 5xx refresh (no spurious logout)', async () => {
+    // A server error during refresh is transient, not a verdict on the cookie.
+    // Evicting the user on a 5xx is an availability harm with no security
+    // benefit (the client logout revokes nothing server-side), so the session
+    // is kept and the original 401 surfaces for the caller to retry.
+    setAccessToken('expired');
+    const onFailure = vi.fn();
+    setOnAuthFailure(onFailure);
+    server.use(
+      http.get('/api/v1/me', () => new HttpResponse(null, { status: 401 })),
+      http.post(
+        '/api/v1/auth/refresh',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+
+    const res = await apiFetch('/api/v1/me');
+
+    expect(res.status).toBe(401);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBe('expired');
+  });
+
+  it('keeps the session on a network error during refresh', async () => {
+    setAccessToken('expired');
+    const onFailure = vi.fn();
+    setOnAuthFailure(onFailure);
+    server.use(
+      http.get('/api/v1/me', () => new HttpResponse(null, { status: 401 })),
+      http.post('/api/v1/auth/refresh', () => HttpResponse.error()),
+    );
+
+    const res = await apiFetch('/api/v1/me');
+
+    expect(res.status).toBe(401);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBe('expired');
+  });
+
+  it('signs out with reason "reuse" on token_reuse_detected', async () => {
+    setAccessToken('expired');
+    const onFailure = vi.fn();
+    setOnAuthFailure(onFailure);
+    server.use(
+      http.get('/api/v1/me', () => new HttpResponse(null, { status: 401 })),
+      http.post('/api/v1/auth/refresh', () =>
+        HttpResponse.json(
+          {
+            error: 'Refresh token reuse detected',
+            code: 'token_reuse_detected',
+          },
+          { status: 401 },
+        ),
+      ),
+    );
+
+    const res = await apiFetch('/api/v1/me');
+
+    expect(res.status).toBe(401);
+    expect(onFailure).toHaveBeenCalledWith('reuse');
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it('signs out with reason "expired" on an ordinary 401 refresh failure', async () => {
+    setAccessToken('expired');
+    const onFailure = vi.fn();
+    setOnAuthFailure(onFailure);
+    server.use(
+      http.get('/api/v1/me', () => new HttpResponse(null, { status: 401 })),
+      http.post('/api/v1/auth/refresh', () =>
+        HttpResponse.json(
+          { error: 'Refresh token has been revoked', code: 'token_invalid' },
+          { status: 401 },
+        ),
+      ),
+    );
+
+    await apiFetch('/api/v1/me');
+
+    expect(onFailure).toHaveBeenCalledWith('expired');
+    expect(getAccessToken()).toBeNull();
   });
 });

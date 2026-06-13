@@ -24,6 +24,20 @@ describe('parseApiError', () => {
     });
   });
 
+  it('maps token_reuse_detected to its ApiError code (ADR-0040)', async () => {
+    const res = new Response(
+      JSON.stringify({
+        error: 'Refresh token reuse detected',
+        code: 'token_reuse_detected',
+      }),
+      { status: 401 },
+    );
+    expect(await parseApiError(res)).toEqual({
+      code: 'token_reuse_detected',
+      message: 'Refresh token reuse detected',
+    });
+  });
+
   it('falls back to `unknown` for a code not in the registry', async () => {
     const res = new Response(
       JSON.stringify({ error: 'Something odd', code: 'brand_new_code' }),
