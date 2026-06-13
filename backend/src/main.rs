@@ -101,9 +101,10 @@ async fn main() -> anyhow::Result<()> {
         argon2_limit: Arc::new(Semaphore::new(ARGON2_MAX_CONCURRENT)),
     };
 
-    // Clone the DB connection for the background cleanup task before `state`
+    // Clone the DB connection for the background cleanup tasks before `state`
     // is moved into the router.
     let cleanup_db = state.db.clone();
+    let prune_db = state.db.clone();
 
     // Graceful-shutdown plumbing (tokio.md § 13). `cancel` is the propagation
     // signal — every long-lived background task selects on `cancel.cancelled()`
@@ -332,6 +333,36 @@ async fn main() -> anyhow::Result<()> {
                             Ok(0) => {}
                             Ok(n) => tracing::info!("Closed {n} stale session(s)"),
                             Err(_) => tracing::error!("Stale session cleanup failed"),
+                        }
+                    }
+                }
+            }
+        }
+    }));
+
+    // Spawn background task to prune expired refresh tokens (ADR-0040 § Row
+    // lifecycle). The `refresh_tokens` table gains a row per refresh; once a
+    // row's JWT has expired it's rejected at decode before its row is ever
+    // read, so expired rows carry no reuse-detection value and are pure DB
+    // hygiene. Runs hourly — there's no read path that depends on it.
+    //
+    // Shutdown-safe (tokio.md § 13): `prune_refresh_tokens` is a single DELETE;
+    // a future dropped before it runs simply means the next cycle prunes the
+    // same rows. No partial-write window.
+    tracker.spawn(shutdown::supervised("refresh-token prune task", {
+        let cancel = cancel.clone();
+        async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(3600));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => break,
+                    _ = tick.tick() => {
+                        match services::auth::prune_refresh_tokens(&prune_db).await {
+                            Ok(0) => {}
+                            Ok(n) => tracing::info!("Pruned {n} expired refresh token(s)"),
+                            Err(_) => tracing::error!("Refresh-token prune failed"),
                         }
                     }
                 }

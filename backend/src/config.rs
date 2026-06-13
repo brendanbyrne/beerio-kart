@@ -28,6 +28,13 @@ pub struct Config {
     /// Controls the `Secure` flag on the refresh cookie. Must be `false` for
     /// local `http://localhost` development, `true` in production behind HTTPS.
     pub cookie_secure: bool,
+    /// Grace window (seconds) for refresh-token reuse detection (ADR-0040). A
+    /// just-superseded token presented again within this window returns the
+    /// family's live successor instead of revoking the family — the server-side
+    /// backstop for concurrent / retried refreshes. Beyond it, a used token is
+    /// treated as theft. Stored as `i64` because `chrono::TimeDelta::seconds`
+    /// takes `i64`. Set to `0` in tests to assert reuse deterministically.
+    pub refresh_grace_seconds: i64,
 
     // Request-level limits applied via Tower middleware. All four are env-tunable
     // so they can be adjusted from Unraid without a redeploy. See `tokio.md` § 12.
@@ -90,6 +97,12 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(true);
 
+        // 10 s default per ADR-0040. `parse_positive_env` rejects 0 (→ default),
+        // which is the right production behavior — a zero grace would turn every
+        // concurrent / retried refresh into a spurious logout. Tests that need a
+        // zero grace construct `Config` directly rather than via env.
+        let refresh_grace_seconds = parse_positive_env("REFRESH_GRACE_SECONDS", 10);
+
         let request_timeout_seconds = parse_positive_env("REQUEST_TIMEOUT_SECONDS", 30);
         let request_concurrency_limit = parse_positive_env("REQUEST_CONCURRENCY_LIMIT", 100);
         let max_request_body_bytes = parse_positive_env("MAX_REQUEST_BODY_BYTES", 10 * 1024 * 1024);
@@ -101,6 +114,7 @@ impl Config {
             jwt_refresh_expiry_days,
             admin_user_id,
             cookie_secure,
+            refresh_grace_seconds,
             request_timeout_seconds,
             request_concurrency_limit,
             max_request_body_bytes,

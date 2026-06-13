@@ -3,21 +3,24 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
+use chrono::{NaiveDateTime, TimeDelta, Utc};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter,
-    Set,
+    ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, ConnectionTrait, EntityTrait,
+    IntoActiveModel, QueryFilter, QueryOrder, Set, TransactionTrait, sea_query::Expr,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     AppState,
+    config::Config,
     domain::{Password, PasswordHash, UserId, Username},
-    entities::users,
+    entities::{refresh_tokens, users},
     error::Error,
     extract::Json,
     middleware::auth::User,
     services::auth as auth_service,
-    timeout::db_query,
+    timeout::{db_query, db_txn},
 };
 
 // ── Request / Response types ────────────────────────────────────────
@@ -106,6 +109,79 @@ fn extract_refresh_cookie(headers: &HeaderMap) -> Option<String> {
         })
 }
 
+/// Mint a refresh token in the given family and persist its `refresh_tokens`
+/// row as the live tip (`used_at = NULL`). Generates a fresh `jti`, so the
+/// minted token is byte-distinct from every other (ADR-0040). The row's
+/// `expires_at` mirrors the JWT expiry so the prune sweep can drop it once the
+/// JWT is dead. Generic over the connection so it works on a plain handle
+/// (register / login / password-change start a new family) or inside the
+/// refresh transaction (a successor in an existing family).
+async fn mint_refresh_in_family<C: ConnectionTrait>(
+    conn: &C,
+    user_id: &UserId,
+    refresh_token_version: i32,
+    family_id: &str,
+    config: &Config,
+) -> Result<String, Error> {
+    let jti = Uuid::new_v4().to_string();
+    let expires_at = (Utc::now() + TimeDelta::days(config.jwt_refresh_expiry_days)).naive_utc();
+
+    // `created_at` is stamped by `refresh_tokens::ActiveModelBehavior`.
+    db_query(
+        refresh_tokens::ActiveModel {
+            id: Set(jti.clone()),
+            user_id: Set(user_id.into()),
+            family_id: Set(family_id.to_string()),
+            used_at: Set(None),
+            expires_at: Set(expires_at),
+            created_at: NotSet,
+        }
+        .insert(conn),
+    )
+    .await?;
+
+    Ok(auth_service::create_refresh_token(
+        user_id,
+        refresh_token_version,
+        family_id,
+        &jti,
+        config,
+    )?)
+}
+
+/// Re-mint a JWT for the family's current live tip, without rotating. Used when
+/// a refresh loses a concurrent race or arrives within the grace window: the
+/// successor already exists, so we hand back a token for it rather than
+/// revoking the family on a false-positive reuse. No live tip means the family
+/// was revoked — surfaced as `token_invalid`.
+async fn reissue_from_family_tip<C: ConnectionTrait>(
+    conn: &C,
+    user_id: &UserId,
+    refresh_token_version: i32,
+    family_id: &str,
+    now: NaiveDateTime,
+    config: &Config,
+) -> Result<String, Error> {
+    let tip = db_query(
+        refresh_tokens::Entity::find()
+            .filter(refresh_tokens::Column::FamilyId.eq(family_id))
+            .filter(refresh_tokens::Column::UsedAt.is_null())
+            .filter(refresh_tokens::Column::ExpiresAt.gt(now))
+            .order_by_desc(refresh_tokens::Column::CreatedAt)
+            .one(conn),
+    )
+    .await?
+    .ok_or_else(|| Error::token_invalid("Refresh token has been revoked"))?;
+
+    Ok(auth_service::create_refresh_token(
+        user_id,
+        refresh_token_version,
+        family_id,
+        &tip.id,
+        config,
+    )?)
+}
+
 // ── Handlers ────────────────────────────────────────────────────────
 
 /// POST /api/v1/auth/register
@@ -167,9 +243,11 @@ pub async fn register(
 
     db_query(new_user.insert(&state.db)).await?;
 
-    // Generate tokens
+    // Generate tokens. Registration starts a fresh token family (ADR-0040).
     let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;
-    let refresh_token = auth_service::create_refresh_token(&user_id, 0, &state.config)?;
+    let family_id = Uuid::new_v4().to_string();
+    let refresh_token =
+        mint_refresh_in_family(&state.db, &user_id, 0, &family_id, &state.config).await?;
     let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
     Ok((
@@ -248,11 +326,19 @@ pub async fn login(
     // (mirrors the PasswordHash / ImagePath from_db pattern).
     let stored_username = Username::from_db(user.username, "users.username")?;
 
-    // Generate tokens
+    // Generate tokens. Each login starts a new token family (ADR-0040), so a
+    // user's devices each get an independent family that rotates on its own.
     let access_token =
         auth_service::create_access_token(&user_id, &stored_username, &state.config)?;
-    let refresh_token =
-        auth_service::create_refresh_token(&user_id, user.refresh_token_version, &state.config)?;
+    let family_id = Uuid::new_v4().to_string();
+    let refresh_token = mint_refresh_in_family(
+        &state.db,
+        &user_id,
+        user.refresh_token_version,
+        &family_id,
+        &state.config,
+    )
+    .await?;
     let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
     Ok((
@@ -270,19 +356,25 @@ pub async fn login(
 /// POST /api/v1/auth/refresh
 ///
 /// Reads the refresh token from the `HttpOnly` cookie (NOT from the request body
-/// or Authorization header). If valid and the `refresh_token_version` matches
-/// the DB, returns a new access token and rotates the refresh cookie.
+/// or Authorization header), then rotates it with **reuse detection** (ADR-0040):
 ///
-/// "Rotation" means issuing a fresh refresh JWT with a fresh expiry on every
-/// successful refresh. This extends the session window without bumping the
-/// version (which would invalidate other devices).
+/// 1. Validate the JWT (signature + expiry) and the `refresh_token_version`
+///    (the global per-user revoke-all, bumped on logout / password change).
+/// 2. Look the token's row up by `jti`. A **live** row (`used_at IS NULL`) is
+///    rotated: it's marked used and a successor is minted in the same family.
+///    An **already-used** row presented past the grace window is **reuse** —
+///    the whole family is revoked and the call fails `token_reuse_detected`.
+/// 3. A used row *within* the grace window, or a lost rotation race, reissues
+///    the family's live successor instead of revoking — the backstop against
+///    spuriously logging out concurrent / retried refreshes.
 ///
 /// # Errors
 ///
-/// Returns `Unauthorized` if the refresh cookie is missing, the JWT fails
-/// validation, the token type is not `refresh`, the user no longer exists,
-/// or the token's `refresh_token_version` doesn't match the DB (revoked via
-/// logout or password change). `Internal` for token-issue or DB failures.
+/// Returns `Unauthorized` (`token_invalid` / `token_expired` /
+/// `token_reuse_detected`) if the cookie is missing, the JWT fails validation,
+/// the token type is wrong, the user is gone, the version doesn't match, the
+/// row is missing/expired, or reuse is detected. `Internal` / `Timeout` for
+/// token-issue or DB failures.
 #[tracing::instrument(skip_all, fields(user_id = tracing::field::Empty))]
 pub async fn refresh(
     State(state): State<AppState>,
@@ -322,27 +414,114 @@ pub async fn refresh(
     let user_id = UserId::from_db(&user.id)?;
     let username = Username::from_db(user.username, "users.username")?;
 
-    // Version mismatch means the token was revoked (logout or password change)
+    // Version mismatch means every token was revoked (logout or password change)
     if claims.refresh_token_version != user.refresh_token_version {
         return Err(Error::token_invalid("Refresh token has been revoked"));
     }
 
-    // Issue new tokens
+    // ── Token-family rotation + reuse detection (ADR-0040) ──
+    // One transaction: the conditional `used_at` claim below is the atomicity
+    // primitive that lets exactly one of N concurrent refreshes rotate.
+    let txn = db_txn(state.db.begin()).await?;
+
+    let row = db_query(refresh_tokens::Entity::find_by_id(&claims.jti).one(&txn))
+        .await?
+        // Missing row = the family was revoked (rows deleted) or an unknown
+        // `jti`. Either way the token is no longer usable.
+        .ok_or_else(|| Error::token_invalid("Refresh token has been revoked"))?;
+
+    let now = Utc::now().naive_utc();
+    if row.expires_at < now {
+        // Defensive: the JWT `exp` check above normally rejects first.
+        return Err(Error::token_expired());
+    }
+
+    let new_refresh = match row.used_at {
+        None => {
+            // Live tip. Atomically claim it — `WHERE used_at IS NULL` means only
+            // one of several concurrent refreshes flips it and rotates.
+            let claim = db_query(
+                refresh_tokens::Entity::update_many()
+                    .col_expr(refresh_tokens::Column::UsedAt, Expr::value(now))
+                    .filter(refresh_tokens::Column::Id.eq(&claims.jti))
+                    .filter(refresh_tokens::Column::UsedAt.is_null())
+                    .exec(&txn),
+            )
+            .await?;
+            if claim.rows_affected == 0 {
+                // Lost the race: another refresh already rotated this token.
+                // Hand back the family's live successor rather than revoke.
+                reissue_from_family_tip(
+                    &txn,
+                    &user_id,
+                    user.refresh_token_version,
+                    &row.family_id,
+                    now,
+                    &state.config,
+                )
+                .await?
+            } else {
+                // We won the claim: mint the successor in the same family.
+                mint_refresh_in_family(
+                    &txn,
+                    &user_id,
+                    user.refresh_token_version,
+                    &row.family_id,
+                    &state.config,
+                )
+                .await?
+            }
+        }
+        Some(used_at) => {
+            let grace = TimeDelta::seconds(state.config.refresh_grace_seconds);
+            if now.signed_duration_since(used_at) <= grace {
+                // Within the grace window: a retry or a racing refresh that read
+                // the row after it was marked used. Reissue from the live tip.
+                reissue_from_family_tip(
+                    &txn,
+                    &user_id,
+                    user.refresh_token_version,
+                    &row.family_id,
+                    now,
+                    &state.config,
+                )
+                .await?
+            } else {
+                // Genuine reuse: a token rotated away from, replayed past the
+                // grace window. Revoke the whole family and force re-auth.
+                db_query(
+                    refresh_tokens::Entity::delete_many()
+                        .filter(refresh_tokens::Column::FamilyId.eq(&row.family_id))
+                        .exec(&txn),
+                )
+                .await?;
+                tracing::warn!(
+                    user_id = %claims.sub,
+                    family_id = %row.family_id,
+                    "Refresh token reuse detected; revoking token family"
+                );
+                db_txn(txn.commit()).await?;
+                return Err(Error::token_reuse_detected());
+            }
+        }
+    };
+
+    // Mint the access token before committing so a (vanishingly unlikely) JWT
+    // failure rolls back the rotation rather than leaving a used token with no
+    // issued successor in the caller's hands.
     let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;
+    db_txn(txn.commit()).await?;
 
-    // Rotate: issue a fresh refresh token with same version but new expiry
-    let new_refresh =
-        auth_service::create_refresh_token(&user_id, user.refresh_token_version, &state.config)?;
     let resp_headers = make_refresh_headers(&new_refresh, &state.config)?;
-
     Ok((resp_headers, Json(RefreshResponse { access_token })))
 }
 
 /// POST /api/v1/auth/logout
 ///
-/// Requires authentication. Increments `refresh_token_version` in the database,
-/// which invalidates ALL refresh tokens for this user across all devices.
-/// Also clears the refresh cookie on the current browser.
+/// Requires authentication. Increments `refresh_token_version` in the database
+/// (the global revoke-all) AND deletes this user's `refresh_tokens` rows, so
+/// every family across all devices is invalidated. Also clears the refresh
+/// cookie on the current browser.
 ///
 /// # Errors
 ///
@@ -360,10 +539,21 @@ pub async fn logout(State(state): State<AppState>, user: User) -> Result<impl In
     // Increment version to invalidate all existing refresh tokens.
     // `updated_at` is bumped by `users::ActiveModelBehavior::before_save`.
     let new_version = db_user.refresh_token_version + 1;
+    let user_id_str = db_user.id.clone();
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.refresh_token_version = Set(new_version);
 
     db_query(active.update(&state.db)).await?;
+
+    // Clear this user's token families. The version bump already revokes every
+    // refresh token; deleting the rows is the matching state cleanup (ADR-0040)
+    // so reuse detection isn't tripped by a stale row after a fresh login.
+    db_query(
+        refresh_tokens::Entity::delete_many()
+            .filter(refresh_tokens::Column::UserId.eq(&user_id_str))
+            .exec(&state.db),
+    )
+    .await?;
 
     // Clear the refresh cookie
     let cookie = auth_service::clear_refresh_cookie(&state.config);
@@ -422,15 +612,28 @@ pub async fn change_password(
     let new_version = db_user.refresh_token_version + 1;
     let username = Username::from_db(db_user.username.clone(), "users.username")?;
     let user_id = UserId::from_db(&db_user.id)?;
+    let user_id_str = db_user.id.clone();
     let mut active: users::ActiveModel = db_user.into_active_model();
     active.password_hash = Set(new_hash.into_inner());
     active.refresh_token_version = Set(new_version);
 
     db_query(active.update(&state.db)).await?;
 
-    // Issue new tokens for the current session
+    // Clear every existing family (all other devices are now logged out), then
+    // start a fresh family for the current session below — so the new cookie
+    // we return isn't immediately deleted (ADR-0040).
+    db_query(
+        refresh_tokens::Entity::delete_many()
+            .filter(refresh_tokens::Column::UserId.eq(&user_id_str))
+            .exec(&state.db),
+    )
+    .await?;
+
+    // Issue new tokens for the current session (a new family at the bumped version).
     let access_token = auth_service::create_access_token(&user_id, &username, &state.config)?;
-    let refresh_token = auth_service::create_refresh_token(&user_id, new_version, &state.config)?;
+    let family_id = Uuid::new_v4().to_string();
+    let refresh_token =
+        mint_refresh_in_family(&state.db, &user_id, new_version, &family_id, &state.config).await?;
     let headers = make_refresh_headers(&refresh_token, &state.config)?;
 
     Ok((headers, Json(RefreshResponse { access_token })))

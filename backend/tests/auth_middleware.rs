@@ -38,6 +38,7 @@ fn make_config(admin_user_id: Option<UserId>) -> Arc<Config> {
         jwt_refresh_expiry_days: 7,
         admin_user_id,
         cookie_secure: false,
+        refresh_grace_seconds: 10,
         request_timeout_seconds: 30,
         request_concurrency_limit: 100,
         max_request_body_bytes: 10 * 1024 * 1024,
@@ -74,7 +75,10 @@ fn create_access_token(user_id: &UserId, username: &str) -> String {
 
 fn create_refresh_token(user_id: &UserId) -> String {
     let config = make_config(None);
-    beerio_kart::services::auth::create_refresh_token(user_id, 0, &config).unwrap()
+    let family_id = uuid::Uuid::new_v4().to_string();
+    let jti = uuid::Uuid::new_v4().to_string();
+    beerio_kart::services::auth::create_refresh_token(user_id, 0, &family_id, &jti, &config)
+        .unwrap()
 }
 
 // ── User extractor tests ────────────────────────────────────────

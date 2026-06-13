@@ -26,8 +26,8 @@ Uses established Rust crates — not rolling crypto from scratch. `argon2` for p
 ```
 POST   /auth/register              Create account (username, password), returns access token + sets refresh cookie
 POST   /auth/login                 Returns access token + sets refresh cookie
-POST   /auth/refresh               Exchange refresh cookie for new access token
-POST   /auth/logout                Clears refresh cookie, increments refresh_token_version
+POST   /auth/refresh               Rotate refresh cookie for a new access token (reuse detection — § 4)
+POST   /auth/logout                Clears refresh cookie, bumps refresh_token_version, clears token families
 PUT    /auth/password              Change own password (requires current password)
 ```
 
@@ -182,6 +182,18 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
 - **Why no `Authorization` token expiry header:** Some APIs return `X-Token-Expires-At`. Unnecessary here — the JWT itself has `exp`, and parsing the access token client-side is one line of base64 + JSON.
 - **Source:** ADR 0031 (refresh-token auth); <https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.4>
 
+#### Rotation with reuse detection (ADR-0040)
+
+- **Decision:** `POST /auth/refresh` rotates the refresh token with **reuse detection**, per [ADR-0040](./decisions/0040-refresh-token-reuse-detection.md) ([RFC 9700](https://datatracker.ietf.org/doc/rfc9700/) § 4.14). Each login starts a *token family*; each refresh mints a successor token (new `jti`) in that family and marks its predecessor used. Replaying an already-used token past a grace window is treated as theft: the whole family is revoked and the call returns `401 token_reuse_detected`. Server-side state lives in the `refresh_tokens` table ([`data-model.md`](./data-model.md) § Refresh Tokens).
+- **Why:** Plain re-issue can't tell a legitimate rotation from a stolen-token replay. Per-token state lets a stolen refresh token become unusable once the real client refreshes, and makes the replay detectable — the RFC 9700 property for this client class.
+- **Behavior by case (the response a client sees):**
+  - **Live token** → `200` with a new access token + a rotated refresh cookie (a different value every time — the `jti` makes tokens byte-distinct).
+  - **Used token, within the grace window** (`refresh_grace_seconds`, default 10s) → `200`, reissuing the family's current live successor. This is the backstop for concurrent / retried refreshes — they don't trip detection.
+  - **Used token, past the grace window** → `401 token_reuse_detected`; the family is revoked, so its current live token stops working too. The client must re-authenticate.
+  - **Revoked / unknown / expired** → `401 token_invalid` or `token_expired`, as before. The global `refresh_token_version` (bumped on logout / password change) still revokes every family at once.
+- **Frontend (deferred to the follow-up PR):** Make the silent-refresh interceptor **single-flight** — concurrent 401s queue behind one in-flight refresh so the app never fires parallel refreshes (the client-side half of the grace-window mitigation). Treat `token_reuse_detected` as a hard logout with a "signed out for security" message, distinct from an ordinary expiry re-login.
+- **Source:** [ADR-0040](./decisions/0040-refresh-token-reuse-detection.md); [RFC 9700](https://datatracker.ietf.org/doc/rfc9700/) § 4.14.
+
 ---
 
 ## 5. Idempotency keys
@@ -231,6 +243,7 @@ The list of stable `code` values returned in error responses. Add to this list w
 | 401 | `invalid_credentials` | Login failed. |
 | 401 | `token_expired` | Access token expired (frontend should refresh). |
 | 401 | `token_invalid` | Token malformed or signature mismatch. |
+| 401 | `token_reuse_detected` | A rotated (already-used) refresh token was replayed past the grace window; its family is revoked. Frontend shows "signed out for security" (§ 4, ADR-0040). |
 | 403 | `forbidden` | Authenticated but not authorized for this action. |
 | 403 | `admin_required` | Endpoint requires admin. |
 | 404 | `not_found` | Generic "resource doesn't exist." |
@@ -278,3 +291,4 @@ The list of stable `code` values returned in error responses. Add to this list w
 - 2026-05-21 — Deleted § 2 "API client generation" (an aspirational `utoipa` + `openapi-fetch` plan from the 2026-05-02 initial draft, never implemented; the actual frontend is hand-rolled per-endpoint with Zod schemas at the boundary, per [`coding-standards/typescript.md`](./coding-standards/typescript.md) § 8 and PR-B2 / Issue [#191](https://github.com/brendanbyrne/beerio-kart/issues/191)). Renumbered the remaining sections: previous §§ 3–11 are now §§ 2–10 (Error response contract through Document history). The decision now lives in [ADR-0039](./decisions/0039-api-client-generation.md), which captures both the current hand-rolled state and the at-threshold codegen path (`schemars` + [`json-schema-to-zod`](https://www.npmjs.com/package/json-schema-to-zod) + brand-mint overlay). Cross-references swept across `design.md`, `coding-standards/typescript.md`, `research/rust-to-ts-codegen.md`, `decisions/0036-error-code-rollout.md`, `decisions/0037-pending-races-dropped-on-session-close.md`, `designs/2026-05-16-frontend-compliance-plan.md`, `backend/CLAUDE.md`, and `frontend/CLAUDE.md`. Code-file and `.claude/skills/` cross-references handed off to Claude Code via `.agents/handoffs/claude-code.md` (Cowork's sandbox blocks `.claude/` writes and is a docs-only assistant for `.rs`/`.ts` files).
 - 2026-05-27 — § 1.4 drink-type identity changed from name-only to `(name, alcoholic)`. The deterministic UUID now derives from both fields, so the alcoholic and non-alcoholic forms of the same name are distinct drinks instead of colliding (the old name-only key silently returned the existing row and discarded the submitted flag). Dedup on a matching `(name, alcoholic)` pair still returns the existing row with 200; case-insensitive name matching preserved. Backend change in Issue [#212](https://github.com/brendanbyrne/beerio-kart/issues/212), surfaced during PR-E1 ([#211](https://github.com/brendanbyrne/beerio-kart/pull/211)) smoke testing.
 - 2026-05-31 — § 9 CORS: repointed the `design.md` reference from § Tech Stack to § Architecture, following the design.md slim-down (#220/#223) that replaced the Tech Stack table with § Architecture.
+- 2026-06-01 — § 4 gained a "Rotation with reuse detection (ADR-0040)" sub-section and § 7 gained the `401 token_reuse_detected` code; § 1.1 refresh/logout one-liners updated. Refresh now rotates with per-token reuse detection (token families + `jti`) per [ADR-0040](./decisions/0040-refresh-token-reuse-detection.md) / Issue [#226](https://github.com/brendanbyrne/beerio-kart/issues/226); the single-flight client + reuse-message handling are deferred to the follow-up frontend PR.

@@ -28,6 +28,7 @@ fn test_config() -> Arc<Config> {
         jwt_refresh_expiry_days: 7,
         admin_user_id: None,
         cookie_secure: false,
+        refresh_grace_seconds: 10,
         request_timeout_seconds: 30,
         request_concurrency_limit: 100,
         max_request_body_bytes: 10 * 1024 * 1024,

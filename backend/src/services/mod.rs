@@ -1,4 +1,5 @@
-/// Authentication primitives: password hashing/verification, JWT issuance.
+/// Authentication primitives: password hashing/verification, JWT issuance, and
+/// refresh-token-store hygiene (expired-row pruning).
 pub mod auth;
 /// Cross-service helpers (lookup-or-404, etc.) that don't fit one resource.
 pub mod helpers;

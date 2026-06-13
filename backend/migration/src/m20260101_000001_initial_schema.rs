@@ -486,6 +486,76 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
+        // ---- Refresh tokens (ADR-0040) ----
+        //
+        // One row per issued refresh token, keyed by its `jti`. Implements
+        // refresh-token rotation with reuse detection (RFC 9700 § 4.14): each
+        // login starts a `family_id`; each refresh mints a successor row in the
+        // same family and stamps its predecessor's `used_at`. Presenting a row
+        // whose `used_at` is already set (past the grace window) is reuse and
+        // revokes the whole family. `used_at IS NULL` marks the live tip.
+        //
+        // Timestamp-bearing ⇒ non-STRICT (the STRICT rule in design.md / ADR
+        // 0002 covers lookup tables only). ON DELETE CASCADE on user_id: a
+        // deleted user's tokens have no independent value (like notifications).
+        manager
+            .create_table(
+                Table::create()
+                    .table(RefreshTokens::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(RefreshTokens::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(RefreshTokens::UserId).text().not_null())
+                    .col(ColumnDef::new(RefreshTokens::FamilyId).text().not_null())
+                    .col(ColumnDef::new(RefreshTokens::UsedAt).date_time())
+                    .col(
+                        ColumnDef::new(RefreshTokens::ExpiresAt)
+                            .date_time()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(RefreshTokens::CreatedAt)
+                            .date_time()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(RefreshTokens::Table, RefreshTokens::UserId)
+                            .to(Users::Table, Users::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Backs revoke-the-whole-family (reuse detection) and reissue-from-tip
+        // (grace window), both of which filter on `family_id`.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_refresh_tokens_family")
+                    .table(RefreshTokens::Table)
+                    .col(RefreshTokens::FamilyId)
+                    .to_owned(),
+            )
+            .await?;
+
+        // Backs logout / password-change family clearing, which deletes every
+        // row for a user.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_refresh_tokens_user")
+                    .table(RefreshTokens::Table)
+                    .col(RefreshTokens::UserId)
+                    .to_owned(),
+            )
+            .await?;
+
         Ok(())
     }
 
@@ -493,6 +563,8 @@ impl MigrationTrait for Migration {
         // Drop in reverse FK dependency order so FKs don't block drops.
         let conn = manager.get_connection();
 
+        conn.execute_unprepared("DROP TABLE IF EXISTS refresh_tokens")
+            .await?;
         conn.execute_unprepared("DROP TABLE IF EXISTS notifications")
             .await?;
         conn.execute_unprepared("DROP TABLE IF EXISTS run_flags")
@@ -610,4 +682,15 @@ pub enum Users {
     RefreshTokenVersion,
     CreatedAt,
     UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+pub enum RefreshTokens {
+    Table,
+    Id,
+    UserId,
+    FamilyId,
+    UsedAt,
+    ExpiresAt,
+    CreatedAt,
 }
