@@ -64,3 +64,12 @@ jobs:
           files: lcov.info
           fail_ci_if_error: true
           flags: backend
+          # TEMPORARY workaround for codecov/codecov-action#1876: the uploader
+          # intermittently fails to import Codecov's GPG verification key
+          # ("gpg: Can't check signature: No public key"), failing the job even
+          # though coverage generated fine. This started ~2026-06-13 (the job
+          # passed on 06-12 with no change to our code or the action pin). Skip
+          # the CLI signature check to ride out the Codecov-side outage; the
+          # binary is still fetched over HTTPS from cli.codecov.io. REVERT this
+          # once the key-import failures stop.
+          skip_validation: true
