@@ -166,4 +166,4 @@ precedent of ADR [0035](0035-race-anchored-session-lifetime.md)).
   [0035](0035-race-anchored-session-lifetime.md) (sweeper precedent for pruning),
   [0036](0036-error-code-rollout.md) (error codes).
 - Reference: [RFC 9700](https://datatracker.ietf.org/doc/rfc9700/) § 4.14.
-- Implementing PRs: backend [#230](https://github.com/brendanbyrne/beerio-kart/pull/230) (table, `jti`/`family_id` claims, rotation + reuse detection, grace window, prune); frontend (single-flight refresh + `token_reuse_detected` handling) TBD. Issue [#226](https://github.com/brendanbyrne/beerio-kart/issues/226).
+- Implementing PRs: backend [#230](https://github.com/brendanbyrne/beerio-kart/pull/230) (table, `jti`/`family_id` claims, rotation + reuse detection, grace window, prune); frontend [#231](https://github.com/brendanbyrne/beerio-kart/pull/231) (single-flight refresh, transient-vs-terminal response handling so a 5xx no longer logs out, `token_reuse_detected` → "signed out for security"). Both merged. Issue [#226](https://github.com/brendanbyrne/beerio-kart/issues/226).

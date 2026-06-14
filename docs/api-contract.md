@@ -191,7 +191,7 @@ PUT    /admin/flags/:id            Resolve a flag (admin only)
   - **Used token, within the grace window** (`refresh_grace_seconds`, default 10s) → `200`, reissuing the family's current live successor. This is the backstop for concurrent / retried refreshes — they don't trip detection.
   - **Used token, past the grace window** → `401 token_reuse_detected`; the family is revoked, so its current live token stops working too. The client must re-authenticate.
   - **Revoked / unknown / expired** → `401 token_invalid` or `token_expired`, as before. The global `refresh_token_version` (bumped on logout / password change) still revokes every family at once.
-- **Frontend (deferred to the follow-up PR):** Make the silent-refresh interceptor **single-flight** — concurrent 401s queue behind one in-flight refresh so the app never fires parallel refreshes (the client-side half of the grace-window mitigation). Treat `token_reuse_detected` as a hard logout with a "signed out for security" message, distinct from an ordinary expiry re-login.
+- **Frontend ([#231](https://github.com/brendanbyrne/beerio-kart/pull/231)):** The silent-refresh interceptor is **single-flight** — concurrent 401s share one in-flight refresh so the app never fires parallel refreshes (the client-side half of the grace-window mitigation). The refresh outcome is classified so only a `401` ends the session: `token_reuse_detected` → hard logout with a "signed out for security" message, an ordinary expiry → re-login, and a 5xx/network failure → transient (keep the session, retry later) rather than evicting the user on a server hiccup.
 - **Source:** [ADR-0040](./decisions/0040-refresh-token-reuse-detection.md); [RFC 9700](https://datatracker.ietf.org/doc/rfc9700/) § 4.14.
 
 ---
