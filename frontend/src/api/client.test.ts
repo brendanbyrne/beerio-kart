@@ -247,8 +247,9 @@ describe('apiFetch', () => {
       ),
     );
 
-    await apiFetch('/api/v1/me');
+    const res = await apiFetch('/api/v1/me');
 
+    expect(res.status).toBe(401);
     expect(onFailure).toHaveBeenCalledWith('expired');
     expect(getAccessToken()).toBeNull();
   });

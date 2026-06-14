@@ -103,8 +103,10 @@ async function refreshOnce(): Promise<RefreshOutcome> {
     }
   }
 
-  // A non-401 failure (5xx, proxy error) is a server problem, not a verdict on
-  // the cookie — keep the session and let a later refresh retry.
+  // Any non-401 (5xx, 4xx, proxy error) is treated as transient: a server
+  // problem or an otherwise-unexpected status is not a verdict on the cookie,
+  // so keep the session and let a later refresh retry. Only a 401 — the
+  // contract's cookie-rejection signal — ends the session.
   if (res.status !== 401) return 'transient';
 
   // 401: the refresh cookie itself was rejected. Reuse detection (theft) gets a

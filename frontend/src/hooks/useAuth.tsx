@@ -80,6 +80,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setOnAuthFailure(handleAuthFailure);
 
+    // This mount refresh deliberately uses a raw fetch, NOT the single-flight
+    // `tryRefresh` in client.ts: at mount `accessToken` is null so `apiFetch`
+    // never fires a competing refresh, and only this path decodes the JWT to
+    // restore the user. Under React StrictMode the effect double-invokes,
+    // firing two parallel mount refreshes — outside the single-flight guard —
+    // but the backend's ~10s grace window (ADR-0040) returns the existing
+    // successor instead of false-positive-revoking, so it's safe. Reconsider if
+    // a token can ever be set before mount.
     async function silentRefresh() {
       try {
         const res = await fetch('/api/v1/auth/refresh', { method: 'POST' });
