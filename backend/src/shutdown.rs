@@ -169,7 +169,7 @@ mod tests {
         let tracker = TaskTracker::new();
         // Task that ignores cancellation and outlives the budget.
         let handle = tracker.spawn(async move {
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_mins(1)).await;
         });
         tracker.close();
 

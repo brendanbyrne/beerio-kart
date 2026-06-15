@@ -42,7 +42,7 @@ pub async fn connect(url: &str) -> Result<DatabaseConnection, DbErr> {
         .max_connections(5)
         .min_connections(1)
         .acquire_timeout(Duration::from_secs(5))
-        .idle_timeout(Some(Duration::from_secs(60)))
+        .idle_timeout(Some(Duration::from_mins(1)))
         .connect_with(sqlx_opts)
         .await
         .map_err(|e| DbErr::Conn(RuntimeErr::SqlxError(e)))?;

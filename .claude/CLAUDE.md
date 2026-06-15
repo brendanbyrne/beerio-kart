@@ -53,7 +53,6 @@ The full operational guide — the two environments and their constraints, the G
 
 **Load-bearing git rules** (canonical detail in `project-workflow.md` § PR conventions → Review and merge):
 
-- **Never push directly to `main`.** All code changes require a PR.
+- **Never push directly to `main`.** All changes — code *and* documentation — go through a PR. (The earlier docs-only direct-to-`main` carve-out was retired in Issue #195; once the branch-protection ruleset is applied, GitHub enforces this. See [`docs/branch-protection.md`](../docs/branch-protection.md).)
 - **Never merge your own PR.** Only Brendan merges.
-- Documentation-only changes (CLAUDE.md files, `docs/` content) can be committed to `main` directly — no code review needed.
 - Claude Code **pushes** after making changes so the remote stays current; both assistants **check `git status` before starting**, since the shared checkout may carry the other's uncommitted work.
