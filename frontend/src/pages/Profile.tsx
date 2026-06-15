@@ -102,7 +102,7 @@ export function Profile() {
 
   async function handleLogout() {
     await logout();
-    navigate('/login');
+    void navigate('/login');
   }
 
   // Rendered in every branch (loading / edit modes / default) so the tab title
@@ -125,7 +125,9 @@ export function Profile() {
         {pageTitle}
         <div className="px-4 pt-4 pb-2 flex items-center">
           <button
-            onClick={() => setEditMode(null)}
+            onClick={() => {
+              setEditMode(null);
+            }}
             className="text-brand-primary text-sm font-medium"
           >
             &larr; Back
@@ -147,7 +149,9 @@ export function Profile() {
               initialBodyId={profile.preferred_body_id}
               initialWheelId={profile.preferred_wheel_id}
               initialGliderId={profile.preferred_glider_id}
-              onComplete={handleSaveRaceSetup}
+              onComplete={(setup) => {
+                void handleSaveRaceSetup(setup);
+              }}
               submitLabel="Save Setup"
             />
           )}
@@ -162,7 +166,9 @@ export function Profile() {
         {pageTitle}
         <div className="px-4 pt-4 pb-2 flex items-center">
           <button
-            onClick={() => setEditMode(null)}
+            onClick={() => {
+              setEditMode(null);
+            }}
             className="text-brand-primary text-sm font-medium"
           >
             &larr; Back
@@ -181,7 +187,9 @@ export function Profile() {
           ) : (
             <DrinkTypeSelector
               selectedId={profile.preferred_drink_type?.id ?? null}
-              onSelect={handleSaveDrinkType}
+              onSelect={(dt) => {
+                void handleSaveDrinkType(dt);
+              }}
             />
           )}
         </div>
@@ -204,7 +212,9 @@ export function Profile() {
       <div className="px-4 pt-4 space-y-3">
         {/* Race Setup Card */}
         <button
-          onClick={() => setEditMode('race-setup')}
+          onClick={() => {
+            setEditMode('race-setup');
+          }}
           className="w-full bg-white rounded-xl border border-gray-200 p-4 text-left"
         >
           <div className="flex items-center justify-between mb-2">
@@ -240,7 +250,9 @@ export function Profile() {
 
         {/* Drink Preference Card */}
         <button
-          onClick={() => setEditMode('drink-type')}
+          onClick={() => {
+            setEditMode('drink-type');
+          }}
           className="w-full bg-white rounded-xl border border-gray-200 p-4 text-left"
         >
           <div className="flex items-center justify-between mb-1">
@@ -278,7 +290,9 @@ export function Profile() {
             <PasswordChangeForm onDone={closePasswordForm} />
           ) : (
             <button
-              onClick={() => setEditMode('password')}
+              onClick={() => {
+                setEditMode('password');
+              }}
               className="w-full flex items-center justify-between"
             >
               <h3 className="text-sm font-semibold text-gray-700">Password</h3>
@@ -291,7 +305,9 @@ export function Profile() {
 
         {/* Logout */}
         <button
-          onClick={handleLogout}
+          onClick={() => {
+            void handleLogout();
+          }}
           className="w-full py-3 text-sm font-semibold text-danger bg-white rounded-xl border border-gray-200 hover:bg-red-50 transition-colors"
         >
           Log Out

@@ -29,7 +29,7 @@ export function Login() {
       }
       const err = await login(parsed.data.username, parsed.data.password);
       if (err) return { error: err };
-      navigate('/');
+      void navigate('/');
       return { error: null };
     },
     INITIAL,

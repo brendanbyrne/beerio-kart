@@ -8,7 +8,7 @@ import {
 } from '../hooks/useGameData';
 import type { SimpleItem } from '../api/types';
 
-interface RaceSetupPickerProps {
+type RaceSetupPickerProps = {
   initialCharacterId?: number | null;
   initialBodyId?: number | null;
   initialWheelId?: number | null;
@@ -21,7 +21,7 @@ interface RaceSetupPickerProps {
   }) => void;
   onSkip?: () => void;
   submitLabel?: string;
-}
+};
 
 type Step = 'character' | 'body' | 'wheel' | 'glider';
 const STEPS: Step[] = ['character', 'body', 'wheel', 'glider'];
@@ -47,14 +47,10 @@ export function RaceSetupPicker({
   const { items: gliders, loading: loadingGliders } = useGliders();
 
   const [step, setStep] = useState<Step>('character');
-  const [characterId, setCharacterId] = useState<number | null>(
-    initialCharacterId ?? null,
-  );
-  const [bodyId, setBodyId] = useState<number | null>(initialBodyId ?? null);
-  const [wheelId, setWheelId] = useState<number | null>(initialWheelId ?? null);
-  const [gliderId, setGliderId] = useState<number | null>(
-    initialGliderId ?? null,
-  );
+  const [characterId, setCharacterId] = useState(initialCharacterId ?? null);
+  const [bodyId, setBodyId] = useState(initialBodyId ?? null);
+  const [wheelId, setWheelId] = useState(initialWheelId ?? null);
+  const [gliderId, setGliderId] = useState(initialGliderId ?? null);
 
   const loading =
     loadingChars || loadingBodies || loadingWheels || loadingGliders;
@@ -98,7 +94,9 @@ export function RaceSetupPicker({
     // check both narrows the type and replaces the old bounds guard.
     const nextStep = STEPS[currentStepIndex + 1];
     if (nextStep) {
-      setTimeout(() => setStep(nextStep), 150);
+      setTimeout(() => {
+        setStep(nextStep);
+      }, 150);
     }
   }
 
@@ -127,7 +125,9 @@ export function RaceSetupPicker({
         {STEPS.map((s) => (
           <button
             key={s}
-            onClick={() => setStep(s)}
+            onClick={() => {
+              setStep(s);
+            }}
             className={clsx(
               'flex-1 min-h-touch text-center py-1.5 text-xs font-medium rounded-lg transition-colors',
               s === step
@@ -164,7 +164,9 @@ export function RaceSetupPicker({
           {items.map((item) => (
             <button
               key={item.id}
-              onClick={() => handleSelect(item.id)}
+              onClick={() => {
+                handleSelect(item.id);
+              }}
               className={clsx(
                 'flex flex-col items-center p-1.5 rounded-xl border-2 transition-all',
                 selected === item.id

@@ -14,12 +14,13 @@ coverage:
         flags: [frontend]
         target: auto
         threshold: 0.5%
-        # Informational (non-blocking) for now. PR-H2 (Issue #193) instrumented
-        # the frontend and un-ignored it below; most files have no tests yet,
-        # so a blocking project target would fail every PR. PR-H1 (Issue #185)
-        # flips this to `informational: false` once its test-coverage backfill
-        # lands. The frontend *patch* gate below blocks from PR-H2 on.
-        informational: true
+        # Blocking from PR-H1 (Issue #185) on. PR-H2 (Issue #193) instrumented
+        # and un-ignored the frontend while it was still largely untested, so it
+        # set this informational to avoid failing every PR; PR-H1's coverage
+        # backfill closed that gap, so frontend project-coverage regressions now
+        # block PRs the same way backend's do. The frontend *patch* gate below
+        # has blocked since PR-H2.
+        informational: false  # blocking status check
     patch:
       backend:
         flags: [backend]

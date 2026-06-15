@@ -24,20 +24,56 @@ vi.mock('../hooks/useAuth', () => ({
 }));
 
 vi.mock('../components/RaceSetupPicker', () => ({
-  RaceSetupPicker: ({ onComplete }: { onComplete: (s: unknown) => void }) => (
-    <button
-      onClick={() =>
-        onComplete({ characterId: 1, bodyId: 2, wheelId: 3, gliderId: 4 })
-      }
-    >
-      complete-setup
-    </button>
+  RaceSetupPicker: ({
+    onComplete,
+    onSkip,
+  }: {
+    onComplete: (s: unknown) => void;
+    onSkip?: () => void;
+  }) => (
+    <>
+      <button
+        onClick={() => {
+          onComplete({ characterId: 1, bodyId: 2, wheelId: 3, gliderId: 4 });
+        }}
+      >
+        complete-setup
+      </button>
+      <button
+        onClick={() => {
+          onSkip?.();
+        }}
+      >
+        skip-setup
+      </button>
+    </>
   ),
 }));
 
 vi.mock('../components/DrinkTypeSelector', () => ({
-  DrinkTypeSelector: ({ onSelect }: { onSelect: (d: unknown) => void }) => (
-    <button onClick={() => onSelect({ id: 'd1' })}>select-drink</button>
+  DrinkTypeSelector: ({
+    onSelect,
+    onSkip,
+  }: {
+    onSelect: (d: unknown) => void;
+    onSkip?: () => void;
+  }) => (
+    <>
+      <button
+        onClick={() => {
+          onSelect({ id: 'd1' });
+        }}
+      >
+        select-drink
+      </button>
+      <button
+        onClick={() => {
+          onSkip?.();
+        }}
+      >
+        skip-drink
+      </button>
+    </>
   ),
 }));
 
@@ -74,6 +110,38 @@ describe('Onboarding', () => {
 
     await user.click(screen.getByText('complete-setup'));
     await user.click(await screen.findByText('select-drink'));
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/');
+    });
+  });
+
+  it('advances to the drink phase when the user skips race setup', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <Onboarding />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByText('skip-setup'));
+
+    // Skipping race setup doesn't hit the API; it just advances the phase, so
+    // the drink picker (its stub) appears.
+    expect(await screen.findByText('select-drink')).toBeInTheDocument();
+  });
+
+  it('navigates home when the user skips the drink phase', async () => {
+    navigate.mockReset();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <Onboarding />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByText('skip-setup'));
+    await user.click(await screen.findByText('skip-drink'));
 
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith('/');

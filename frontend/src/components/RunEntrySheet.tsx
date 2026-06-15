@@ -20,29 +20,29 @@ import { DrinkTypeSelector } from './DrinkTypeSelector';
 import { RaceSetupPicker } from './RaceSetupPicker';
 import { useModalA11y } from '../hooks/useModalA11y';
 
-interface TimeFields {
+type TimeFields = {
   m: string;
   ss: string;
   mmm: string;
-}
+};
 
 const emptyTime: TimeFields = { m: '', ss: '', mmm: '' };
 
-interface RunEntrySheetProps {
+type RunEntrySheetProps = {
   race: SessionRaceInfo;
   onClose: () => void;
   onSubmitted: () => void;
-}
+};
 
 export function RunEntrySheet({
   race,
   onClose,
   onSubmitted,
 }: RunEntrySheetProps) {
-  const [totalTime, setTotalTime] = useState<TimeFields>(emptyTime);
-  const [lap1, setLap1] = useState<TimeFields>(emptyTime);
-  const [lap2, setLap2] = useState<TimeFields>(emptyTime);
-  const [lap3, setLap3] = useState<TimeFields>(emptyTime);
+  const [totalTime, setTotalTime] = useState(emptyTime);
+  const [lap1, setLap1] = useState(emptyTime);
+  const [lap2, setLap2] = useState(emptyTime);
+  const [lap3, setLap3] = useState(emptyTime);
 
   // Only the user's explicit picks live in state; the pre-fill defaults come
   // from the query below and are layered in via `picked ?? default` so we never
@@ -125,11 +125,11 @@ export function RunEntrySheet({
         : '';
 
   // Derive drink type object from ID + loaded data (or explicit user pick)
-  const resolvedDrinkType = drinkType
-    ? drinkType
-    : drinkTypeId && drinkTypes.length > 0
+  const resolvedDrinkType =
+    drinkType ??
+    (drinkTypeId && drinkTypes.length > 0
       ? (drinkTypes.find((dt) => dt.id === drinkTypeId) ?? null)
-      : null;
+      : null);
 
   // Derive setup summary from IDs + loaded game data
   const setupSummary = ((): string => {
@@ -180,19 +180,10 @@ export function RunEntrySheet({
   const showSumWarning = sumDiff !== null && sumDiff > 0;
 
   const handleSubmit = async () => {
-    if (
-      !canSubmit ||
-      parsedTotal === null ||
-      parsedLap1 === null ||
-      parsedLap2 === null ||
-      parsedLap3 === null ||
-      drinkTypeId === null ||
-      characterId === null ||
-      bodyId === null ||
-      wheelId === null ||
-      gliderId === null
-    )
-      return;
+    // `canSubmit` is an aliased-condition guard: it's only true when every
+    // time, drink, and setup value is non-null (see its definition above), so
+    // this one check narrows them all to non-null for the request body below.
+    if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -329,7 +320,7 @@ export function RunEntrySheet({
                 </div>
               </div>
             </div>
-            {showSumWarning && sumDiff !== null && (
+            {showSumWarning && (
               <p className="text-[10px] text-amber-600 mt-1.5 text-center">
                 Lap times don&apos;t add up to total (off by{' '}
                 {(sumDiff / 1000).toFixed(3)}s)
@@ -417,8 +408,12 @@ export function RunEntrySheet({
             <SlideToConfirm
               key={dq ? 'dq' : 'no-dq'}
               confirmed={dq}
-              onConfirm={() => setDq(true)}
-              onReset={() => setDq(false)}
+              onConfirm={() => {
+                setDq(true);
+              }}
+              onReset={() => {
+                setDq(false);
+              }}
             />
           </div>
 
@@ -427,7 +422,9 @@ export function RunEntrySheet({
           )}
 
           <button
-            onClick={handleSubmit}
+            onClick={() => {
+              void handleSubmit();
+            }}
             disabled={!canSubmit}
             className="w-full py-4 bg-brand-primary-strong text-white font-semibold rounded-2xl text-[15px] shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
           >
@@ -439,7 +436,9 @@ export function RunEntrySheet({
       {showDrinkPicker && (
         <SubPickerOverlay
           title="Select Drink"
-          onClose={() => setShowDrinkPicker(false)}
+          onClose={() => {
+            setShowDrinkPicker(false);
+          }}
           triggerRef={subPickerTriggerRef}
         >
           <DrinkTypeSelector
@@ -456,7 +455,9 @@ export function RunEntrySheet({
       {showSetupPicker && (
         <SubPickerOverlay
           title="Race Setup"
-          onClose={() => setShowSetupPicker(false)}
+          onClose={() => {
+            setShowSetupPicker(false);
+          }}
           triggerRef={subPickerTriggerRef}
         >
           <RaceSetupPicker
@@ -480,7 +481,7 @@ export function RunEntrySheet({
 
 // ── Sub-picker overlay (full-screen drink / race-setup picker) ──────
 
-interface SubPickerOverlayProps {
+type SubPickerOverlayProps = {
   /** Dialog accessible name and visible heading, e.g. "Select Drink". */
   title: string;
   /** Close the picker — wired to the Back button and the Escape handler. */
@@ -488,7 +489,7 @@ interface SubPickerOverlayProps {
   /** The sheet control that opened the picker; focus restores here on close. */
   triggerRef: RefObject<HTMLElement | null>;
   children: ReactNode;
-}
+};
 
 // A full-screen sub-view of the run sheet. useModalA11y gives it the sheet's own
 // modal a11y: focus seats into the picker on open, Escape and Back close it, the
@@ -532,7 +533,7 @@ function SubPickerOverlay({
 
 // ── Time Input Group (self-contained with auto-advance) ─────────────
 
-interface TimeInputGroupProps {
+type TimeInputGroupProps = {
   /** Accessible-name prefix for the three inputs, e.g. "Total time", "Lap 1". */
   groupLabel: string;
   fields: TimeFields;
@@ -542,7 +543,7 @@ interface TimeInputGroupProps {
   mmmRef?: React.RefObject<HTMLInputElement | null>;
   onComplete?: () => void;
   onBackspace?: () => void;
-}
+};
 
 function TimeInputGroup({
   groupLabel,
@@ -575,7 +576,7 @@ function TimeInputGroup({
       if (val.length === maxLen) {
         if (field === 'm') ssRef.current?.focus();
         else if (field === 'ss') resolvedMmmRef.current?.focus();
-        else if (field === 'mmm') onComplete?.();
+        else onComplete?.();
       }
     };
   };
@@ -583,7 +584,7 @@ function TimeInputGroup({
   const advanceFrom = (field: 'm' | 'ss' | 'mmm') => {
     if (field === 'm') ssRef.current?.focus();
     else if (field === 'ss') resolvedMmmRef.current?.focus();
-    else if (field === 'mmm') onComplete?.();
+    else onComplete?.();
   };
 
   const handleKeyDown = (field: 'm' | 'ss' | 'mmm', maxLen: number) => {
@@ -592,7 +593,7 @@ function TimeInputGroup({
         e.preventDefault();
         if (field === 'mmm') ssRef.current?.focus();
         else if (field === 'ss') resolvedMRef.current?.focus();
-        else if (field === 'm') onBackspace?.();
+        else onBackspace?.();
       } else if (
         /^[0-9]$/.test(e.key) &&
         e.currentTarget.value.length >= maxLen
@@ -649,11 +650,11 @@ function TimeInputGroup({
 
 // ── Slide to Confirm DQ ─────────────────────────────────────────────
 
-interface SlideToConfirmProps {
+type SlideToConfirmProps = {
   confirmed: boolean;
   onConfirm: () => void;
   onReset: () => void;
-}
+};
 
 function SlideToConfirm({
   confirmed,
@@ -673,7 +674,9 @@ function SlideToConfirm({
     };
     measure();
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+    };
   }, []);
 
   const handleMove = (clientX: number) => {
@@ -733,10 +736,14 @@ function SlideToConfirm({
         e.preventDefault();
         setDragging(true);
       }}
-      onMouseMove={(e) => handleMove(e.clientX)}
+      onMouseMove={(e) => {
+        handleMove(e.clientX);
+      }}
       onMouseUp={handleEnd}
       onMouseLeave={handleEnd}
-      onTouchStart={() => setDragging(true)}
+      onTouchStart={() => {
+        setDragging(true);
+      }}
       onTouchMove={(e) => {
         // touches[0] is Touch | undefined under noUncheckedIndexedAccess;
         // a touchmove always carries at least one touch, but narrow anyway.

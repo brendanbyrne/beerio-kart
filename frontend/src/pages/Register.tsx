@@ -28,7 +28,7 @@ export function Register() {
       }
       const err = await register(parsed.data.username, parsed.data.password);
       if (err) return { error: err };
-      navigate('/onboarding');
+      void navigate('/onboarding');
       return { error: null };
     },
     INITIAL,

@@ -8,11 +8,11 @@ import { DrinkTypeSchema } from '../api/types';
 import type { DrinkType } from '../api/types';
 import { SubmitButton } from './SubmitButton';
 
-interface DrinkTypeSelectorProps {
+type DrinkTypeSelectorProps = {
   selectedId?: string | null;
   onSelect: (drinkType: DrinkType) => void;
   onSkip?: () => void;
-}
+};
 
 export function DrinkTypeSelector({
   selectedId,
@@ -40,7 +40,9 @@ export function DrinkTypeSelector({
         {items.map((dt) => (
           <button
             key={dt.id}
-            onClick={() => onSelect(dt)}
+            onClick={() => {
+              onSelect(dt);
+            }}
             className={clsx(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all text-left',
               selectedId === dt.id
@@ -70,7 +72,9 @@ export function DrinkTypeSelector({
 
       {!showAddForm ? (
         <button
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setShowAddForm(true);
+          }}
           className="text-sm text-brand-primary font-medium min-h-touch py-2 hover:text-brand-primary-strong transition-colors"
         >
           + Not listed? Add new
@@ -82,7 +86,9 @@ export function DrinkTypeSelector({
             onSelect(created);
             setShowAddForm(false);
           }}
-          onCancel={() => setShowAddForm(false)}
+          onCancel={() => {
+            setShowAddForm(false);
+          }}
         />
       )}
 
@@ -169,7 +175,9 @@ function AddDrinkTypeForm({
         <label className="flex items-center gap-2 text-sm text-gray-600">
           <button
             type="button"
-            onClick={() => setAlcoholic(!alcoholic)}
+            onClick={() => {
+              setAlcoholic(!alcoholic);
+            }}
             className={clsx(
               'w-11 h-6 flex-shrink-0 rounded-full transition-colors relative',
               alcoholic ? 'bg-brand-primary' : 'bg-gray-300',

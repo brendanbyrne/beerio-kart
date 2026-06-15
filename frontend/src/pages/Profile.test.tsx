@@ -1,18 +1,35 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import type * as RouterDom from 'react-router-dom';
 import { Profile } from './Profile';
 
-// The password change form is what PR-E1 migrated; the other Profile cards
-// delegate to sub-components covered by their own tests. So this file
-// focuses on PasswordChangeForm: happy path (success message + auto-close)
-// and error path (backend error message shown, form stays open).
-
-const { changePassword, logout } = vi.hoisted(() => ({
-  changePassword: vi.fn(),
-  logout: vi.fn(),
+// Mutable mock state, reset per test. Lets one set of module-level mocks serve
+// both the all-null default profile (most tests) and a fully-populated one
+// (the preferences-rendering test) without re-declaring `vi.mock` per case.
+const state = vi.hoisted(() => ({
+  profile: null as Record<string, unknown> | null,
+  characters: [] as { id: number; name: string; image_path: string }[],
+  bodies: [] as { id: number; name: string; image_path: string }[],
+  wheels: [] as { id: number; name: string; image_path: string }[],
+  gliders: [] as { id: number; name: string; image_path: string }[],
 }));
+
+const { changePassword, logout, refresh, apiFetch, navigate } = vi.hoisted(
+  () => ({
+    changePassword: vi.fn(),
+    logout: vi.fn(),
+    refresh: vi.fn(),
+    apiFetch: vi.fn(),
+    navigate: vi.fn(),
+  }),
+);
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof RouterDom>('react-router-dom');
+  return { ...actual, useNavigate: () => navigate };
+});
 
 vi.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
@@ -23,31 +40,72 @@ vi.mock('../hooks/useAuth', () => ({
 }));
 
 vi.mock('../hooks/useUserProfile', () => ({
-  useUserProfile: () => ({
-    profile: {
-      id: 'u1',
-      username: 'alice',
-      preferred_character_id: null,
-      preferred_body_id: null,
-      preferred_wheel_id: null,
-      preferred_glider_id: null,
-      preferred_drink_type: null,
-      created_at: '2026-05-21T00:00:00.000Z',
-    },
-    refresh: vi.fn(),
-  }),
+  useUserProfile: () => ({ profile: state.profile, refresh }),
 }));
 
 vi.mock('../hooks/useGameData', () => ({
-  useCharacters: () => ({ items: [] }),
-  useBodies: () => ({ items: [] }),
-  useWheels: () => ({ items: [] }),
-  useGliders: () => ({ items: [] }),
+  useCharacters: () => ({ items: state.characters }),
+  useBodies: () => ({ items: state.bodies }),
+  useWheels: () => ({ items: state.wheels }),
+  useGliders: () => ({ items: state.gliders }),
 }));
+
+vi.mock('../api/client', () => ({ apiFetch }));
 
 vi.mock('../components/BottomNav', () => ({
   BottomNav: () => <nav data-testid="bottom-nav" />,
 }));
+
+// The two picker children are exercised by their own tests; here they stand in
+// as a single button that fires the callback Profile passes, so the edit-mode
+// save handlers can be driven without re-testing the pickers themselves.
+vi.mock('../components/RaceSetupPicker', () => ({
+  RaceSetupPicker: ({
+    onComplete,
+  }: {
+    onComplete: (s: {
+      characterId: number;
+      bodyId: number;
+      wheelId: number;
+      gliderId: number;
+    }) => void;
+  }) => (
+    <button
+      onClick={() => {
+        onComplete({ characterId: 1, bodyId: 2, wheelId: 3, gliderId: 4 });
+      }}
+    >
+      complete-setup
+    </button>
+  ),
+}));
+
+vi.mock('../components/DrinkTypeSelector', () => ({
+  DrinkTypeSelector: ({
+    onSelect,
+  }: {
+    onSelect: (d: { id: string; name: string; alcoholic: boolean }) => void;
+  }) => (
+    <button
+      onClick={() => {
+        onSelect({ id: 'd1', name: 'Cider', alcoholic: true });
+      }}
+    >
+      select-drink
+    </button>
+  ),
+}));
+
+const ALL_NULL_PROFILE = {
+  id: 'u1',
+  username: 'alice',
+  preferred_character_id: null,
+  preferred_body_id: null,
+  preferred_wheel_id: null,
+  preferred_glider_id: null,
+  preferred_drink_type: null,
+  created_at: '2026-05-21T00:00:00.000Z',
+};
 
 function renderProfile() {
   return render(
@@ -57,9 +115,23 @@ function renderProfile() {
   );
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.profile = { ...ALL_NULL_PROFILE };
+  state.characters = [];
+  state.bodies = [];
+  state.wheels = [];
+  state.gliders = [];
+});
+
+// The password block opts into fake timers; restore real ones after every test
+// so the later real-timer blocks (waitFor) aren't left on a frozen clock.
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('Profile password change form', () => {
   beforeEach(() => {
-    changePassword.mockReset();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -150,5 +222,98 @@ describe('Profile password change form', () => {
       await screen.findByText('New password must be at least 8 characters'),
     ).toBeInTheDocument();
     expect(changePassword).not.toHaveBeenCalled();
+  });
+});
+
+describe('Profile cards, edit modes, and logout', () => {
+  it('renders the saved character setup and drink preference when present', () => {
+    state.profile = {
+      ...ALL_NULL_PROFILE,
+      preferred_character_id: 1,
+      preferred_body_id: 2,
+      preferred_wheel_id: 3,
+      preferred_glider_id: 4,
+      preferred_drink_type: { id: 'd1', name: 'Cider', alcoholic: true },
+    };
+    state.characters = [{ id: 1, name: 'Mario', image_path: 'c.png' }];
+    state.bodies = [{ id: 2, name: 'Standard', image_path: 'b.png' }];
+    state.wheels = [{ id: 3, name: 'Slick', image_path: 'w.png' }];
+    state.gliders = [{ id: 4, name: 'Cloud', image_path: 'g.png' }];
+    renderProfile();
+
+    expect(screen.getByText('Mario')).toBeInTheDocument();
+    expect(screen.getByText('Cider')).toBeInTheDocument();
+    expect(screen.getByText('(Alcoholic)')).toBeInTheDocument();
+  });
+
+  it('shows "Not set yet" when no setup or drink preference is saved', () => {
+    renderProfile();
+    expect(screen.getAllByText('Not set yet')).toHaveLength(2);
+  });
+
+  it('opens the race-setup editor from its card and returns on Back', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /race setup/i }));
+    // The mocked picker stands in for the edit view.
+    expect(
+      screen.getByRole('button', { name: 'complete-setup' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(
+      screen.getByRole('button', { name: /log out/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('saves the race setup and returns to the profile view', async () => {
+    apiFetch.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /race setup/i }));
+    await user.click(screen.getByRole('button', { name: 'complete-setup' }));
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        '/api/v1/users/u1',
+        expect.objectContaining({ method: 'PUT' }),
+      );
+    });
+    expect(refresh).toHaveBeenCalled();
+    expect(
+      await screen.findByRole('button', { name: /log out/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('saves the drink preference from its editor', async () => {
+    apiFetch.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /preferred drink/i }));
+    await user.click(screen.getByRole('button', { name: 'select-drink' }));
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        '/api/v1/users/u1',
+        expect.objectContaining({ method: 'PUT' }),
+      );
+    });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('logs out and redirects to the login page', async () => {
+    logout.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /log out/i }));
+
+    await waitFor(() => {
+      expect(logout).toHaveBeenCalledTimes(1);
+    });
+    expect(navigate).toHaveBeenCalledWith('/login');
   });
 });

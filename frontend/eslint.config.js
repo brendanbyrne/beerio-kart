@@ -67,10 +67,11 @@ export default defineConfig([
         },
       ],
 
-      // --- Standards rules, started at `warn` (AC-named) ---
-      // consistent-type-definitions: ~25 `interface` declarations remain;
-      //   api/types.ts is converted in PR-B1, prop types in later PRs.
-      '@typescript-eslint/consistent-type-definitions': ['warn', 'type'],
+      // --- Standards rules (AC-named) ---
+      // consistent-type-definitions: every `interface` is now a `type`
+      //   (api/types.ts in PR-B1, the remaining prop/local declarations in
+      //   PR-H1). Flipped warn → error in PR-H1 (#185).
+      '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
       // import/no-default-export: all default exports converted in PR-D1.
       'import/no-default-export': 'error',
       // no-explicit-any / no-non-null-assertion: flipped to error in PR-F1
@@ -83,10 +84,10 @@ export default defineConfig([
       // consistent-type-specifier-style — named in typescript.md § 9 but
       // omitted from the PR-A1 AC; added per PR review. `prefer-top-level`
       // matches § 5's `import type { … }` example and consistent-type-
-      // imports' `separate-type-imports` fix style. Fires on 3 inline-type
-      // imports (useAuth.tsx, Login.tsx, Register.tsx); warn until later
-      // PRs touching those files convert them, then flips to error.
-      'import/consistent-type-specifier-style': ['warn', 'prefer-top-level'],
+      // imports' `separate-type-imports` fix style. The last inline-type
+      // imports (useAuth.tsx) were hoisted to top-level `import type` in
+      // PR-H1; flipped warn → error there.
+      'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
 
       // --- strictTypeChecked / stylisticTypeChecked rules that once fired on
       // pre-compliance code. Each flips back to `error` the moment its offender
@@ -102,15 +103,21 @@ export default defineConfig([
       '@typescript-eslint/no-deprecated': 'error',
       '@typescript-eslint/prefer-regexp-exec': 'error',
 
-      // Still at `warn`: offenders remain, owned by the frontend compliance-plan
-      // PR that touches each file. Flip to `error` as each reaches zero.
-      '@typescript-eslint/no-floating-promises': 'warn',
-      '@typescript-eslint/no-misused-promises': 'warn',
-      '@typescript-eslint/no-unnecessary-condition': 'warn',
-      '@typescript-eslint/no-confusing-void-expression': 'warn',
-      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
-      '@typescript-eslint/no-unnecessary-type-arguments': 'warn',
-      '@typescript-eslint/restrict-template-expressions': 'warn',
+      // Flipped warn → error in PR-H1 (#185), the final compliance pass that
+      // cleared the last offenders across the page/component files: floating and
+      // misused promises now carry `void` (or are wrapped in a void-returning
+      // handler), redundant conditions were removed (TS already narrows them via
+      // aliased-condition guards), void-returning arrow bodies were braced,
+      // a drink-resolution ternary became `??`, and the inferable type
+      // arguments and bare-number template expression were cleaned up. The
+      // ratchet only ever tightens.
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/no-confusing-void-expression': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/no-unnecessary-type-arguments': 'error',
+      '@typescript-eslint/restrict-template-expressions': 'error',
 
       // --- jsx-a11y rules restored to error by PR-G2 (the accessibility
       // sweep). All offenders are fixed: sub-44px touch targets bumped to

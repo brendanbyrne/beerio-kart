@@ -83,11 +83,11 @@ describe('DrinkTypeSelector add-drink flow', () => {
     await openAddForm(user);
     await user.click(screen.getByRole('button', { name: /^add$/i }));
 
-    await vi.waitFor(() =>
+    await vi.waitFor(() => {
       expect(onSelect).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'd2', name: 'Cider' }),
-      ),
-    );
+      );
+    });
   });
 
   it('catches an empty name with the Zod backstop if native validation is bypassed', async () => {
