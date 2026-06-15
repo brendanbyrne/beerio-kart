@@ -62,6 +62,19 @@ failing test is fixed and pushed. The ruleset's `required_status_checks` rule al
 sets `do_not_enforce_on_create: false` deliberately, so the checks are enforced
 even on the first push that creates a ref — there is no create-time gap.
 
+**Toolchain pinning.** The required `Backend clippy & fmt` check runs clippy on
+bare `cargo`, which resolves to the stable version pinned in
+[`rust-toolchain.toml`](../rust-toolchain.toml) (repo root) — the same file the
+local lefthook hook honors, so the two never disagree. This closes a real
+surprise-breakage hole: on an *unpinned* `stable`, the day a GitHub runner bumps
+the default rustc to a release with a new default lint, the required clippy check
+goes red on **every open PR** until the new violations are fixed — blocking all
+merges. (That exact drift surfaced when this CI first ran: CI's stable had
+`clippy::duration_suboptimal_units`, the local stable didn't.) Bump the pin
+deliberately and fix any new lints in the same PR. `fmt` runs on floating nightly
+(rustfmt.toml needs nightly-only options) — a smaller surface left to match
+lefthook.
+
 ## The always-run + internal-skip pattern
 
 The deadlock this avoids: GitHub waits for a required check's status; a workflow

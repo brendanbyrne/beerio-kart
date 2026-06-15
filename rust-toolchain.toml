@@ -1,0 +1,22 @@
+# Pins the stable Rust toolchain so local hooks and CI use the *same* rustc.
+#
+# Why (Issue #195): clippy/build/coverage all run on bare `cargo` — locally via
+# the lefthook pre-commit hook, in CI via the `Checks` (clippy) and `Backend`
+# (coverage) workflows. `cargo` honors this file (rustup walks up from any
+# subdir to find it), so both sides resolve to the exact version below. Without
+# the pin they drift: a newer CI stable added the `duration_suboptimal_units`
+# lint that the older local stable lacked, which would surprise-break the
+# (about-to-be-required) clippy check on every open PR the day a runner bumped
+# stable. Bump this line deliberately and fix any new lints in the same PR.
+#
+# `fmt` is NOT governed here: it runs on nightly (`cargo +nightly fmt`) because
+# rustfmt.toml uses nightly-only options (imports_granularity, group_imports),
+# and stays floating to match lefthook. That's a smaller, separately-addressable
+# surface than clippy.
+#
+# Components: clippy for the lint gate; llvm-tools-preview for `cargo llvm-cov`
+# coverage. They auto-install with the toolchain on first `cargo` use.
+[toolchain]
+channel = "1.96.0"
+components = ["clippy", "llvm-tools-preview"]
+profile = "minimal"
