@@ -143,10 +143,11 @@ describe('getRunDefaults', () => {
     );
     const result = await getRunDefaults();
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.source).toBe('previous_run');
-      expect(result.value.character_id).toBe(1);
-    }
+    // Narrow the discriminated Result with a throwing guard so the assertions
+    // sit at the top level, not inside an `if` (vitest/no-conditional-expect).
+    if (!result.ok) throw new Error('expected an ok Result');
+    expect(result.value.source).toBe('previous_run');
+    expect(result.value.character_id).toBe(1);
   });
 
   it('returns an error Result carrying the typed code when the request fails', async () => {
@@ -160,8 +161,7 @@ describe('getRunDefaults', () => {
     );
     const result = await getRunDefaults();
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('internal');
-    }
+    if (result.ok) throw new Error('expected an error Result');
+    expect(result.error.code).toBe('internal');
   });
 });

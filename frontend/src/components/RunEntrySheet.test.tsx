@@ -283,12 +283,15 @@ describe('RunEntrySheet', () => {
       { wrapper: Wrapper },
     );
 
-    const thumb = (await screen.findByText('»')).parentElement;
-    if (!thumb?.parentElement) throw new Error('slider track not found');
-    const track = thumb.parentElement;
+    // The track is the role="button" element carrying every drag handler; the
+    // thumb is aria-hidden and presentational (a press on it just bubbles here),
+    // so we drive the track directly via its accessible name — no node walking.
+    const track = await screen.findByRole('button', {
+      name: /disqualify this run/i,
+    });
 
-    // Grab the thumb, drag past the 252px threshold, and release.
-    fireEvent.mouseDown(thumb);
+    // Drag past the 252px threshold and release.
+    fireEvent.mouseDown(track);
     fireEvent.mouseMove(track, { clientX: 300 });
     fireEvent.mouseUp(track);
 
@@ -312,11 +315,14 @@ describe('RunEntrySheet', () => {
       { wrapper: Wrapper },
     );
 
-    const thumb = (await screen.findByText('»')).parentElement;
-    if (!thumb?.parentElement) throw new Error('slider track not found');
-    const track = thumb.parentElement;
+    // The track is the role="button" element carrying every drag handler; the
+    // thumb is aria-hidden and presentational (a press on it just bubbles here),
+    // so we drive the track directly via its accessible name — no node walking.
+    const track = await screen.findByRole('button', {
+      name: /disqualify this run/i,
+    });
 
-    fireEvent.touchStart(thumb);
+    fireEvent.touchStart(track);
     fireEvent.touchMove(track, { touches: [{ clientX: 300 }] });
     fireEvent.touchEnd(track);
 
@@ -338,12 +344,15 @@ describe('RunEntrySheet', () => {
       { wrapper: Wrapper },
     );
 
-    const thumb = (await screen.findByText('»')).parentElement;
-    if (!thumb?.parentElement) throw new Error('slider track not found');
-    const track = thumb.parentElement;
+    // The track is the role="button" element carrying every drag handler; the
+    // thumb is aria-hidden and presentational (a press on it just bubbles here),
+    // so we drive the track directly via its accessible name — no node walking.
+    const track = await screen.findByRole('button', {
+      name: /disqualify this run/i,
+    });
 
     // A short drag (well under the 252px threshold) releases without confirming.
-    fireEvent.mouseDown(thumb);
+    fireEvent.mouseDown(track);
     fireEvent.mouseMove(track, { clientX: 50 });
     fireEvent.mouseUp(track);
 
