@@ -95,16 +95,14 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
         run: bash .github/scripts/detect-changes.sh backend
 
-      # clippy runs on stable (matching backend.yml's coverage job); fmt runs on
+      # clippy runs on the stable toolchain pinned in rust-toolchain.toml (repo
+      # root): bare `cargo clippy` honors that file — and so does lefthook
+      # locally — so a new stable release can't surprise-break this required
+      # check (Issue #195; see docs/branch-protection.md). The pinned toolchain
+      # and its clippy component auto-install on first `cargo` use. fmt runs on
       # nightly because rustfmt.toml uses nightly-only options (imports_granularity,
-      # group_imports) — the same reason lefthook calls `cargo +nightly fmt`.
-      - if: steps.changes.outputs.run == 'true'
-        name: Install Rust stable (clippy)
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
-        with:
-          toolchain: stable
-          components: clippy
-
+      # group_imports) — the same reason lefthook calls `cargo +nightly fmt`;
+      # nightly stays floating to match lefthook.
       - if: steps.changes.outputs.run == 'true'
         name: Install Rust nightly (rustfmt)
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -120,10 +118,11 @@ jobs:
 
       - if: steps.changes.outputs.run == 'true'
         name: Clippy
+        # Bare `cargo clippy` → the pinned stable from rust-toolchain.toml.
         # --all-targets so test code is compiled and linted too (the
         # #![warn(clippy::assertions_on_result_states)] in lib.rs only bites
         # when #[cfg(test)] modules compile — #217). Mirrors lefthook.
-        run: cargo +stable clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - if: steps.changes.outputs.run == 'true'
         name: Format check

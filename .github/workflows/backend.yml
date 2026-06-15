@@ -38,12 +38,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
-        with:
-          toolchain: stable
-          components: llvm-tools-preview
-
+      # No explicit toolchain install: the stable toolchain is pinned in
+      # rust-toolchain.toml (repo root) and auto-installs on first `cargo` use,
+      # along with its llvm-tools-preview component (needed by cargo-llvm-cov).
+      # This keeps coverage on the same rustc as the clippy gate and lefthook
+      # (Issue #195; see docs/branch-protection.md).
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5 # v2.82.0
         with:
