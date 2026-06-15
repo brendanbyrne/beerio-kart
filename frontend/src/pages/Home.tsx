@@ -28,7 +28,7 @@ export function Home() {
 
   const handleStartButton = () => {
     if (mySessionId) {
-      navigate(`/session/${mySessionId}`);
+      void navigate(`/session/${mySessionId}`);
     } else {
       setShowCreate(true);
     }
@@ -44,7 +44,7 @@ export function Home() {
       // bottom-nav and Home list reflect it without waiting for the next poll.
       void queryClient.invalidateQueries({ queryKey: ['my-session'] });
       void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-      navigate(`/session/${session.id}`);
+      void navigate(`/session/${session.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session');
       setCreating(false);
@@ -91,7 +91,9 @@ export function Home() {
           <CreateSessionModal
             creating={creating}
             error={error}
-            onCreate={handleCreate}
+            onCreate={() => {
+              void handleCreate();
+            }}
             onClose={() => {
               setShowCreate(false);
               setError(null);
@@ -114,7 +116,9 @@ export function Home() {
               return (
                 <button
                   key={s.id}
-                  onClick={() => navigate(`/session/${s.id}`)}
+                  onClick={() => {
+                    void navigate(`/session/${s.id}`);
+                  }}
                   className={clsx(
                     'w-full rounded-xl border p-4 text-left active:bg-gray-50 transition-colors',
                     isMySession

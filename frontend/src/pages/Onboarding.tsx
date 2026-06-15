@@ -61,7 +61,7 @@ export function Onboarding() {
         body: JSON.stringify({ preferred_drink_type_id: dt.id }),
       });
       if (!res.ok) return { error: (await parseApiError(res)).message };
-      navigate('/');
+      void navigate('/');
       return { error: null };
     } catch {
       return { error: 'Network error — please try again' };
@@ -98,7 +98,9 @@ export function Onboarding() {
         {!saving && phase === 'race-setup' && (
           <RaceSetupPicker
             onComplete={saveRaceSetup}
-            onSkip={() => setPhase('drink-type')}
+            onSkip={() => {
+              setPhase('drink-type');
+            }}
             submitLabel="Next: Pick Drink"
           />
         )}
@@ -107,7 +109,9 @@ export function Onboarding() {
           <div className="px-4 flex-1">
             <DrinkTypeSelector
               onSelect={saveDrinkType}
-              onSkip={() => navigate('/')}
+              onSkip={() => {
+                void navigate('/');
+              }}
             />
           </div>
         )}

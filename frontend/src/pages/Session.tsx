@@ -64,7 +64,7 @@ function SessionView({ id }: { id: SessionId }) {
     try {
       await leaveSession(id);
       invalidateMembership();
-      navigate('/');
+      void navigate('/');
     } catch {
       setLeaving(false);
     }
@@ -144,7 +144,9 @@ function SessionView({ id }: { id: SessionId }) {
         <p className="text-3xl">{'\uD83C\uDFC1'}</p>
         <p className="text-base font-semibold text-gray-900">Session ended</p>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => {
+            void navigate('/');
+          }}
           className="px-6 py-2 bg-brand-primary text-white rounded-xl text-sm font-semibold"
         >
           Back to Home
@@ -172,7 +174,9 @@ function SessionView({ id }: { id: SessionId }) {
       {/* Zone 1 — Session Header (sticky top) */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
         <button
-          onClick={() => setHeaderExpanded(!headerExpanded)}
+          onClick={() => {
+            setHeaderExpanded(!headerExpanded);
+          }}
           className="w-full px-4 py-3 flex items-center justify-between"
         >
           <div className="flex items-center gap-2">
@@ -226,7 +230,9 @@ function SessionView({ id }: { id: SessionId }) {
                 src={`/${currentRace.image_path}`}
                 alt={currentRace.track_name}
                 className="w-full h-40 object-contain bg-gray-100"
-                onError={() => setTrackImageError(true)}
+                onError={() => {
+                  setTrackImageError(true);
+                }}
               />
             )}
             <div className="px-4 py-3">
@@ -266,7 +272,9 @@ function SessionView({ id }: { id: SessionId }) {
           <div className="space-y-2">
             {isHost && (
               <button
-                onClick={handleNextTrack}
+                onClick={() => {
+                  void handleNextTrack();
+                }}
                 disabled={pickingTrack}
                 className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-strong transition-colors"
               >
@@ -275,7 +283,9 @@ function SessionView({ id }: { id: SessionId }) {
             )}
             {currentRace && (
               <button
-                onClick={handleSkipTrack}
+                onClick={() => {
+                  void handleSkipTrack();
+                }}
                 disabled={skippingTrack}
                 className="w-full py-2.5 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-xl disabled:opacity-50 active:bg-gray-50 transition-colors"
               >
@@ -321,7 +331,9 @@ function SessionView({ id }: { id: SessionId }) {
               </div>
             ) : (
               <button
-                onClick={() => setShowRunEntry(true)}
+                onClick={() => {
+                  setShowRunEntry(true);
+                }}
                 className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl active:bg-brand-primary-strong transition-colors"
               >
                 Submit Time
@@ -382,7 +394,9 @@ function SessionView({ id }: { id: SessionId }) {
         {pastRaces.length > 0 && (
           <div>
             <button
-              onClick={() => setHistoryExpanded(!historyExpanded)}
+              onClick={() => {
+                setHistoryExpanded(!historyExpanded);
+              }}
               className="w-full flex items-center justify-between px-1 mb-2"
             >
               <div className="flex items-center gap-2">
@@ -432,7 +446,9 @@ function SessionView({ id }: { id: SessionId }) {
 
         {isParticipant ? (
           <button
-            onClick={handleLeave}
+            onClick={() => {
+              void handleLeave();
+            }}
             disabled={leaving}
             className="w-full py-3 text-sm font-medium text-danger bg-white border border-red-200 rounded-xl disabled:opacity-50 active:bg-red-50 transition-colors"
           >
@@ -441,7 +457,9 @@ function SessionView({ id }: { id: SessionId }) {
         ) : (
           <div className="space-y-2">
             <button
-              onClick={handleJoin}
+              onClick={() => {
+                void handleJoin();
+              }}
               disabled={joiningSession}
               className="w-full py-3 text-sm font-semibold text-white bg-brand-primary rounded-xl disabled:opacity-50 active:bg-brand-primary-strong transition-colors"
             >
@@ -460,7 +478,9 @@ function SessionView({ id }: { id: SessionId }) {
       {showRunEntry && currentRace && (
         <RunEntrySheet
           race={currentRace}
-          onClose={() => setShowRunEntry(false)}
+          onClose={() => {
+            setShowRunEntry(false);
+          }}
           onSubmitted={() => {
             // The submitted run isn't in the cached session detail yet;
             // invalidate so it shows up without waiting for the next poll.

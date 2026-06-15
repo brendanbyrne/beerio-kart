@@ -4,15 +4,15 @@ import {
   useContext,
   useEffect,
   useState,
-  type ReactNode,
 } from 'react';
+import type { ReactNode } from 'react';
 import {
   apiFetch,
   getAccessToken,
   setAccessToken,
   setOnAuthFailure,
-  type AuthFailureReason,
 } from '../api/client';
+import type { AuthFailureReason } from '../api/client';
 import { parseApiError, parseBody } from '../api/result';
 import {
   AccessTokenPayloadSchema,
@@ -20,12 +20,12 @@ import {
   TokenRefreshSchema,
 } from '../api/types';
 
-interface User {
+type User = {
   id: string;
   username: string;
-}
+};
 
-interface AuthContextValue {
+type AuthContextValue = {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -40,7 +40,7 @@ interface AuthContextValue {
     newPassword: string,
   ) => Promise<string | null>;
   logout: () => Promise<void>;
-}
+};
 
 /** Notice shown on the login screen after reuse detection forces a sign-out. */
 const SECURITY_LOGOUT_NOTICE =
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    silentRefresh();
+    void silentRefresh();
   }, [handleAuthFailure]);
 
   /** Returns an error message on failure, or null on success. */

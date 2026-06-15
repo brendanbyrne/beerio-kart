@@ -92,6 +92,80 @@ describe('Home', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['sessions'] });
   });
 
+  it('jumps straight to the current session when the user already has one', async () => {
+    // With an active membership the primary button becomes "Jump to Current
+    // Session" and navigates directly, skipping the create modal.
+    server.use(
+      http.get('/api/v1/users/u1', () => HttpResponse.json(profile)),
+      http.get('/api/v1/characters', () => HttpResponse.json([])),
+      http.get('/api/v1/sessions', () => HttpResponse.json([])),
+      http.get('/api/v1/sessions/mine', () =>
+        HttpResponse.json({ session_id: 's1' }),
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/session/:id" element={<SessionRouteProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await user.click(
+      await screen.findByRole('button', { name: /jump to current session/i }),
+    );
+    expect(await screen.findByText('session route: s1')).toBeInTheDocument();
+  });
+
+  it('navigates to a session picked from the active-sessions list', async () => {
+    server.use(
+      http.get('/api/v1/users/u1', () => HttpResponse.json(profile)),
+      http.get('/api/v1/characters', () => HttpResponse.json([])),
+      http.get('/api/v1/sessions', () =>
+        HttpResponse.json([
+          {
+            id: 's2',
+            host_username: 'bob',
+            participant_count: 2,
+            race_number: 3,
+            ruleset: 'random',
+          },
+        ]),
+      ),
+      http.get('/api/v1/sessions/mine', () =>
+        HttpResponse.json({ session_id: null }),
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/session/:id" element={<SessionRouteProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await user.click(
+      await screen.findByRole('button', { name: /bob's session/i }),
+    );
+    expect(await screen.findByText('session route: s2')).toBeInTheDocument();
+  });
+
   it('closes the create-session modal on Escape and restores focus to the trigger', async () => {
     // PR-G2 (Issue #184): the create-session modal is a real dialog — Escape
     // closes it and focus returns to the button that opened it (react.md § 10).

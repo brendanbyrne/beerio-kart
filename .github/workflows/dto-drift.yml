@@ -1,0 +1,54 @@
+name: DTO Drift
+
+# Cheap backend ↔ frontend contract-drift detection (PR-H1, Issue #185).
+#
+# Fails a PR that changes a backend DTO / wire-contract file without also
+# touching frontend/src/api/types.ts — the hand-maintained Zod mirror of the
+# backend's serialized request/response types (ADR-0039: no Rust→TS codegen
+# for MVP). False positives are acceptable: a backend change that does not
+# alter the wire shape clears the check with a one-line touch to types.ts.
+#
+# The `paths:` list below enumerates the backend files that define serialized
+# DTOs and the enums they reference; it MUST stay in sync with
+# DTO_PATHS_REGEX in .github/scripts/dto-drift-check.sh. When you add a new
+# DTO-bearing backend module, add it to BOTH. See
+# docs/coding-standards/typescript.md § 11.
+on:
+  pull_request:
+    paths:
+      - 'backend/src/routes/**'
+      - 'backend/src/domain/enums.rs'
+      - 'backend/src/services/sessions/types.rs'
+      - 'backend/src/services/sessions/detail.rs'
+      - 'backend/src/services/runs/read.rs'
+      - 'backend/src/services/users.rs'
+      - 'backend/src/services/notifications.rs'
+      - 'frontend/src/api/types.ts'
+      - '.github/workflows/dto-drift.yml'
+      - '.github/scripts/dto-drift-check.sh'
+
+concurrency:
+  group: dto-drift-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Backend DTO ↔ frontend types sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Full history so the merge base of the PR branch is reachable for
+          # the three-dot diff in the check script.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check DTO ↔ types.ts sync
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/dto-drift-check.sh
