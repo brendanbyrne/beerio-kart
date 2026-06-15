@@ -84,4 +84,20 @@ describe('RaceSetupPicker', () => {
       gliderId: 1,
     });
   });
+
+  it('jumps directly to a step when its indicator pill is clicked', async () => {
+    server.use(
+      http.get('/api/v1/characters', () => HttpResponse.json(characters)),
+      http.get('/api/v1/bodies', () => HttpResponse.json(bodies)),
+      http.get('/api/v1/wheels', () => HttpResponse.json(wheels)),
+      http.get('/api/v1/gliders', () => HttpResponse.json(gliders)),
+    );
+    const user = userEvent.setup();
+    render(<RaceSetupPicker onComplete={vi.fn()} />, { wrapper: Wrapper });
+
+    // The step starts on Character; clicking the Body pill jumps there without
+    // making a selection first.
+    await user.click(await screen.findByRole('button', { name: 'Body' }));
+    expect(await screen.findByText(/pick your body/i)).toBeInTheDocument();
+  });
 });
