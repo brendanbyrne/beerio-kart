@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 
 // Tab-order members inside a modal. Mirrors the set browsers treat as
 // sequentially focusable; `[tabindex="-1"]` is programmatically focusable but
@@ -29,10 +30,16 @@ const FOCUSABLE_SELECTOR = [
  *   alone) — used when the modal hands off to a full-screen sub-view that owns
  *   focus, e.g. RunEntrySheet's drink/setup pickers. Focus is still restored to
  *   the original trigger when the modal unmounts, regardless of `active`.
+ * @param restoreFocusRef element to restore focus to on unmount. Pass this when
+ *   the trigger can lose focus before the modal mounts — e.g. the parent marks
+ *   itself `inert` on the same render that opens this modal, which blurs the
+ *   focused trigger (and Safari never focuses a button on click). Defaults to
+ *   whatever held focus when the modal mounted.
  */
 export function useModalA11y<T extends HTMLElement = HTMLDivElement>(
   onClose: () => void,
   active = true,
+  restoreFocusRef?: RefObject<HTMLElement | null>,
 ) {
   const ref = useRef<T>(null);
   // Lets the keydown handler read the latest onClose without re-installing the
@@ -43,18 +50,26 @@ export function useModalA11y<T extends HTMLElement = HTMLDivElement>(
     onCloseRef.current = onClose;
   }, [onClose]);
 
-  // Capture the trigger on mount; restore focus to it on unmount. Runs once for
-  // the modal's whole lifetime (empty deps) so toggling `active` for a sub-view
-  // doesn't bounce focus back to the page.
+  // Capture the element to restore focus to on unmount. An explicit
+  // `restoreFocusRef` wins, because by the time this runs the trigger may
+  // already be blurred — a parent that flips to `inert` on open blurs it, and
+  // Safari never focuses a button on click. Otherwise fall back to whatever
+  // holds focus now. Runs once for the modal's whole lifetime so toggling
+  // `active` for a sub-view doesn't bounce focus back to the page.
   useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
+    const trigger =
+      restoreFocusRef?.current ??
+      (document.activeElement as HTMLElement | null);
     return () => {
       trigger?.focus();
     };
-  }, []);
+  }, [restoreFocusRef]);
 
   // Trap focus and handle Escape while active. Re-runs on `active` flips so a
-  // suspended trap resumes (and re-seats focus) when a sub-view closes.
+  // suspended trap resumes when a sub-view closes — but it re-seats focus only
+  // if focus has escaped the dialog. On resume the closing sub-view has already
+  // restored focus to the control that opened it (inside this dialog), and
+  // re-seating to the first focusable would steal it back.
   useEffect(() => {
     const node = ref.current;
     if (!active || !node) return;
@@ -62,13 +77,17 @@ export function useModalA11y<T extends HTMLElement = HTMLDivElement>(
     const getFocusable = () =>
       Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
 
-    // Seat focus inside the dialog on open: first focusable, else the container.
-    const initial = getFocusable()[0];
-    if (initial) {
-      initial.focus();
-    } else {
-      node.tabIndex = -1;
-      node.focus();
+    // Seat focus inside the dialog: first focusable, else the container. Skip
+    // when focus is already inside — on resume a sub-view just restored it, and
+    // on open the trigger lives outside the dialog so the seat still runs.
+    if (!node.contains(document.activeElement)) {
+      const initial = getFocusable()[0];
+      if (initial) {
+        initial.focus();
+      } else {
+        node.tabIndex = -1;
+        node.focus();
+      }
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
