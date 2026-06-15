@@ -109,7 +109,7 @@ mod tests {
         // `start_paused = true` lets the runtime auto-advance time when all
         // tasks are blocked on sleep, so the 2 s budget elapses instantly.
         let result: Result<(), Error> = db_query(async {
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_mins(1)).await;
             Ok::<(), DbErr>(())
         })
         .await;
@@ -122,7 +122,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn test_db_txn_returns_timeout_with_txn_budget_when_elapsed() {
         let result: Result<(), Error> = db_txn(async {
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_mins(1)).await;
             Ok::<(), DbErr>(())
         })
         .await;

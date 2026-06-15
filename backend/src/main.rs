@@ -157,7 +157,7 @@ async fn main() -> anyhow::Result<()> {
     tracker.spawn(shutdown::supervised("governor cache janitor", {
         let cancel = cancel.clone();
         async move {
-            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            let mut tick = tokio::time::interval(Duration::from_mins(1));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 tokio::select! {
@@ -322,7 +322,7 @@ async fn main() -> anyhow::Result<()> {
     tracker.spawn(shutdown::supervised("session cleanup task", {
         let cancel = cancel.clone();
         async move {
-            let mut tick = tokio::time::interval(Duration::from_secs(900));
+            let mut tick = tokio::time::interval(Duration::from_mins(15));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 tokio::select! {
@@ -352,7 +352,7 @@ async fn main() -> anyhow::Result<()> {
     tracker.spawn(shutdown::supervised("refresh-token prune task", {
         let cancel = cancel.clone();
         async move {
-            let mut tick = tokio::time::interval(Duration::from_secs(3600));
+            let mut tick = tokio::time::interval(Duration::from_hours(1));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 tokio::select! {
