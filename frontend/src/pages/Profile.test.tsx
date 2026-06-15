@@ -275,16 +275,47 @@ describe('Profile cards, edit modes, and logout', () => {
     await user.click(screen.getByRole('button', { name: /race setup/i }));
     await user.click(screen.getByRole('button', { name: 'complete-setup' }));
 
+    // Pin the request body, not just method — it's the only thing that
+    // distinguishes a race-setup save from a drink save to the same URL.
     await waitFor(() => {
       expect(apiFetch).toHaveBeenCalledWith(
         '/api/v1/users/u1',
-        expect.objectContaining({ method: 'PUT' }),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            preferred_character_id: 1,
+            preferred_body_id: 2,
+            preferred_wheel_id: 3,
+            preferred_glider_id: 4,
+          }),
+        }),
       );
     });
     expect(refresh).toHaveBeenCalled();
     expect(
       await screen.findByRole('button', { name: /log out/i }),
     ).toBeInTheDocument();
+  });
+
+  it('surfaces a save error and stays on the race-setup editor when the PUT fails', async () => {
+    apiFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () =>
+        Promise.resolve({ error: 'Server exploded', code: 'internal' }),
+    });
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /race setup/i }));
+    await user.click(screen.getByRole('button', { name: 'complete-setup' }));
+
+    // The backend error is surfaced and the editor stays open (refresh skipped).
+    expect(await screen.findByText('Server exploded')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'complete-setup' }),
+    ).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it('saves the drink preference from its editor', async () => {
@@ -298,10 +329,30 @@ describe('Profile cards, edit modes, and logout', () => {
     await waitFor(() => {
       expect(apiFetch).toHaveBeenCalledWith(
         '/api/v1/users/u1',
-        expect.objectContaining({ method: 'PUT' }),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ preferred_drink_type_id: 'd1' }),
+        }),
       );
     });
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it('surfaces a save error and stays on the drink editor when the PUT fails', async () => {
+    apiFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () =>
+        Promise.resolve({ error: 'Unknown drink type', code: 'validation' }),
+    });
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /preferred drink/i }));
+    await user.click(screen.getByRole('button', { name: 'select-drink' }));
+
+    expect(await screen.findByText('Unknown drink type')).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it('opens the drink editor from its card and returns on Back', async () => {

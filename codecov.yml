@@ -14,13 +14,15 @@ coverage:
         flags: [frontend]
         target: auto
         threshold: 0.5%
-        # Blocking from PR-H1 (Issue #185) on. PR-H2 (Issue #193) instrumented
-        # and un-ignored the frontend while it was still largely untested, so it
-        # set this informational to avoid failing every PR; PR-H1's coverage
-        # backfill closed that gap, so frontend project-coverage regressions now
-        # block PRs the same way backend's do. The frontend *patch* gate below
-        # has blocked since PR-H2.
-        informational: false  # blocking status check
+        # Reports a pass/fail status from PR-H1 (Issue #185) on (was
+        # informational). PR-H2 (Issue #193) instrumented and un-ignored the
+        # frontend while it was still largely untested, so it set this
+        # informational to avoid a red X on every PR; PR-H1's coverage backfill
+        # closed that gap. A project-coverage regression now shows X like
+        # backend's — though that only *blocks merge* once `main` has a branch-
+        # protection rule requiring these checks (none today). The frontend
+        # *patch* status below has reported since PR-H2.
+        informational: false  # pass/fail status check (not informational)
     patch:
       backend:
         flags: [backend]
