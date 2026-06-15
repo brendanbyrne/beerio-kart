@@ -513,8 +513,11 @@ function SubPickerOverlay({
       aria-labelledby={headingId}
       className="fixed inset-0 z-50 bg-white flex flex-col"
     >
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <button onClick={onClose} className="text-sm text-brand-primary">
+      <div className="flex items-center justify-between px-4 border-b border-gray-200">
+        <button
+          onClick={onClose}
+          className="text-sm text-brand-primary min-h-touch inline-flex items-center px-2 -mx-2"
+        >
           Back
         </button>
         <h2 id={headingId} className="text-sm font-semibold text-gray-900">
