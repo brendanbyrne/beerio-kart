@@ -125,10 +125,11 @@ These rules are partly enforced so they can't silently reappear:
   flat React config, scoped to test files in [`eslint.config.js`](../../frontend/eslint.config.js).
   Together they lock in `valid-expect`, `valid-expect-in-promise`,
   `expect-expect`, `no-focused-tests`, `no-disabled-tests`, and the async-query
-  hygiene rules. Two rules that fire on existing valid patterns
-  (`vitest/no-conditional-expect`, `testing-library/no-node-access`) start at
-  `warn` per that file's preamble. Rule 2 (outcome over choreography) is
-  review-enforced.
+  hygiene rules. Two rules that fired on existing valid patterns
+  (`vitest/no-conditional-expect`, `testing-library/no-node-access`) started at
+  `warn` and were ratcheted to `error` once their offenders were reworked to
+  unconditional assertions / accessible-name queries (#227). Rule 2 (outcome
+  over choreography) is review-enforced.
 
 ## Document history
 
