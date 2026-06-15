@@ -8,32 +8,17 @@ name: DTO Drift
 # for MVP). False positives are acceptable: a backend change that does not
 # alter the wire shape clears the check with a one-line touch to types.ts.
 #
-# The `paths:` list below enumerates the backend files that define serialized
-# DTOs and the enums they reference; it MUST stay in sync with
-# DTO_PATHS_REGEX in .github/scripts/dto-drift-check.sh. When you add a new
-# DTO-bearing backend module, add it to BOTH. See
-# docs/coding-standards/typescript.md § 11.
-#
-# NOTE: this is path-filtered, so a PR touching none of these files never runs
-# it. That's fine while it's an advisory check. If it's ever made a *required*
-# status check on `main`, the path filter would leave such PRs stuck "pending"
-# (a skipped required check never reports) — at that point convert this to an
-# always-runs job that internally checks the paths and exits 0 when none match.
+# This workflow is NOT path-filtered: it runs on EVERY pull request and always
+# posts a status, so it is safe to mark as a *required* check in branch
+# protection (Issue #195). The path matching lives entirely inside
+# dto-drift-check.sh (DTO_PATHS_REGEX) — when a PR touches no DTO file the
+# script prints "nothing to check" and exits 0 (a real all-clear, not an
+# absent status that would deadlock a required check at "Expected/Pending").
+# When you add a DTO-bearing backend module, add it to that regex only; there
+# is no longer a duplicate `paths:` list here to keep in sync. See
+# docs/coding-standards/typescript.md § 11 and docs/branch-protection.md.
 on:
   pull_request:
-    paths:
-      - 'backend/src/routes/**'
-      - 'backend/src/domain/enums.rs'
-      - 'backend/src/services/auth.rs' # AccessClaims (decoded by AccessTokenPayloadSchema)
-      - 'backend/src/services/sessions/types.rs'
-      - 'backend/src/services/sessions/detail.rs'
-      - 'backend/src/services/sessions/lifecycle.rs' # SessionSummary (GET /sessions)
-      - 'backend/src/services/runs/read.rs'
-      - 'backend/src/services/users.rs'
-      - 'backend/src/services/notifications.rs'
-      - 'frontend/src/api/types.ts'
-      - '.github/workflows/dto-drift.yml'
-      - '.github/scripts/dto-drift-check.sh'
 
 concurrency:
   group: dto-drift-${{ github.event.pull_request.number || github.sha }}
