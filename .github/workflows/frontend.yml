@@ -1,26 +1,25 @@
 name: Frontend
 
-# Frontend test + coverage CI (PR-H2, Issue #193). Path-filtered to the
-# frontend subtree so a backend- or docs-only PR skips this workflow entirely
-# (zero runner minutes). Codecov's flag carryforward keeps the `frontend` flag
-# stable on the PRs that skip it.
+# Frontend test + coverage CI (PR-H2, Issue #193).
 #
-# Seam with Issue #195 (general frontend-lint + backend-clippy CI): #195 should
-# add its `bun run lint` / `bun run typecheck` jobs to THIS file — same path
-# filter, same Bun setup. PR-H2 owns the `bun run test` + coverage job; #195
-# must not duplicate it.
+# Runs on EVERY pull request — deliberately NOT path-filtered (changed in Issue
+# #195). The frontend suite is sub-second, and running it on every PR guarantees
+# at least one coverage flag uploads on every commit, so Codecov always
+# processes the commit and posts its `codecov/patch/{frontend,backend}` checks
+# (the `backend` flag carries forward when backend.yml path-skips). Those checks
+# are *required* in branch protection (docs/branch-protection.md); a docs-only
+# PR that uploaded nothing at all could otherwise leave them with no status and
+# deadlock the merge. backend.yml stays path-filtered because cargo llvm-cov is
+# slow — its carryforward covers the skipped side.
+#
+# Issue #195's lint/typecheck jobs live in checks.yml, not here: they must run
+# (and post a status) independently of any path filter — a different trigger
+# shape from this coverage job. This workflow still owns the single
+# `bun run test` + coverage upload; checks.yml must not duplicate it.
 on:
   pull_request:
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/frontend.yml'
-      - 'codecov.yml'
   push:
     branches: [main]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/frontend.yml'
-      - 'codecov.yml'
 
 concurrency:
   group: frontend-${{ github.event.pull_request.number || github.sha }}

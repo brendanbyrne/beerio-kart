@@ -12,9 +12,11 @@
 # not actually alter the wire shape, a one-line edit to types.ts (e.g. a
 # comment) clears the check. See docs/coding-standards/typescript.md § 11.
 #
-# The DTO_PATHS_REGEX below MUST stay in sync with the `paths:` filter in
-# .github/workflows/dto-drift.yml. When you add a new DTO-bearing backend
-# module, add it to BOTH.
+# DTO_PATHS_REGEX below is the single source of truth for which backend files
+# imply a possible wire-contract change. The workflow (dto-drift.yml) runs on
+# every PR and delegates the path matching here (Issue #195 made it a required,
+# always-runs check), so there is no `paths:` filter to keep in sync — add a
+# new DTO-bearing backend module to this regex only.
 #
 # Inputs (env): BASE_SHA, HEAD_SHA — the PR's base-branch tip and head commit.
 set -euo pipefail
