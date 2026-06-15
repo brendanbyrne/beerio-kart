@@ -163,5 +163,7 @@ describe('getRunDefaults', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected an error Result');
     expect(result.error.code).toBe('internal');
+    // Also pin the backend `error` field threaded through parseApiError.
+    expect(result.error.message).toBe('Defaults unavailable');
   });
 });
