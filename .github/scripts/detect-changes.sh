@@ -34,7 +34,7 @@ AREA="${1:?usage: detect-changes.sh <frontend|backend>}"
 CI_PLUMBING='\.github/workflows/checks\.yml$|\.github/scripts/detect-changes\.sh$'
 case "${AREA}" in
   frontend) AREA_REGEX="^(frontend/|${CI_PLUMBING})" ;;
-  backend)  AREA_REGEX="^(backend/|Cargo\.toml$|Cargo\.lock$|${CI_PLUMBING})" ;;
+  backend)  AREA_REGEX="^(backend/|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$|${CI_PLUMBING})" ;;
   *) echo "detect-changes.sh: unknown area '${AREA}' (expected frontend|backend)" >&2; exit 2 ;;
 esac
 
