@@ -4,7 +4,8 @@ description: >
   Clean up after a PR has been merged. Determines the branch to delete, checks out
   main, pulls the latest changes, and deletes the merged branch locally and remotely,
   then checks whether the merge now makes any follow-up documentation updates necessary
-  (e.g. design-record or compliance-plan sign-off) and opens a small follow-up PR for those.
+  (e.g. design-record or compliance-plan sign-off), confirms those sign-offs landed in the
+  triggering PR, or opens a small follow-up PR only if one was missed.
   Use when the user says a PR has been merged, or asks to clean up after a merge.
 ---
 
