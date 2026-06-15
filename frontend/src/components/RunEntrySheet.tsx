@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { clsx } from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -70,11 +71,21 @@ export function RunEntrySheet({
 
   const [showDrinkPicker, setShowDrinkPicker] = useState(false);
   const [showSetupPicker, setShowSetupPicker] = useState(false);
+  // The sheet control that opened the active sub-picker, captured at click time.
+  // Opening a picker flips the sheet to `inert`, which blurs the trigger before
+  // the picker could read document.activeElement — so we hand the element to the
+  // picker explicitly and it restores focus there on close.
+  const subPickerTriggerRef = useRef<HTMLElement | null>(null);
+
+  // A full-screen sub-picker (drink or race setup) owns the screen while open.
+  // The sheet behind is made `inert` and its focus trap suspended so focus and
+  // screen-reader navigation stay inside the open picker (react.md § 10).
+  const subPickerOpen = showDrinkPicker || showSetupPicker;
 
   // Trap focus / close-on-Escape / restore-focus for the sheet (react.md § 10).
-  // The trap suspends while a full-screen sub-picker is open so it doesn't fight
-  // the picker for focus; the picker has its own Back control.
-  const dialogRef = useModalA11y(onClose, !showDrinkPicker && !showSetupPicker);
+  // The trap suspends while a sub-picker is open so it doesn't fight the picker
+  // for focus; each picker runs its own useModalA11y (see SubPickerOverlay).
+  const dialogRef = useModalA11y(onClose, !subPickerOpen);
 
   // Load game data for resolving default names
   const { items: drinkTypes } = useDrinkTypes();
@@ -212,6 +223,7 @@ export function RunEntrySheet({
         type="button"
         aria-label="Close"
         tabIndex={-1}
+        inert={subPickerOpen}
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
       />
@@ -221,6 +233,7 @@ export function RunEntrySheet({
         role="dialog"
         aria-modal="true"
         aria-label="Log your run"
+        inert={subPickerOpen}
         className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[92%]"
       >
         <div className="flex justify-center pt-2.5 pb-1">
@@ -335,7 +348,10 @@ export function RunEntrySheet({
               Drink
             </span>
             <button
-              onClick={() => setShowDrinkPicker(true)}
+              onClick={(e) => {
+                subPickerTriggerRef.current = e.currentTarget;
+                setShowDrinkPicker(true);
+              }}
               className="w-full flex items-center justify-between px-3.5 min-h-[48px] bg-gray-50 border border-gray-200 rounded-xl text-left"
             >
               {resolvedDrinkType ? (
@@ -369,7 +385,10 @@ export function RunEntrySheet({
               Race Setup
             </span>
             <button
-              onClick={() => setShowSetupPicker(true)}
+              onClick={(e) => {
+                subPickerTriggerRef.current = e.currentTarget;
+                setShowSetupPicker(true);
+              }}
               className="w-full flex items-center justify-between px-3.5 min-h-[48px] bg-gray-50 border border-gray-200 rounded-xl text-left"
             >
               {hasSetup ? (
@@ -418,61 +437,92 @@ export function RunEntrySheet({
       </div>
 
       {showDrinkPicker && (
-        <div className="fixed inset-0 z-50 bg-white flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-            <button
-              onClick={() => setShowDrinkPicker(false)}
-              className="text-sm text-brand-primary"
-            >
-              Back
-            </button>
-            <h2 className="text-sm font-semibold text-gray-900">
-              Select Drink
-            </h2>
-            <div className="w-10" />
-          </div>
-          <div className="flex-1 overflow-y-auto p-4">
-            <DrinkTypeSelector
-              selectedId={drinkTypeId}
-              onSelect={(dt: DrinkType) => {
-                setPickedDrinkTypeId(dt.id);
-                setDrinkType(dt);
-                setShowDrinkPicker(false);
-              }}
-            />
-          </div>
-        </div>
+        <SubPickerOverlay
+          title="Select Drink"
+          onClose={() => setShowDrinkPicker(false)}
+          triggerRef={subPickerTriggerRef}
+        >
+          <DrinkTypeSelector
+            selectedId={drinkTypeId}
+            onSelect={(dt: DrinkType) => {
+              setPickedDrinkTypeId(dt.id);
+              setDrinkType(dt);
+              setShowDrinkPicker(false);
+            }}
+          />
+        </SubPickerOverlay>
       )}
 
       {showSetupPicker && (
-        <div className="fixed inset-0 z-50 bg-white flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-            <button
-              onClick={() => setShowSetupPicker(false)}
-              className="text-sm text-brand-primary"
-            >
-              Back
-            </button>
-            <h2 className="text-sm font-semibold text-gray-900">Race Setup</h2>
-            <div className="w-10" />
-          </div>
-          <div className="flex-1 overflow-y-auto p-4">
-            <RaceSetupPicker
-              initialCharacterId={characterId}
-              initialBodyId={bodyId}
-              initialWheelId={wheelId}
-              initialGliderId={gliderId}
-              onComplete={(setup) => {
-                setPickedCharacterId(setup.characterId);
-                setPickedBodyId(setup.bodyId);
-                setPickedWheelId(setup.wheelId);
-                setPickedGliderId(setup.gliderId);
-                setShowSetupPicker(false);
-              }}
-            />
-          </div>
-        </div>
+        <SubPickerOverlay
+          title="Race Setup"
+          onClose={() => setShowSetupPicker(false)}
+          triggerRef={subPickerTriggerRef}
+        >
+          <RaceSetupPicker
+            initialCharacterId={characterId}
+            initialBodyId={bodyId}
+            initialWheelId={wheelId}
+            initialGliderId={gliderId}
+            onComplete={(setup) => {
+              setPickedCharacterId(setup.characterId);
+              setPickedBodyId(setup.bodyId);
+              setPickedWheelId(setup.wheelId);
+              setPickedGliderId(setup.gliderId);
+              setShowSetupPicker(false);
+            }}
+          />
+        </SubPickerOverlay>
       )}
+    </div>
+  );
+}
+
+// ── Sub-picker overlay (full-screen drink / race-setup picker) ──────
+
+interface SubPickerOverlayProps {
+  /** Dialog accessible name and visible heading, e.g. "Select Drink". */
+  title: string;
+  /** Close the picker — wired to the Back button and the Escape handler. */
+  onClose: () => void;
+  /** The sheet control that opened the picker; focus restores here on close. */
+  triggerRef: RefObject<HTMLElement | null>;
+  children: ReactNode;
+}
+
+// A full-screen sub-view of the run sheet. useModalA11y gives it the sheet's own
+// modal a11y: focus seats into the picker on open, Escape and Back close it, the
+// Tab trap keeps focus inside, and focus restores to `triggerRef` on close
+// (react.md § 10). The sheet behind is made `inert` by the parent while this is
+// mounted, so the two dialogs never both own focus. The dialog takes its
+// accessible name from the visible heading (aria-labelledby), matching
+// Home.tsx's CreateSessionModal.
+function SubPickerOverlay({
+  title,
+  onClose,
+  triggerRef,
+  children,
+}: SubPickerOverlayProps) {
+  const ref = useModalA11y(onClose, true, triggerRef);
+  const headingId = useId();
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={headingId}
+      className="fixed inset-0 z-50 bg-white flex flex-col"
+    >
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+        <button onClick={onClose} className="text-sm text-brand-primary">
+          Back
+        </button>
+        <h2 id={headingId} className="text-sm font-semibold text-gray-900">
+          {title}
+        </h2>
+        <div className="w-10" />
+      </div>
+      <div className="flex-1 overflow-y-auto p-4">{children}</div>
     </div>
   );
 }

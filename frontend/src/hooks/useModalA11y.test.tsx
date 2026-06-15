@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -53,6 +54,57 @@ function Harness({ onClose }: { onClose?: () => void }) {
             setOpen(false);
             onClose?.();
           }}
+        />
+      )}
+    </div>
+  );
+}
+
+// A dialog that restores focus to an EXPLICIT element (via restoreFocusRef)
+// rather than whatever was focused at mount — the path RunEntrySheet's
+// sub-pickers use so an `inert`-blurred trigger is still restored correctly.
+function RefDialog({
+  onClose,
+  restoreFocusRef,
+}: {
+  onClose: () => void;
+  restoreFocusRef: RefObject<HTMLElement | null>;
+}) {
+  const ref = useModalA11y(onClose, true, restoreFocusRef);
+  return (
+    <div ref={ref} role="dialog" aria-modal="true" aria-label="Ref dialog">
+      <button>first</button>
+    </div>
+  );
+}
+
+function RefHarness() {
+  const [open, setOpen] = useState(false);
+  // Points at "restore target" — a different element than the "open" button
+  // that actually holds focus when the dialog mounts.
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  return (
+    <div>
+      <button
+        ref={(el) => {
+          restoreFocusRef.current = el;
+        }}
+      >
+        restore target
+      </button>
+      <button
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        open
+      </button>
+      {open && (
+        <RefDialog
+          onClose={() => {
+            setOpen(false);
+          }}
+          restoreFocusRef={restoreFocusRef}
         />
       )}
     </div>
@@ -169,5 +221,20 @@ describe('useModalA11y', () => {
     // Closing (Escape → unmount) hands focus back to the element that opened it.
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(trigger).toHaveFocus();
+  });
+
+  it('restores focus to an explicit restoreFocusRef, not the element focused at mount', async () => {
+    const user = userEvent.setup();
+    render(<RefHarness />);
+    const open = screen.getByRole('button', { name: 'open' });
+    const target = screen.getByRole('button', { name: 'restore target' });
+
+    // `open` holds focus when the dialog mounts, but the dialog was handed an
+    // explicit restore target — close must return focus there, not to `open`.
+    await user.click(open);
+    expect(screen.getByRole('button', { name: 'first' })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(target).toHaveFocus();
   });
 });

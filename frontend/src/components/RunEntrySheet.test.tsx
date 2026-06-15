@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -430,5 +430,141 @@ describe('RunEntrySheet', () => {
     expect(await screen.findByText('Select drink')).toBeInTheDocument();
     expect(screen.getByText('Select race setup')).toBeInTheDocument();
     expect(screen.queryByText('From your last run')).not.toBeInTheDocument();
+  });
+});
+
+describe('RunEntrySheet sub-picker focus management', () => {
+  // Issue #222: a full-screen sub-picker (drink / race setup) must move focus
+  // into itself on open, seal the sheet behind it from focus + screen readers
+  // (`inert`), restore focus to the control that opened it on close, and close
+  // on Escape. SubPickerOverlay wires this through useModalA11y; the sheet adds
+  // `inert` while a picker is open. userEvent.click is used to open a picker so
+  // the trigger button is focused first — that's the element focus restores to.
+
+  /** Render the sheet with a populated defaults response; returns the user. */
+  function setupSheet(onClose: () => void = vi.fn()) {
+    mockGameData();
+    server.use(
+      http.get('/api/v1/runs/defaults', () =>
+        HttpResponse.json({
+          drink_type_id: 'd1',
+          character_id: 1,
+          body_id: 1,
+          wheel_id: 1,
+          glider_id: 1,
+          source: 'previous_run',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    render(
+      <RunEntrySheet race={race} onClose={onClose} onSubmitted={vi.fn()} />,
+      { wrapper: Wrapper },
+    );
+    return user;
+  }
+
+  it('moves focus into the drink picker when it opens', async () => {
+    const user = setupSheet();
+    await screen.findByText('Lager'); // sheet settled
+
+    await user.click(screen.getByRole('button', { name: /change/i }));
+
+    const picker = await screen.findByRole('dialog', { name: /select drink/i });
+    expect(within(picker).getByRole('button', { name: /back/i })).toHaveFocus();
+  });
+
+  it('makes the sheet behind inert while a sub-picker is open', async () => {
+    const user = setupSheet();
+    await screen.findByText('Lager');
+
+    // Hold a reference to the sheet dialog before it becomes inert (an inert
+    // element may drop out of the accessibility tree, so re-querying could miss).
+    const sheet = screen.getByRole('dialog', { name: /log your run/i });
+    expect(sheet).not.toHaveAttribute('inert');
+
+    await user.click(screen.getByRole('button', { name: /change/i }));
+    await screen.findByRole('dialog', { name: /select drink/i });
+    expect(sheet).toHaveAttribute('inert');
+
+    // Closing the picker lifts the inert seal.
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(sheet).not.toHaveAttribute('inert');
+  });
+
+  it('restores focus to the drink button when the picker closes', async () => {
+    const user = setupSheet();
+    await screen.findByText('Lager');
+
+    const changeButton = screen.getByRole('button', { name: /change/i });
+    await user.click(changeButton);
+    await screen.findByRole('dialog', { name: /select drink/i });
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    expect(changeButton).toHaveFocus();
+  });
+
+  it.each([
+    { picker: 'drink', trigger: /change/i, dialog: /select drink/i },
+    { picker: 'setup', trigger: /edit/i, dialog: /race setup/i },
+  ])(
+    'closes the $picker sub-picker on Escape without closing the sheet',
+    async ({ trigger, dialog }) => {
+      const onClose = vi.fn();
+      const user = setupSheet(onClose);
+      await screen.findByText('Lager');
+
+      const triggerButton = screen.getByRole('button', { name: trigger });
+      await user.click(triggerButton);
+      await screen.findByRole('dialog', { name: dialog });
+
+      // fireEvent flushes the re-render synchronously, so the picker is already
+      // gone once this returns — no waitFor needed.
+      fireEvent.keyDown(document, { key: 'Escape' });
+
+      expect(
+        screen.queryByRole('dialog', { name: dialog }),
+      ).not.toBeInTheDocument();
+      // The sheet's own Escape handler is suspended while a picker owns focus,
+      // so Escape closes only the picker — the sheet stays open.
+      expect(onClose).not.toHaveBeenCalled();
+      expect(triggerButton).toHaveFocus();
+    },
+  );
+
+  it('restores focus to the trigger even when it was never focused (Safari / inert blur)', async () => {
+    // Real browsers blur the trigger when the sheet flips to `inert`, and Safari
+    // never focuses a button on click — so the picker cannot rely on
+    // document.activeElement at mount. Opening with fireEvent (which does not
+    // move focus) reproduces that state: the trigger captured at click time must
+    // still be the restore target. This test fails if the picker captures
+    // document.activeElement instead of the explicit trigger.
+    setupSheet();
+    await screen.findByText('Lager');
+
+    const changeButton = screen.getByRole('button', { name: /change/i });
+    expect(changeButton).not.toHaveFocus(); // sheet seated focus on a time input
+
+    fireEvent.click(changeButton);
+    const picker = await screen.findByRole('dialog', { name: /select drink/i });
+
+    fireEvent.click(within(picker).getByRole('button', { name: /back/i }));
+
+    expect(changeButton).toHaveFocus();
+  });
+
+  it('moves focus into the race-setup picker and restores it on Back', async () => {
+    const user = setupSheet();
+    await screen.findByText(/Mario.*Standard Kart/); // setup summary settled
+
+    const editButton = screen.getByRole('button', { name: /edit/i });
+    await user.click(editButton);
+
+    const picker = await screen.findByRole('dialog', { name: /race setup/i });
+    expect(within(picker).getByRole('button', { name: /back/i })).toHaveFocus();
+
+    await user.click(within(picker).getByRole('button', { name: /back/i }));
+    expect(editButton).toHaveFocus();
   });
 });
