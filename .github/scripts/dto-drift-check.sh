@@ -25,7 +25,17 @@ TYPES_FILE='frontend/src/api/types.ts'
 #   - routes/**         — the request/response structs returned by handlers
 #   - domain/enums.rs   — SessionStatus / SessionRuleset (serialized enums)
 #   - the services/ modules that define serialized DTOs
-DTO_PATHS_REGEX='^backend/src/(routes/|domain/enums\.rs$|services/sessions/types\.rs$|services/sessions/detail\.rs$|services/runs/read\.rs$|services/users\.rs$|services/notifications\.rs$)'
+# The services/ list is exhaustive: it's every module under services/ + domain/
+# that derives Serialize on a struct/enum mirrored in types.ts. SessionSummary
+# (defined in lifecycle.rs but returned by GET /sessions) and AccessClaims (the
+# JWT payload AccessTokenPayloadSchema decodes) are easy to miss because they're
+# defined away from their route — both are watched here. domain/enums.rs is
+# watched but the domain/strings.rs + numeric.rs newtypes are not: a serialized
+# enum's variant rename changes the wire string without touching any DTO struct
+# (so it must be watched), whereas a newtype serializes transparently as its
+# inner primitive and only ever reaches the wire through a DTO field that lives
+# in one of the watched structs.
+DTO_PATHS_REGEX='^backend/src/(routes/|domain/enums\.rs$|services/auth\.rs$|services/sessions/types\.rs$|services/sessions/detail\.rs$|services/sessions/lifecycle\.rs$|services/runs/read\.rs$|services/users\.rs$|services/notifications\.rs$)'
 
 # Three-dot diff: changes on the PR head since its merge base with the target
 # branch (ignores commits that landed on the base after the branch point).

@@ -13,13 +13,21 @@ name: DTO Drift
 # DTO_PATHS_REGEX in .github/scripts/dto-drift-check.sh. When you add a new
 # DTO-bearing backend module, add it to BOTH. See
 # docs/coding-standards/typescript.md § 11.
+#
+# NOTE: this is path-filtered, so a PR touching none of these files never runs
+# it. That's fine while it's an advisory check. If it's ever made a *required*
+# status check on `main`, the path filter would leave such PRs stuck "pending"
+# (a skipped required check never reports) — at that point convert this to an
+# always-runs job that internally checks the paths and exits 0 when none match.
 on:
   pull_request:
     paths:
       - 'backend/src/routes/**'
       - 'backend/src/domain/enums.rs'
+      - 'backend/src/services/auth.rs' # AccessClaims (decoded by AccessTokenPayloadSchema)
       - 'backend/src/services/sessions/types.rs'
       - 'backend/src/services/sessions/detail.rs'
+      - 'backend/src/services/sessions/lifecycle.rs' # SessionSummary (GET /sessions)
       - 'backend/src/services/runs/read.rs'
       - 'backend/src/services/users.rs'
       - 'backend/src/services/notifications.rs'
