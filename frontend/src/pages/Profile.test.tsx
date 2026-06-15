@@ -304,6 +304,21 @@ describe('Profile cards, edit modes, and logout', () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it('opens the drink editor from its card and returns on Back', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(screen.getByRole('button', { name: /preferred drink/i }));
+    expect(
+      screen.getByRole('button', { name: 'select-drink' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(
+      screen.getByRole('button', { name: /log out/i }),
+    ).toBeInTheDocument();
+  });
+
   it('logs out and redirects to the login page', async () => {
     logout.mockResolvedValue(undefined);
     const user = userEvent.setup();

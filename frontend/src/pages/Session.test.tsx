@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -315,5 +315,28 @@ describe('Session', () => {
     // DQ branch: the "(DQ)" label variant and the struck-through time.
     expect(await screen.findByText('Your Time (DQ)')).toBeInTheDocument();
     expect(screen.getByText(formatTime(83456))).toBeInTheDocument();
+  });
+
+  it('swaps a broken track image for a placeholder and expands the participant header', async () => {
+    server.use(
+      http.get('/api/v1/sessions/s1', () => HttpResponse.json(hostSession)),
+      http.get('/api/v1/sessions/mine', () =>
+        HttpResponse.json({ session_id: 's1' }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSession();
+
+    // A failed image load swaps the <img> for the placeholder card.
+    const img = await screen.findByAltText('Mario Circuit');
+    fireEvent.error(img);
+    await waitFor(() => {
+      expect(screen.queryByAltText('Mario Circuit')).not.toBeInTheDocument();
+    });
+
+    // The header starts collapsed (chevron down); clicking it expands the
+    // participant panel and flips the chevron up.
+    await user.click(screen.getByRole('button', { name: /player/i }));
+    expect(await screen.findByText('▲')).toBeInTheDocument();
   });
 });

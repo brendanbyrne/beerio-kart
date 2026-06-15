@@ -106,6 +106,25 @@ describe('DrinkTypeSelector add-drink flow', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it('toggles the alcoholic switch and closes the add form on Cancel', async () => {
+    mockList();
+    const user = userEvent.setup();
+    renderWithClient(<DrinkTypeSelector onSelect={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: /add new/i }));
+    // The alcoholic switch defaults to on for a drinking game; clicking flips it.
+    const toggle = screen.getByRole('button', { name: /toggle alcoholic/i });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    // Cancel closes the add form — the "Add new" trigger comes back.
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(
+      await screen.findByRole('button', { name: /add new/i }),
+    ).toBeInTheDocument();
+  });
+
   it('marks the matching item as selected when a selectedId is supplied', async () => {
     // The check mark renders only on the item whose id equals selectedId — the
     // selected branch of the item styling. The other tests render with no
