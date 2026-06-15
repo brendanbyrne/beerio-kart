@@ -2,7 +2,7 @@
 
 > **Scope.** React 19.2, react-router-dom 7, mobile-first SPA, no SSR. Component shape, hooks, data fetching, forms, errors, accessibility, routing, and file layout. TS rules live in [`typescript.md`](./typescript.md); styling in [`tailwind.md`](./tailwind.md).
 > **Format.** Each rule: *Rule / Why / Example / Source*.
-> **Companions.** `typescript.md`, `tailwind.md`, `../api-contract.md`, `../user-workflows.md` (UI screen specs). Compliance plan: `../designs/2026-05-16-frontend-compliance-plan.md`.
+> **Companions.** `typescript.md`, `tailwind.md`, `../api-contract.md`, `../user-workflows.md` (UI screen specs). Compliance plan (complete, archived): `../designs/archive/2026-05-16-frontend-compliance-plan.md`.
 
 ## Index
 

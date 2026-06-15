@@ -2,7 +2,7 @@
 
 > **Scope.** Tailwind v4.x styling rules for the `beerio-kart` frontend. Mobile-first, utility-first, Firefox-compatible. Component-level patterns are in [`react.md`](./react.md); language rules in [`typescript.md`](./typescript.md).
 > **Format.** Each rule: *Rule / Why / Example / Source*.
-> **Companions.** `typescript.md`, `react.md`, `../user-workflows.md` (UI screen specs). Compliance plan: `../designs/2026-05-16-frontend-compliance-plan.md`.
+> **Companions.** `typescript.md`, `react.md`, `../user-workflows.md` (UI screen specs). Compliance plan (complete, archived): `../designs/archive/2026-05-16-frontend-compliance-plan.md`.
 
 ## Index
 

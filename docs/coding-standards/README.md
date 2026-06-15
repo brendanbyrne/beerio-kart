@@ -22,8 +22,8 @@ Companion documents:
 
 - [`../api-contract.md`](../api-contract.md) — wire-format conventions between backend and frontend.
 - [`../designs/archive/compliance-plan.md`](../designs/archive/compliance-plan.md) — archived sequenced PR plan that brought the existing backend codebase to the standard (signed off 2026-05-15).
-- [`../designs/2026-05-16-frontend-audit.md`](../designs/2026-05-16-frontend-audit.md) — per-file compliance baseline for `frontend/src/` against the new standards. Source of the findings in the compliance plan.
-- [`../designs/2026-05-16-frontend-compliance-plan.md`](../designs/2026-05-16-frontend-compliance-plan.md) — active sequenced PR plan to bring the existing frontend codebase to the standard.
+- [`../designs/archive/2026-05-16-frontend-audit.md`](../designs/archive/2026-05-16-frontend-audit.md) — per-file compliance baseline for `frontend/src/` against the new standards. Source of the findings in the compliance plan. _(Complete, archived 2026-06-15.)_
+- [`../designs/archive/2026-05-16-frontend-compliance-plan.md`](../designs/archive/2026-05-16-frontend-compliance-plan.md) — the sequenced PR plan that brought the existing frontend codebase to the standard. _(Complete — all 16 PRs merged; archived 2026-06-15.)_
 - [`../research/rust-to-ts-codegen.md`](../research/rust-to-ts-codegen.md) — evaluation of automated Rust→TypeScript type-sync tools (typeshare, ts-rs, specta, schemars). Informs `typescript.md` § 11.
 - [`../research/unit-test-audit.md`](../research/unit-test-audit.md) — the backend+frontend test audit that produced `testing.md`'s rules: the anti-pattern taxonomy, per-file findings, and the cleared false-positives. Source of Issue #217.
 

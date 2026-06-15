@@ -35,6 +35,7 @@ OCR work (was Phase 7) is **not** yet milestoned — too speculative to commit t
 |-------|------------|--------|--------|
 | Docs | Documentation overhaul (renamed from `Special:` for convention consistency, 2026-05-11) | Closed | 2026-05-11 |
 | Hardening | Backend compliance plan — code hygiene, standards conformance, type-driven design, infrastructure (per `designs/archive/compliance-plan.md`, archived) | Closed | 2026-05-15 |
+| Hardening | Frontend standards compliance — lint/type strictness, branded types + Zod validation, TanStack Query, accessibility, tests + CI gates (per `designs/archive/2026-05-16-frontend-compliance-plan.md`, archived) | Closed | 2026-06-15 |
 
 ---
 
@@ -115,6 +116,22 @@ Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-ho
 **Success criteria.** `compliance-plan.md` reached all-signed-off; the standards docs in `coding-standards/` describe the code as it actually is; the backend's structural hygiene supports the next product cup without surprise. All met.
 
 [Milestone Hardening: Backend compliance plan](https://github.com/brendanbyrne/beerio-kart/milestone/8)
+
+---
+
+## Hardening — Frontend standards compliance
+
+**Status:** Closed 2026-06-15.
+
+**Type:** Workstream. Ran concurrent with product cups; spanned Star.
+
+**Goal.** Brought the existing React/TypeScript frontend into conformance with the standards in [`coding-standards/`](./coding-standards/) (`typescript.md`, `react.md`, `tailwind.md`) and executed the 16-PR sequenced list in [`designs/archive/2026-05-16-frontend-compliance-plan.md`](./designs/archive/2026-05-16-frontend-compliance-plan.md), driven by the per-file [`designs/archive/2026-05-16-frontend-audit.md`](./designs/archive/2026-05-16-frontend-audit.md). Strict tsconfig + an ESLint ratchet, branded IDs + runtime Zod validation at the API boundary, TanStack Query for data fetching, React 19 forms / router / error boundaries, Tailwind `@theme` tokens, an accessibility sweep, and a Vitest + RTL test suite with Codecov gates and a backend↔frontend DTO drift check.
+
+**Scope.** The full sequenced list (streams A–H, 16 PRs) lives in `designs/archive/2026-05-16-frontend-compliance-plan.md` (archived 2026-06-15). All 16 are signed off.
+
+**Success criteria.** The plan reached all-signed-off; every lint rule flipped to `error` holds at zero offenders; the standards docs in `coding-standards/` describe the frontend as it actually is; CI runs lint / type / test / coverage and the DTO-sync check. All met. Making those statuses *merge-blocking* via branch protection on `main` is follow-up work tracked in [#195](https://github.com/brendanbyrne/beerio-kart/issues/195).
+
+[Milestone Hardening: Frontend standards compliance](https://github.com/brendanbyrne/beerio-kart/milestone/9)
 
 ---
 

@@ -1,6 +1,8 @@
 # Frontend Code Audit
 
-> **Purpose.** Per-file compliance baseline for `frontend/src/` against the coding standards introduced 2026-05-16 in [`../coding-standards/typescript.md`](../coding-standards/typescript.md), [`react.md`](../coding-standards/react.md), and [`tailwind.md`](../coding-standards/tailwind.md). Drives the sequenced PRs in the [compliance plan](./2026-05-16-frontend-compliance-plan.md).
+> **Status: complete.** Archived 2026-06-15. The compliance plan it drove is done (all 16 PRs merged); retained for historical reference. Live frontend conventions live in [`../../coding-standards/`](../../coding-standards/).
+
+> **Purpose.** Per-file compliance baseline for `frontend/src/` against the coding standards introduced 2026-05-16 in [`../coding-standards/typescript.md`](../../coding-standards/typescript.md), [`react.md`](../../coding-standards/react.md), and [`tailwind.md`](../../coding-standards/tailwind.md). Drives the sequenced PRs in the [compliance plan](./2026-05-16-frontend-compliance-plan.md).
 > **Status.** Initial. Findings recorded; no PR work has shipped against them yet.
 > **Scope.** Every `.ts` and `.tsx` file under `frontend/src/`, plus `frontend/tsconfig*.json`, `frontend/vite.config.ts`, `frontend/eslint.config.js`, `frontend/package.json`. Excludes generated files (`node_modules/`, `dist/`).
 > **Auditor.** Cowork (Sonnet subagent), 2026-05-16.

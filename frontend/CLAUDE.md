@@ -20,7 +20,7 @@ For deep conventions, read these once and refer back when relevant:
 - [`docs/user-workflows.md`](../docs/user-workflows.md) — end-user flows and screen-by-screen UI breakdown. Match what's specified there before introducing new UI patterns.
 - [`docs/api-contract.md`](../docs/api-contract.md) — endpoint catalog (§ 1) and wire-format conventions. The frontend uses per-endpoint hand-written `fetch` wrappers with Zod schemas at the boundary; see [`docs/decisions/0039-api-client-generation.md`](../docs/decisions/0039-api-client-generation.md) for the decision and adoption trigger.
 - [`docs/design.md`](../docs/design.md) — high-level principles (single-handed, never rushed, inclusive by default) and design goals (minimize choices, prefer simple interactions, sensible defaults).
-- [`docs/designs/2026-05-16-frontend-compliance-plan.md`](../docs/designs/2026-05-16-frontend-compliance-plan.md) — active sequenced PR plan bringing the existing frontend code up to the standards. Consult before starting cross-cutting refactors to see what's already planned.
+- [`docs/designs/archive/2026-05-16-frontend-compliance-plan.md`](../docs/designs/archive/2026-05-16-frontend-compliance-plan.md) — the sequenced PR plan that brought the existing frontend code up to the standards. _Complete — all 16 PRs merged; archived 2026-06-15._ The live rules are in `docs/coding-standards/`; this is the historical record of the migration.
 
 ## UI reference device
 

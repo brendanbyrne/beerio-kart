@@ -2,7 +2,7 @@
 
 > **Scope.** General TypeScript patterns for the `beerio-kart` frontend. TypeScript 5.9+, ES2023+ target, Vite + esbuild toolchain, ESLint flat config. Language-level rules only — React-specific patterns are in [`react.md`](./react.md), styling rules in [`tailwind.md`](./tailwind.md).
 > **Format.** Each rule: *Rule / Why / Example / Source*.
-> **Companions.** `react.md`, `tailwind.md`, `../api-contract.md`. Compliance plan: `../designs/2026-05-16-frontend-compliance-plan.md`.
+> **Companions.** `react.md`, `tailwind.md`, `../api-contract.md`. Compliance plan (complete, archived): `../designs/archive/2026-05-16-frontend-compliance-plan.md`.
 
 ## Index
 
