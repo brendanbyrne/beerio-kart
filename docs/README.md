@@ -22,6 +22,7 @@ Start with `design.md` if you're new.
 - `api-contract.md` — wire-format conventions and endpoint list
 - `roadmap.md` — phase narrative
 - `project-workflow.md` — operational workflow (Issue lifecycle, branch naming, triage, multi-assistant coordination)
+- `branch-protection.md` — the ready-to-apply `main` branch-protection ruleset + the always-run CI pattern behind it
 - `decisions/` — Architecture Decision Records (MADR format)
 - `designs/` — design records (durable narrative of how decisions were reached)
 - `drafts/` — work-in-progress design records (gitignored except `WIP_*.md`)

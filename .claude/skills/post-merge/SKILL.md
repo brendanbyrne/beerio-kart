@@ -4,7 +4,7 @@ description: >
   Clean up after a PR has been merged. Determines the branch to delete, checks out
   main, pulls the latest changes, and deletes the merged branch locally and remotely,
   then checks whether the merge now makes any follow-up documentation updates necessary
-  (e.g. design-record or compliance-plan sign-off) and commits those directly to main.
+  (e.g. design-record or compliance-plan sign-off) and opens a small follow-up PR for those.
   Use when the user says a PR has been merged, or asks to clean up after a merge.
 ---
 
@@ -64,14 +64,19 @@ and exits non-zero on an unmerged-work refusal instead of escalating.
    - **Cross-references** — docs that named the branch or PR as planned or
      pending and should now read as done.
 
-   If any apply, make a **documentation-only** commit and push it **directly to
-   `main`** — docs-only changes skip the PR flow by project rule (root
-   `.claude/CLAUDE.md` § Git workflow). If nothing applies, say so and stop;
-   don't manufacture churn.
+   These **belong in the PR that triggers them** — authored as part of that PR
+   before it merges, not as a separate commit afterward. A PR can reference its
+   own number for the `Merged PR: #NNN` link, and the last PR of a multi-PR
+   record can include the archive `git mv`. Every change to `main` goes through
+   a PR now (Issue #195 retired docs-only direct-to-`main` — see root
+   `.claude/CLAUDE.md` § Load-bearing git rules and `docs/branch-protection.md`),
+   so there is **no** post-merge docs commit to make.
 
-   **Guardrail — docs only.** This direct-to-`main` commit may touch only
-   documentation. Any code, test, schema, or config change still requires a
-   PR; never fold one into this commit.
+   At post-merge, your job is to **confirm those sign-offs actually landed** in
+   the PR that just merged. If they did, say so and stop. If one was genuinely
+   missed, it has to go in its own small docs PR (the original is already
+   merged and `main` is protected) — but the convention is to bundle them into
+   the triggering PR so that's not needed. Don't manufacture churn.
 
 ## Notes
 

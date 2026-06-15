@@ -199,9 +199,8 @@ If `test:coverage` shows uncovered new lines, fix them locally — the failed-CI
 
 ### Review and merge
 
-- **Never push directly to `main`.** All code changes require a PR.
+- **Never push directly to `main`.** All changes — code *and* documentation — require a PR. (The docs-only direct-to-`main` carve-out was retired in Issue #195; the branch-protection ruleset enforces it once applied — see [`branch-protection.md`](./branch-protection.md).)
 - **Never merge your own PR.** Only Brendan merges.
-- Documentation-only changes can commit to `main` directly per `.claude/CLAUDE.md`.
 
 ### PR template structure
 
