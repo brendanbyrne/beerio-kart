@@ -88,30 +88,25 @@ describe('parseBody', () => {
 
   it('throws a response_shape_mismatch ApiErrorException on a schema failure', async () => {
     const res = new Response(JSON.stringify({ name: 'ok' })); // count missing
-    try {
-      await parseBody(schema, res);
-      expect.unreachable('parseBody should have thrown');
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiErrorException);
-      expect((e as ApiErrorException).apiError.code).toBe(
-        'response_shape_mismatch',
-      );
-      // The ZodError is preserved as `cause` so the original detail survives.
-      expect((e as ApiErrorException).cause).toBeInstanceOf(ZodError);
-    }
+    // Capture the rejection once and assert on it at the top level — a Response
+    // body can only be read once, so we can't re-await the promise, and the
+    // assertions must not live inside a `catch` (vitest/no-conditional-expect).
+    const err = await parseBody(schema, res).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiErrorException);
+    expect((err as ApiErrorException).apiError.code).toBe(
+      'response_shape_mismatch',
+    );
+    // The ZodError is preserved as `cause` so the original detail survives.
+    expect((err as ApiErrorException).cause).toBeInstanceOf(ZodError);
   });
 
   it('throws response_shape_mismatch when the body is not JSON', async () => {
     const res = new Response('not json at all');
-    try {
-      await parseBody(schema, res);
-      expect.unreachable('parseBody should have thrown');
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiErrorException);
-      expect((e as ApiErrorException).apiError.code).toBe(
-        'response_shape_mismatch',
-      );
-    }
+    const err = await parseBody(schema, res).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiErrorException);
+    expect((err as ApiErrorException).apiError.code).toBe(
+      'response_shape_mismatch',
+    );
   });
 });
 

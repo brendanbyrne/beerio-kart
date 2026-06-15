@@ -174,13 +174,11 @@ export default defineConfig([
     files: ['**/*.test.{ts,tsx}', 'src/__tests__/**/*.{ts,tsx}'],
     rules: {
       ...vitest.configs.recommended.rules,
-      // Started at `warn`, not `error`, per this file's preamble: it fires on
-      // two legitimate shapes for asserting on a failure — result.test.ts's
-      // `try { …; expect.unreachable() } catch { expect(err) }`, and
-      // runs.test.ts's discriminated-`Result` narrowing
-      // (`expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code)…`). Flip to
-      // `error` once both are reworked to unconditional assertions (#227).
-      'vitest/no-conditional-expect': 'warn',
+      // Enforced once its offender count hit zero (#227): result.test.ts's
+      // `try/expect.unreachable()/catch` and runs.test.ts's in-`if` Result
+      // narrowing were reworked to unconditional assertions. (The preset already
+      // sets this to `error`; listed explicitly to document the ratchet flip.)
+      'vitest/no-conditional-expect': 'error',
     },
   },
   {
@@ -191,11 +189,11 @@ export default defineConfig([
     files: ['**/*.test.{ts,tsx}', 'src/__tests__/**/*.{ts,tsx}'],
     rules: {
       ...testingLibrary.configs['flat/react'].rules,
-      // Started at `warn`, not `error`, per this file's preamble: it fires on
-      // the unavoidable raw-node drag simulation for the custom div-based DQ
-      // slider (RunEntrySheet.test.tsx), which has no Testing Library query.
-      // Flip to `error` if that drag is reworked or the rule disabled inline.
-      'testing-library/no-node-access': 'warn',
+      // Enforced once its offender count hit zero (#227): the RunEntrySheet
+      // DQ-slider drag now drives the track via its `role="button"` accessible
+      // name instead of walking `parentElement`. (The preset already sets this
+      // to `error`; listed explicitly to document the ratchet flip.)
+      'testing-library/no-node-access': 'error',
     },
   },
   {
