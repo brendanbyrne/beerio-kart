@@ -9,9 +9,10 @@ ruleset. This doc is the ready-to-apply artifact plus the reasoning behind it.
 The ruleset itself is checked in at
 [`.github/branch-protection-ruleset.json`](../.github/branch-protection-ruleset.json).
 
-> **Status: not yet applied.** `main` has no protection today. Apply the ruleset
-> with the procedure below once this issue's PR has merged (so the new check
-> names exist on `main`).
+> **Status: active.** Applied 2026-06-20 as ruleset id `17919103` (enforcement
+> `active`, no bypass actors) after #195's PR (#236) merged. A direct push to
+> `main` is now rejected (`GH013`), and a PR needs the five required checks green
+> to merge. The procedure below is retained for reference, edits, and rollback.
 
 ## What the ruleset enforces
 

@@ -129,7 +129,7 @@ Restructured `docs/` from a few sprawling files (a monolithic `DESIGN.md`, ad-ho
 
 **Scope.** The full sequenced list (streams A–H, 16 PRs) lives in `designs/archive/2026-05-16-frontend-compliance-plan.md` (archived 2026-06-15). All 16 are signed off.
 
-**Success criteria.** The plan reached all-signed-off; every lint rule flipped to `error` holds at zero offenders; the standards docs in `coding-standards/` describe the frontend as it actually is; CI runs lint / type / test / coverage and the DTO-sync check. All met. Making those statuses *merge-blocking* via branch protection on `main` is follow-up work tracked in [#195](https://github.com/brendanbyrne/beerio-kart/issues/195).
+**Success criteria.** The plan reached all-signed-off; every lint rule flipped to `error` holds at zero offenders; the standards docs in `coding-standards/` describe the frontend as it actually is; CI runs lint / type / test / coverage and the DTO-sync check. All met. The CI safety-net that makes those statuses *merge-blocking* — a `Checks` workflow (lint/type/clippy/fmt) plus the `main` branch-protection ruleset — landed in [#195](https://github.com/brendanbyrne/beerio-kart/issues/195) and is now active on `main` (see [`branch-protection.md`](./branch-protection.md)).
 
 [Milestone Hardening: Frontend standards compliance](https://github.com/brendanbyrne/beerio-kart/milestone/9)
 
