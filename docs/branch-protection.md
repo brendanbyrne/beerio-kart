@@ -41,12 +41,20 @@ including the repo owner. Each entry below is safe on that axis:
 
 **Deliberately *not* required:**
 
-- **`codecov/project/*`** — Codecov is not currently emitting project-coverage
-  as a check on this repo (only `codecov/patch/*` appears on PRs and pushes),
-  even though `codecov.yml` configures it `informational: false`. Requiring a
-  context that never posts would deadlock every PR. Making project coverage a
-  gate is a follow-up: first get Codecov to emit the `codecov/project/*` checks,
-  confirm they appear on a PR, *then* add them here.
+- **`codecov/project/*`** — not yet required, but the likely *cause* of it not
+  posting is now fixed. Project coverage is a base-relative comparison ("did
+  total coverage regress vs. `main`?"), so it needs a coverage report at the
+  PR's base commit — and many `main` commits had none (a docs- or one-sided
+  commit where the path-filtered coverage workflows skipped uploaded nothing,
+  so Codecov had no base to compare against and withheld the status, while
+  `patch` — an absolute threshold on the diff — still posted). This PR closes
+  that gap: `frontend.yml` always-runs, and `backend.yml` always-runs on `main`
+  pushes, so every `main` commit now carries a coverage report for both flags
+  (a one-sided PR's missing flag fills via carryforward from that base). Once
+  this lands, `codecov/project/*` should begin posting. The remaining follow-up
+  is to confirm it posts reliably on a few PRs, *then* add the two contexts here
+  and to the ruleset — requiring a context that doesn't post would deadlock
+  every PR, so it stays verify-then-require.
 - **`link-check`** — path-filtered to `**/*.md` (skips on code-only PRs, so it
   can't be required without the always-run treatment) and prone to transient
   per-host flakes that would block merges on infrastructure unrelated to the PR.
