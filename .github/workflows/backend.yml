@@ -1,9 +1,16 @@
 name: Backend
 
-# Backend coverage CI. Path-filtered to the backend subtree (PR-H2, Issue
-# #193) so a frontend- or docs-only PR skips this workflow — the frontend has
-# its own coverage workflow (frontend.yml). Codecov's flag carryforward keeps
-# the `backend` flag stable on the PRs that skip it.
+# Backend coverage CI. PR runs are path-filtered to the backend subtree (PR-H2,
+# Issue #193) so a frontend- or docs-only PR skips this workflow — the frontend
+# has its own coverage workflow (frontend.yml), and Codecov's flag carryforward
+# keeps the `backend` flag stable on the PRs that skip it.
+#
+# Pushes to `main` are deliberately NOT path-filtered (Issue #195): every commit
+# on main uploads backend coverage, so Codecov always has a base report for the
+# codecov/project/backend comparison. A docs-/frontend-only main commit would
+# otherwise leave a base gap — the reason project status doesn't post today. A
+# frontend-only PR's backend flag then carries forward from this base. See
+# docs/branch-protection.md.
 on:
   pull_request:
     paths:
@@ -14,12 +21,6 @@ on:
       - '.github/workflows/backend.yml'
   push:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'codecov.yml'
-      - '.github/workflows/backend.yml'
 
 concurrency:
   group: backend-${{ github.event.pull_request.number || github.sha }}
