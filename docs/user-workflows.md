@@ -62,6 +62,7 @@ Earmarked: the track selection sub-workflow (how the chooser browses/searches fo
 3. If the leaving player is the host: host role transfers to the earliest-joined remaining participant.
 4. Session ends when all participants have left.
 5. Sessions with no activity of any kind for an hour — no new race, run, join, leave, or skip — auto-close on the next sweeper pass. No further run submissions accepted, and any unresolved pending races are dropped.
+6. Logging out leaves your current session first (always — even mid-session), so a sole-participant session closes immediately on logout rather than lingering until the sweeper. Best-effort: a failed leave never blocks the sign-out, with the sweeper as the backstop.
 
 ### 1.6 Checking personal stats
 
@@ -181,3 +182,4 @@ Streamlined compared to standalone entry — the track is already known from the
 - 2026-05-08 — Updated the § 0 cross-reference: `workflow.md` → `project-workflow.md` (operational doc renamed for clarity — see that file's history). Dropped the "note the singular 'workflow'" caveat, no longer needed once the filename is unambiguous.
 - 2026-05-08 — Demoted the broken `[workflow.md](./workflow.md)` markdown link in the 2026-05-06 initial-creation history bullet to plain backticked text. The file no longer exists at that path (renamed to `project-workflow.md` on 2026-05-08); the rename history is documented in the bullet immediately above. PR 5 of the docs restructure (plan deviation — Cowork's PR 5 handoff did not anticipate this link, surfaced when lychee `fail: true` flip would otherwise turn it into a CI failure).
 - 2026-05-16 — Rewrote § 1.5 step 2 for ADR-0037: pending races stay submittable while the session is active and rejoining works as long as someone keeps the session alive; if everyone leaves, the session ends and pending races are dropped (with a notification). The per-race 1-hour window is gone. Step 5 (auto-close) updated for the five-signal sweeper predicate and the drop-on-close behavior. § 1.2 step 6 "(oldest expire first)" → "(oldest shown first)" — no per-race expiry remains. Issue [#51](https://github.com/brendanbyrne/beerio-kart/issues/51).
+- 2026-06-20 — § 1.5 step 6 added: logout now leaves your current session before signing out ([#209](https://github.com/brendanbyrne/beerio-kart/issues/209)). Chose **always-leave** (not only-when-sole) so a sole-participant session closes on logout instead of waiting for the hourly sweeper; best-effort, so a failed leave never blocks the sign-out.

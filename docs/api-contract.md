@@ -68,6 +68,7 @@ A drink type is identified by `(name, alcoholic)`, matched case-insensitively on
 POST   /sessions                   Create a new session (choose ruleset)
 GET    /sessions                   List active sessions (sorted by most recent activity)
 GET    /sessions/:id               Get session details (participants, current race, state)
+GET    /sessions/mine              Get the caller's current session (`{ session_id }`, null if not in one)
 POST   /sessions/:id/join          Join a session (dedicated endpoint — designed for future password support)
 POST   /sessions/:id/leave         Leave a session (if you were the last to leave, the session closes and unresolved pending races are dropped)
 POST   /sessions/:id/next-track    Trigger next track selection (host or chooser, depending on ruleset)

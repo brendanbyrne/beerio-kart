@@ -245,4 +245,146 @@ describe('useAuth', () => {
       expect(err).toBe('Current password is incorrect');
     });
   });
+
+  describe('logout (#209 — leave session first)', () => {
+    // Log in so the API client holds an access token; `getMySession` /
+    // `leaveSession` go through `apiFetch`, which attaches it.
+    async function loggedInHook() {
+      const view = setupHook();
+      await waitFor(() => {
+        expect(view.result.current.isLoading).toBe(false);
+      });
+      server.use(
+        http.post('/api/v1/auth/login', () => HttpResponse.json(session)),
+      );
+      await act(async () => {
+        await view.result.current.login('alice', 'hunter2');
+      });
+      expect(view.result.current.isAuthenticated).toBe(true);
+      return view;
+    }
+
+    it('leaves the current session before POSTing logout, then clears auth', async () => {
+      const { result } = await loggedInHook();
+
+      const calls: string[] = [];
+      let leftSessionId: string | undefined;
+      server.use(
+        http.get('/api/v1/sessions/mine', () => {
+          calls.push('mine');
+          return HttpResponse.json({ session_id: 's1' });
+        }),
+        http.post('/api/v1/sessions/:id/leave', ({ params }) => {
+          calls.push('leave');
+          leftSessionId = params.id as string;
+          return new HttpResponse(null, { status: 204 });
+        }),
+        http.post('/api/v1/auth/logout', () => {
+          calls.push('logout');
+          return new HttpResponse(null, { status: 204 });
+        }),
+      );
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      // Leave is called with the live session id, strictly before the logout
+      // POST (which revokes the refresh token), then local auth is cleared.
+      expect(leftSessionId).toBe('s1');
+      expect(calls).toEqual(['mine', 'leave', 'logout']);
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(result.current.user).toBeNull();
+    });
+
+    it('still signs out after attempting the leave when leaving fails', async () => {
+      const { result } = await loggedInHook();
+
+      const calls: string[] = [];
+      server.use(
+        http.get('/api/v1/sessions/mine', () => {
+          calls.push('mine');
+          return HttpResponse.json({ session_id: 's1' });
+        }),
+        // Leave errors (500, not a 401 — no refresh path); logout must proceed.
+        http.post('/api/v1/sessions/:id/leave', () => {
+          calls.push('leave');
+          return HttpResponse.json({ error: 'leave failed' }, { status: 500 });
+        }),
+        http.post('/api/v1/auth/logout', () => {
+          calls.push('logout');
+          return new HttpResponse(null, { status: 204 });
+        }),
+      );
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      // Leave was attempted (and failed) strictly before the logout POST; the
+      // failure was swallowed and sign-out completed regardless.
+      expect(calls).toEqual(['mine', 'leave', 'logout']);
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(result.current.user).toBeNull();
+    });
+
+    it('does not call leaveSession when not in a session', async () => {
+      const { result } = await loggedInHook();
+
+      let leaveCalled = false;
+      let logoutPosted = false;
+      server.use(
+        http.get('/api/v1/sessions/mine', () =>
+          HttpResponse.json({ session_id: null }),
+        ),
+        http.post('/api/v1/sessions/:id/leave', () => {
+          leaveCalled = true;
+          return new HttpResponse(null, { status: 204 });
+        }),
+        http.post('/api/v1/auth/logout', () => {
+          logoutPosted = true;
+          return new HttpResponse(null, { status: 204 });
+        }),
+      );
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(leaveCalled).toBe(false);
+      expect(logoutPosted).toBe(true);
+      expect(result.current.isAuthenticated).toBe(false);
+    });
+
+    it('skips leaveSession and still signs out when fetching the current session errors', async () => {
+      const { result } = await loggedInHook();
+
+      let leaveCalled = false;
+      let logoutPosted = false;
+      server.use(
+        // getMySession swallows a non-ok /mine and resolves to null, so leave
+        // is skipped — a different path to the no-session outcome than a null
+        // body, and one a slow/erroring sessions service hits in practice.
+        http.get('/api/v1/sessions/mine', () =>
+          HttpResponse.json({ error: 'boom' }, { status: 500 }),
+        ),
+        http.post('/api/v1/sessions/:id/leave', () => {
+          leaveCalled = true;
+          return new HttpResponse(null, { status: 204 });
+        }),
+        http.post('/api/v1/auth/logout', () => {
+          logoutPosted = true;
+          return new HttpResponse(null, { status: 204 });
+        }),
+      );
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(leaveCalled).toBe(false);
+      expect(logoutPosted).toBe(true);
+      expect(result.current.isAuthenticated).toBe(false);
+    });
+  });
 });
