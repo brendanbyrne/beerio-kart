@@ -14,6 +14,7 @@ import {
 } from '../api/client';
 import type { AuthFailureReason } from '../api/client';
 import { parseApiError, parseBody } from '../api/result';
+import { getMySession, leaveSession } from '../api/sessions';
 import {
   AccessTokenPayloadSchema,
   AuthSessionSchema,
@@ -168,6 +169,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // Leave the current session before signing out (#209). A sole participant
+    // who logs out without leaving would keep the session `active` until the
+    // hourly stale-session sweeper closes it; leaving first closes it at once
+    // (the backend's `leave_session` closes a session whose last participant
+    // departs). This runs *before* the logout POST and the token clear because
+    // both `getMySession` and `leaveSession` go through `apiFetch`, which needs
+    // the still-live access token. Best-effort: not being in a session, a
+    // network error, or a rejected leave must not block the sign-out, so any
+    // failure is swallowed and we fall through to clear local state regardless.
+    // The stale-session sweeper remains the server-side backstop.
+    try {
+      const sessionId = await getMySession();
+      if (sessionId) await leaveSession(sessionId);
+    } catch (e) {
+      // Best-effort — sign-out proceeds regardless (see above). getMySession
+      // returns null (no throw) when you're simply not in a session, so a
+      // throw here is abnormal — a network failure or a genuinely-rejected
+      // leave — and otherwise invisible until the sweeper catches it. Log at
+      // debug so a persistently-broken leave is diagnosable without noise.
+      console.debug('logout: best-effort leave failed', e);
+    }
+
     try {
       // Send the access token so the server can bump refresh_token_version
       const token = getAccessToken();
