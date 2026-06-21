@@ -182,8 +182,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const sessionId = await getMySession();
       if (sessionId) await leaveSession(sessionId);
-    } catch {
-      // Best-effort — sign-out proceeds regardless (see above).
+    } catch (e) {
+      // Best-effort — sign-out proceeds regardless (see above). getMySession
+      // returns null (no throw) when you're simply not in a session, so a
+      // throw here is abnormal — a network failure or a genuinely-rejected
+      // leave — and otherwise invisible until the sweeper catches it. Log at
+      // debug so a persistently-broken leave is diagnosable without noise.
+      console.debug('logout: best-effort leave failed', e);
     }
 
     try {
